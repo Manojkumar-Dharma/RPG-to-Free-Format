@@ -174,6 +174,11 @@ dcl-proc ValidateIO export;
     return Fail('IAC0003':'TGT':o_msgId:o_msgData);
   endif;
 
+  // A member target needs a real library: its record width is read from it.
+  if l_tgt.mode = C_MODE_MBR and %subst(%trim(l_tgtLib):1:1) = '*';
+    return Fail('IAC0018':%trim(l_tgtLib):o_msgId:o_msgData);
+  endif;
+
   // Member names (*SRCMBR copies the source member name)
   l_srcMbr = i_parm.srcMbr;
   l_tgtMbr = i_parm.tgtMbr;
@@ -319,6 +324,11 @@ dcl-proc ValidateIO export;
   if i_parm.srcCcsid <> -1 and (i_parm.srcCcsid < 1
      or i_parm.srcCcsid > 65535);
     return Fail('IAC0013':%char(i_parm.srcCcsid):o_msgId:o_msgData);
+  endif;
+  // Explicit input CCSID for stream files needs raw read plus iconv, which
+  // is a later piece of work. *DFT uses the file's own CCSID.
+  if l_src.mode = C_MODE_IFS and i_parm.srcCcsid <> -1;
+    return Fail('IAC0017':%char(i_parm.srcCcsid):o_msgId:o_msgData);
   endif;
   if i_parm.tgtCcsid <> -1 and (i_parm.tgtCcsid < 1
      or i_parm.tgtCcsid > 65535);

@@ -108,3 +108,35 @@ end-pr;
 dcl-pr DirExists ind extproc('DirExists');
   i_dir varchar(1024) const;
 end-pr;
+
+// Source member reader/writer (module IAcnvMbr). One source and one target
+// open at a time. Open/write calls return 0, or 1 with o_msgId/o_msgData set.
+dcl-pr MbrOpenSource int(10) extproc('MbrOpenSource');
+  i_desc likeds(IAcnvDesc_t) const;
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+dcl-pr MbrReadLine ind extproc('MbrReadLine');
+  o_text varchar(512);
+  o_seq packed(6:2);
+end-pr;
+
+dcl-pr MbrCloseSource extproc('MbrCloseSource');
+end-pr;
+
+dcl-pr MbrOpenTarget int(10) extproc('MbrOpenTarget');
+  i_desc likeds(IAcnvDesc_t) const;
+  o_width int(10);
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+dcl-pr MbrWriteLine int(10) extproc('MbrWriteLine');
+  i_text varchar(512) const;
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+dcl-pr MbrCloseTarget extproc('MbrCloseTarget');
+end-pr;

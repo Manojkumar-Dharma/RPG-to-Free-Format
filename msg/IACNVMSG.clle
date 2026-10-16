@@ -1,0 +1,112 @@
+/* IACNVMSG - creates the message file IACNVMSG and its messages.   */
+/* Compile as a CLLE program and call it with the library name:     */
+/*   CALL PGM(IACNVMSG) PARM('YOURLIB')                             */
+/* Safe to run again: existing messages are replaced.               */
+/* Message data (&1) is one character field of 256 bytes, except    */
+/* IAC0100, which carries three 10-byte counts.                     */
+PGM        PARM(&LIB)
+
+DCL        VAR(&LIB) TYPE(*CHAR) LEN(10)
+DCL        VAR(&ID) TYPE(*CHAR) LEN(7)
+DCL        VAR(&TXT) TYPE(*CHAR) LEN(132)
+
+CRTMSGF    MSGF(&LIB/IACNVMSG) TEXT('Legacy source converter messages')
+MONMSG     MSGID(CPF0000)
+
+CHGVAR     VAR(&ID) VALUE('IAC0001')
+CHGVAR     VAR(&TXT) VALUE('Parameter &1 is required.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0002')
+CHGVAR     VAR(&TXT) VALUE('Source location: give library and file, or an IFS directory, not both and not neither.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0003')
+CHGVAR     VAR(&TXT) VALUE('Target location: give library and file, or an IFS directory, not both and not neither.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0004')
+CHGVAR     VAR(&TXT) VALUE('Source type &1 is not valid for this converter.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0005')
+CHGVAR     VAR(&TXT) VALUE('Target type &1 is not valid for this converter.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0006')
+CHGVAR     VAR(&TXT) VALUE('Source not found: &1.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0007')
+CHGVAR     VAR(&TXT) VALUE('Source IFS file or directory not found or not readable: &1.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0008')
+CHGVAR     VAR(&TXT) VALUE('More than one file matches ignoring case: &1.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0009')
+CHGVAR     VAR(&TXT) VALUE('Target not found: &1.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0010')
+CHGVAR     VAR(&TXT) VALUE('Target IFS directory not found or not writable: &1.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0011')
+CHGVAR     VAR(&TXT) VALUE('Target already exists and REPLACE(*NO) is in effect: &1.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0012')
+CHGVAR     VAR(&TXT) VALUE('Source and target are the same: &1.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0013')
+CHGVAR     VAR(&TXT) VALUE('CCSID &1 is not valid.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0014')
+CHGVAR     VAR(&TXT) VALUE('REPLACE value &1 is not valid. Use *NO or *YES.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0015')
+CHGVAR     VAR(&TXT) VALUE('&1 can only be used when the source is a library member.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0016')
+CHGVAR     VAR(&TXT) VALUE('Name &1 is not valid.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0017')
+CHGVAR     VAR(&TXT) VALUE('An explicit CCSID for IFS input is not supported yet. Use *DFT.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0018')
+CHGVAR     VAR(&TXT) VALUE('Target library must be a named library, not &1.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0101')
+CHGVAR     VAR(&TXT) VALUE('Source read error: &1.')
+CALLSUBR   SUBR(ADDMSG)
+
+CHGVAR     VAR(&ID) VALUE('IAC0102')
+CHGVAR     VAR(&TXT) VALUE('Target write error: &1.')
+CALLSUBR   SUBR(ADDMSG)
+
+/* IAC0100 has three 10-byte data fields */
+RMVMSGD    MSGID(IAC0100) MSGF(&LIB/IACNVMSG)
+MONMSG     MSGID(CPF0000)
+ADDMSGD    MSGID(IAC0100) MSGF(&LIB/IACNVMSG) +
+             MSG('Conversion complete: &1 converted, &2 with assumption, &3 for review.') +
+             FMT((*CHAR 10) (*CHAR 10) (*CHAR 10))
+
+RETURN
+
+SUBR       SUBR(ADDMSG)
+  RMVMSGD    MSGID(&ID) MSGF(&LIB/IACNVMSG)
+  MONMSG     MSGID(CPF0000)
+  ADDMSGD    MSGID(&ID) MSGF(&LIB/IACNVMSG) MSG(&TXT) +
+               FMT((*CHAR 256))
+ENDSUBR
+
+ENDPGM
