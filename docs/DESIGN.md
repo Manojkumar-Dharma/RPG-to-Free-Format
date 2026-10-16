@@ -8,11 +8,11 @@ Three converters, one program (and one command) each. Smallest first.
 
 | Order | Command | Program | Converts |
 |---|---|---|---|
-| 1 | `OCLTOCLLE` | `OclToClle` | OCL36 to CLLE |
-| 2 | `CNVDSPF` | `CnvDspf` | DSP36 / DSP38 to DSPF (DDS) |
-| 3 | `CNVTOFREE` | `cnvtoFree` | RPG36 / RPG38 / RPG3 / RPG4 to fully free format (`**FREE`) |
+| 1 | `IAOCLTOCLE` | `IAoclToCle` | OCL36 to CLLE |
+| 2 | `IACNVDSPF` | `IAcnvDspf` | DSP36 / DSP38 to DSPF (DDS) |
+| 3 | `IACNVFREE` | `IAcnvFree` | RPG36 / RPG38 / RPG3 / RPG4 to fully free format (`**FREE`) |
 
-For `cnvtoFree`, the intended route is two stages: normalize the older dialects to fixed-format RPG IV, then convert fixed RPG IV to `**FREE`. IBM's `CVTRPGSRC` may cover stage 1 and must be evaluated first.
+For `IAcnvFree`, the intended route is two stages: normalize the older dialects to fixed-format RPG IV, then convert fixed RPG IV to `**FREE`. IBM's `CVTRPGSRC` may cover stage 1 and must be evaluated first.
 
 Later: a VS Code extension that drives the same commands (see section 10).
 
@@ -79,7 +79,7 @@ The first failure is returned as an escape message from the message file so CL c
 
 ## 4. Shared service program
 
-One service program (working name `CNVSRV`) holds everything the converters share. Converters never know whether they are reading a member or a stream file.
+One service program (`IAcnvSrv`) holds everything the converters share. Converters never know whether they are reading a member or a stream file.
 
 - `ValidateIO(params): result`: runs section 3.4 and returns two descriptors (source and target) or an error message id.
 - `OpenSource(descriptor)`, `ReadLine(handle)`, `CloseSource(handle)`.
@@ -93,7 +93,7 @@ Descriptor fields: mode (member or IFS), resolved library/file/member or resolve
 
 - Source members have fixed record length with sequence and date columns. Stream files have variable-length lines.
 - Reader: normalizes both to the same line structure (text, original line number, original sequence/date if present).
-- Writer: knows the target's usable line width (the data area of the target record, or a configured maximum for stream files). Lines that do not fit are **wrapped at a safe point**, never truncated. Trailing blanks are trimmed for stream output.
+- Writer: knows the target's usable line width (the data area of the target record, or the constant `C_STMFWIDTH` for stream files, currently 100). Lines that do not fit are **wrapped at a safe point**, never truncated. Trailing blanks are trimmed for stream output.
 
 Safe-point rules (the writer applies the target's own continuation syntax):
 
@@ -118,22 +118,37 @@ Every converter has the same stages:
 4. Emit through the shared writer.
 5. Write the conversion report.
 
-Rules for what must be flagged rather than guessed will be listed per converter (for example `CABxx`, `TAG`/`GOTO`, the RPG cycle, O-specs for `cnvtoFree`).
+Rules for what must be flagged rather than guessed will be listed per converter (for example `CABxx`, `TAG`/`GOTO`, the RPG cycle, O-specs for `IAcnvFree`).
 
 ## 6. Fidelity policy
 
 Start with faithful 1:1 translation. Restructuring (for example `COMP` plus indicators into `if`) is a later, optional pass. Indicator renaming (named indicators via data-flow) is out of scope for v1.
 
-## 7. Naming standards (proposal, **open: confirm**)
+## 7. Naming standards
 
-Follow the conventions already used for the COBOL parser programs (`IAparseMember`, `IAparseCblMember`):
+Follow the `IA` prefix convention used for the COBOL parser programs, adjusted for the IBM i object name limit of 10 characters.
 
-- Programs and service programs carry the `IA` prefix, then a lower-case verb or object start and camel case: `IAoclToClle`, `IAcnvDspf`, `IAcnvToFree`, shared service program `IAcnvSrv`.
-- Source members use `.sqlrpgle` when the program has embedded SQL, otherwise `.rpgle`.
+| Object | Name |
+|---|---|
+| Commands (same name as their programs, upper case) | `IAOCLTOCLE`, `IACNVDSPF`, `IACNVFREE` |
+| Programs (source file names, mixed case) | `IAoclToCle`, `IAcnvDspf`, `IAcnvFree` |
+| Shared service program | `IAcnvSrv` |
+| Library | One library holds all objects. Source never hard-codes its name. |
+
+- Source files use `.sqlrpgle` when the program has embedded SQL, otherwise `.rpgle`.
 - Procedures are PascalCase verbs (`ValidateIO`, `OpenSource`, `ReadLine`, `WriteLine`).
-- Local variables use the `l_` prefix, program-level (global) variables use `p_`.
 - Database objects and columns use upper-case names with underscores.
-- Command names and the object library are still to be chosen.
+
+Variable prefixes (RPG is case-insensitive, so letter case of the prefix is cosmetic):
+
+| Prefix | Meaning |
+|---|---|
+| `l_` | Local variable |
+| `g_` | Global (program-level) variable |
+| `i_` | Input parameter |
+| `o_` | Output parameter |
+| `io_` | Input/output parameter |
+| `C_` | Constant, upper-case name (for example `C_STMFWIDTH`) |
 
 ## 8. Repository layout (proposal)
 
@@ -142,10 +157,10 @@ README.md
 LICENSE                 (open: license choice)
 docs/DESIGN.md
 src/                    free-format RPGLE, one folder per module group
-  common/               service program source (CNVSRV)
-  oclcle/               OclToClle
-  dspf/                 CnvDspf
-  tofree/               cnvtoFree
+  common/               service program source (IAcnvSrv)
+  oclcle/               IAoclToCle
+  dspf/                 IAcnvDspf
+  tofree/               IAcnvFree
 cmd/                    command definitions
 msg/                    message file source
 rules/                  mapping tables (data)
@@ -166,7 +181,5 @@ The IFS parameters are the integration point: an extension can upload the open f
 
 ## 11. Open items
 
-- Confirm the naming proposal in section 7 (program names, command names).
-- Object library name for commands and the service program.
-- Maximum line width to use for stream-file output.
-- Whether `CVTRPGSRC` is good enough to use as stage 1 of `cnvtoFree`.
+- Library name, to be chosen when the objects are first compiled.
+- Whether `CVTRPGSRC` is good enough to use as stage 1 of `IAcnvFree`.
