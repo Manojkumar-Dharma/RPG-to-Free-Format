@@ -14,7 +14,7 @@ Three converters, one program (and one command) each. Smallest first.
 
 For `cnvtoFree`, the intended route is two stages: normalize the older dialects to fixed-format RPG IV, then convert fixed RPG IV to `**FREE`. IBM's `CVTRPGSRC` may cover stage 1 and must be evaluated first.
 
-Later: a VS Code extension that drives the same commands (see section 9).
+Later: a VS Code extension that drives the same commands (see section 10).
 
 ## 2. Targets
 
@@ -41,7 +41,7 @@ All three commands take the same parameters.
 | Output | `TGTTYPE` | Output type. Default depends on the converter: `CLLE`, `DSPF`, `RPGLE` |
 | Output | `TGTCCSID` | CCSID for writing, default `*DFT` |
 | Control | `REPLACE` | `*NO` (default) or `*YES` |
-| Control | report options | **(open)** where the conversion report goes |
+| Control | (none) | The conversion report is always a plain spooled file (section 4.2) |
 
 ### 3.1 Location rules
 
@@ -93,7 +93,20 @@ Descriptor fields: mode (member or IFS), resolved library/file/member or resolve
 
 - Source members have fixed record length with sequence and date columns. Stream files have variable-length lines.
 - Reader: normalizes both to the same line structure (text, original line number, original sequence/date if present).
-- Writer: knows the target's record length. Lines that do not fit are an error by default **(open: optional wrap)**. Trailing blanks are trimmed for stream output.
+- Writer: knows the target's usable line width (the data area of the target record, or a configured maximum for stream files). Lines that do not fit are **wrapped at a safe point**, never truncated. Trailing blanks are trimmed for stream output.
+
+Safe-point rules (the writer applies the target's own continuation syntax):
+
+- Never break inside a quoted literal, a hex or graphic literal, or an identifier.
+- Prefer breaking after a comma, then before an operator, then at a blank, searching backwards from the width limit.
+- If no safe point exists before the limit (for example a very long literal), break at the first safe point after it and add a report entry with status `REVIEW`. If there is none at all, the line is written as is and reported as `REVIEW`.
+- Free-format RPG: statements continue on the next line naturally. Comment lines wrap into additional `//` comment lines.
+- CLLE: continuation uses `+` (or `-`) at the end of the line, following CL rules for blanks at the break.
+- DDS: columns are fixed, so wrapping does not apply. A value that does not fit is reported as `REVIEW`.
+
+### 4.2 Conversion report
+
+A plain spooled file, written once per run by the shared report writer. It lists the source and target (resolved names or paths), the types, the CCSIDs, and one line per item with status `CONVERTED`, `ASSUMPTION` or `REVIEW` and a reason, followed by a totals section. There are no report destination parameters.
 
 ## 5. Converter pipeline
 
@@ -111,7 +124,18 @@ Rules for what must be flagged rather than guessed will be listed per converter 
 
 Start with faithful 1:1 translation. Restructuring (for example `COMP` plus indicators into `if`) is a later, optional pass. Indicator renaming (named indicators via data-flow) is out of scope for v1.
 
-## 7. Repository layout (proposal, **open**)
+## 7. Naming standards (proposal, **open: confirm**)
+
+Follow the conventions already used for the COBOL parser programs (`IAparseMember`, `IAparseCblMember`):
+
+- Programs and service programs carry the `IA` prefix, then a lower-case verb or object start and camel case: `IAoclToClle`, `IAcnvDspf`, `IAcnvToFree`, shared service program `IAcnvSrv`.
+- Source members use `.sqlrpgle` when the program has embedded SQL, otherwise `.rpgle`.
+- Procedures are PascalCase verbs (`ValidateIO`, `OpenSource`, `ReadLine`, `WriteLine`).
+- Local variables use the `l_` prefix, program-level (global) variables use `p_`.
+- Database objects and columns use upper-case names with underscores.
+- Command names and the object library are still to be chosen.
+
+## 8. Repository layout (proposal)
 
 ```
 README.md
@@ -128,23 +152,21 @@ rules/                  mapping tables (data)
 tests/                  sample source members and expected output
 ```
 
-Build tooling **(open)**: the author uses Code for IBM i, so an IBM i project file plus a Makefile-based build (Bob / `makei`) is the likely fit. Final layout depends on that choice.
+Build tooling: none for now. The author pulls the repo with Code for IBM i and compiles manually. A project file and build scripts can be added later without changing the source layout.
 
-## 8. Git workflow
+## 9. Git workflow
 
 - Single branch: `main`.
 - Before every push: fetch `origin`, check for drift, and merge or rebase before pushing. No force pushes.
 - Compilation and testing happen on the author's IBM i, after pulling. Compiler messages and test output come back into the conversation so fixes can be pushed.
 
-## 9. VS Code extension (future)
+## 10. VS Code extension (future)
 
 The IFS parameters are the integration point: an extension can upload the open file to a directory, call the command with `SRCIFS`/`TGTIFS`, and read the result back. Keeping mapping rules as data keeps a client-side implementation possible if it is ever wanted.
 
-## 10. Open items
+## 11. Open items
 
-- License choice.
-- Build tooling and final repo layout.
-- Object library name for commands and the service program, and any naming prefix.
-- Conversion report destination and options.
-- Behaviour for lines longer than the target record length (error or optional wrap).
+- Confirm the naming proposal in section 7 (program names, command names).
+- Object library name for commands and the service program.
+- Maximum line width to use for stream-file output.
 - Whether `CVTRPGSRC` is good enough to use as stage 1 of `cnvtoFree`.
