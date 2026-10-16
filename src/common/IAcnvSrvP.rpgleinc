@@ -1,0 +1,110 @@
+// IAcnvSrvP - shared constants, structures and prototypes for the
+// legacy source converters (IAcnvSrv service program).
+// Free-format include (no **FREE line; every includer is **FREE).
+// Include with: /copy 'IAcnvSrvP.rpgleinc'
+// and compile with INCDIR pointing at the repo's src/common folder.
+// Target release V7R3.
+
+/if defined(IACNVSRVP)
+/eof
+/endif
+/define IACNVSRVP
+
+// ---- Constants ------------------------------------------------------
+dcl-c C_STMFWIDTH 100;           // max line width for stream-file output
+dcl-c C_SRCDTALEN 100;           // data width of a standard source record
+dcl-c C_MODE_MBR 'M';            // location mode: source physical file member
+dcl-c C_MODE_IFS 'I';            // location mode: IFS stream file
+
+dcl-c C_CNV_OCL 1;               // IAoclToCle
+dcl-c C_CNV_DSPF 2;              // IAcnvDspf
+dcl-c C_CNV_FREE 3;              // IAcnvFree
+
+dcl-c C_STS_CONVERTED 'C';       // report status: converted
+dcl-c C_STS_ASSUMPTION 'A';      // report status: converted with assumption
+dcl-c C_STS_REVIEW 'R';          // report status: needs manual review
+
+// ---- Command parameters as received ----------------------------------
+// Blank (or *NONE-style empty) values mean "not given".
+dcl-ds IAcnvParm_t qualified template;
+  srcLib char(10);
+  srcFile char(10);
+  srcIfs varchar(1024);
+  srcMbr char(10);
+  srcType char(10);
+  srcCcsid int(10);              // -1 means *DFT
+  tgtLib char(10);
+  tgtFile char(10);
+  tgtIfs varchar(1024);
+  tgtMbr char(10);
+  tgtType char(10);
+  tgtCcsid int(10);              // -1 means *DFT
+  replace char(4);               // *NO or *YES
+end-ds;
+
+// ---- Resolved location (one for source, one for target) ---------------
+dcl-ds IAcnvDesc_t qualified template;
+  mode char(1);                  // C_MODE_MBR or C_MODE_IFS
+  lib char(10);
+  file char(10);
+  mbr char(10);
+  type char(10);                 // validated, upper case
+  path varchar(1024);            // full resolved IFS path, IFS mode only
+  ccsid int(10);                 // -1 means use the file's own CCSID
+  exists ind;                    // the member or stream file exists now
+  replaceOk ind;                 // output only: *YES given
+end-ds;
+
+// ---- Validation ----------------------------------------------------------
+// Returns 0 when valid. Otherwise returns 1 and sets o_msgId / o_msgData
+// to the first failure (message ids are defined in the IACNVMSG message file).
+dcl-pr ValidateIO int(10) extproc('ValidateIO');
+  i_converter int(10) const;
+  i_parm likeds(IAcnvParm_t) const;
+  o_src likeds(IAcnvDesc_t);
+  o_tgt likeds(IAcnvDesc_t);
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+// Source type table helpers
+dcl-pr IsValidSrcType ind extproc('IsValidSrcType');
+  i_converter int(10) const;
+  i_type char(10) const;
+end-pr;
+
+dcl-pr IsValidTgtType ind extproc('IsValidTgtType');
+  i_converter int(10) const;
+  i_type char(10) const;
+end-pr;
+
+dcl-pr DefaultTgtType char(10) extproc('DefaultTgtType');
+  i_converter int(10) const;
+end-pr;
+
+// System helpers (module IAcnvSys)
+dcl-pr IsSafeName ind extproc('IsSafeName');
+  i_name char(10) const;
+end-pr;
+
+dcl-pr ChkQsysObj ind extproc('ChkQsysObj');
+  i_lib char(10) const;
+  i_file char(10) const;
+  i_mbr char(10) const;
+end-pr;
+
+dcl-pr IfsAccess ind extproc('IfsAccess');
+  i_path varchar(1024) const;
+  i_mode int(10) const;
+end-pr;
+
+dcl-pr FindIfsName int(10) extproc('FindIfsName');
+  i_dir varchar(1024) const;
+  i_name varchar(256) const;
+  o_first varchar(256);
+  o_list varchar(512);
+end-pr;
+
+dcl-pr DirExists ind extproc('DirExists');
+  i_dir varchar(1024) const;
+end-pr;
