@@ -1,0 +1,7 @@
+     A*  IACNVRPT - conversion report for the legacy source converters
+     A*  Create with: CRTPRTF FILE(yourlib/IACNVRPT) SRCFILE(...) SRCMBR(IACNVRPT)
+     A*               PAGESIZE(66 132) CPI(10) LPI(6)
+     A          R RPTTOP                    SKIPB(1)
+     A            TXT          132A  O     1
+     A          R RPTLINE                   SPACEA(1)
+     A            TXT          132A  O     1

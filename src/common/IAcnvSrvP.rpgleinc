@@ -20,6 +20,10 @@ dcl-c C_CNV_OCL 1;               // IAoclToCle
 dcl-c C_CNV_DSPF 2;              // IAcnvDspf
 dcl-c C_CNV_FREE 3;              // IAcnvFree
 
+dcl-c C_WRAP_NONE 0;             // WriteText: never wrap
+dcl-c C_WRAP_CL 1;               // wrap with '+' continuation (CLLE)
+dcl-c C_WRAP_FREE 2;             // wrap free-format RPG (comments become //)
+
 dcl-c C_STS_CONVERTED 'C';       // report status: converted
 dcl-c C_STS_ASSUMPTION 'A';      // report status: converted with assumption
 dcl-c C_STS_REVIEW 'R';          // report status: needs manual review
@@ -176,4 +180,65 @@ dcl-pr IfsWriteLine int(10) extproc('IfsWriteLine');
 end-pr;
 
 dcl-pr IfsCloseTarget extproc('IfsCloseTarget');
+end-pr;
+
+// Reader/writer for converters (module IAcnvIO). Dispatches by location mode.
+dcl-pr OpenSource int(10) extproc('OpenSource');
+  i_desc likeds(IAcnvDesc_t) const;
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+dcl-pr ReadLine ind extproc('ReadLine');
+  o_text varchar(512);
+  o_lineNo int(10);
+end-pr;
+
+// After ReadLine returned *OFF: *ON when it was an error rather than the end.
+dcl-pr ReadError ind extproc('ReadError');
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+dcl-pr CloseSource extproc('CloseSource');
+end-pr;
+
+dcl-pr OpenTarget int(10) extproc('OpenTarget');
+  i_desc likeds(IAcnvDesc_t) const;
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+// Writes one logical line, wrapping at a safe point. o_status is
+// C_STS_CONVERTED or C_STS_REVIEW (no safe break available).
+dcl-pr WriteText int(10) extproc('WriteText');
+  i_text varchar(512) const;
+  i_style int(10) const;
+  o_lines int(10);
+  o_status char(1);
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+dcl-pr CloseTarget extproc('CloseTarget');
+end-pr;
+
+// Conversion report (module IAcnvRpt): plain spooled file IACNVRPT.
+dcl-pr RptOpen int(10) extproc('RptOpen');
+  i_converter int(10) const;
+  i_src likeds(IAcnvDesc_t) const;
+  i_tgt likeds(IAcnvDesc_t) const;
+end-pr;
+
+dcl-pr RptItem extproc('RptItem');
+  i_status char(1) const;
+  i_lineNo int(10) const;
+  i_text varchar(512) const;
+  i_reason varchar(200) const;
+end-pr;
+
+dcl-pr RptClose extproc('RptClose');
+  o_conv int(10) options(*nopass);
+  o_assump int(10) options(*nopass);
+  o_review int(10) options(*nopass);
 end-pr;
