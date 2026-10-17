@@ -119,7 +119,7 @@ end-pr;
 
 dcl-pr MbrReadLine ind extproc('MbrReadLine');
   o_text varchar(512);
-  o_seq packed(6:2);
+  o_lineNo int(10);
 end-pr;
 
 dcl-pr MbrCloseSource extproc('MbrCloseSource');
@@ -139,4 +139,41 @@ dcl-pr MbrWriteLine int(10) extproc('MbrWriteLine');
 end-pr;
 
 dcl-pr MbrCloseTarget extproc('MbrCloseTarget');
+end-pr;
+
+// IFS stream file reader/writer (module IAcnvIfs). Same conventions as above.
+// IfsReadLine returns *OFF at end of file or on error: call IfsLastError
+// afterwards. It returns *ON (with the message) only for an error.
+dcl-pr IfsOpenSource int(10) extproc('IfsOpenSource');
+  i_desc likeds(IAcnvDesc_t) const;
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+dcl-pr IfsReadLine ind extproc('IfsReadLine');
+  o_text varchar(512);
+  o_lineNo int(10);
+end-pr;
+
+dcl-pr IfsLastError ind extproc('IfsLastError');
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+dcl-pr IfsCloseSource extproc('IfsCloseSource');
+end-pr;
+
+dcl-pr IfsOpenTarget int(10) extproc('IfsOpenTarget');
+  i_desc likeds(IAcnvDesc_t) const;
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+dcl-pr IfsWriteLine int(10) extproc('IfsWriteLine');
+  i_text varchar(512) const;
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+dcl-pr IfsCloseTarget extproc('IfsCloseTarget');
 end-pr;

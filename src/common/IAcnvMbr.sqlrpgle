@@ -23,6 +23,7 @@ dcl-s g_srcOpen ind inz(*off);
 dcl-s g_tgtOpen ind inz(*off);
 dcl-s g_tgtSeq packed(6:2) inz(0);
 dcl-s g_tgtWidth int(10) inz(0);
+dcl-s g_srcLine int(10) inz(0);
 
 // ------------------------------------------------------------------
 // Alias target text: unqualified for *LIBL / *CURLIB, else lib/file.
@@ -82,12 +83,13 @@ dcl-proc MbrOpenSource export;
   endif;
 
   exec sql declare cSrc cursor for
-    select srcseq, srcdta from qtemp/iacnvsrc a order by rrn(a);
+    select srcdta from qtemp/iacnvsrc a order by rrn(a);
   exec sql open cSrc;
   if sqlcode < 0;
     return SqlFail('IAC0101':'Open source cursor':o_msgId:o_msgData);
   endif;
 
+  g_srcLine = 0;
   g_srcOpen = *on;
   return 0;
 end-proc;
@@ -97,21 +99,21 @@ end-proc;
 dcl-proc MbrReadLine export;
   dcl-pi *n ind;
     o_text varchar(512);
-    o_seq packed(6:2);
+    o_lineNo int(10);
   end-pi;
 
   dcl-s l_data varchar(512);
-  dcl-s l_seq packed(6:2);
 
-  exec sql fetch cSrc into :l_seq, :l_data;
+  exec sql fetch cSrc into :l_data;
   if sqlcode <> 0;
     o_text = '';
-    o_seq = 0;
+    o_lineNo = g_srcLine;
     return *off;
   endif;
 
+  g_srcLine += 1;
   o_text = %trimr(l_data);
-  o_seq = l_seq;
+  o_lineNo = g_srcLine;
   return *on;
 end-proc;
 
