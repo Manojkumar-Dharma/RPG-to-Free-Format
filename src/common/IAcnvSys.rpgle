@@ -46,6 +46,26 @@ dcl-ds dirent_t qualified template;
   name char(640);
 end-ds;
 
+// Message API (used by SendMessage below).
+dcl-pr QMHSNDPM extpgm('QMHSNDPM');
+  msgId char(7) const;
+  msgFile char(20) const;
+  msgData char(256) const options(*varsize);
+  msgDataLen int(10) const;
+  msgType char(10) const;
+  stackEntry char(10) const;
+  stackCounter int(10) const;
+  msgKey char(4);
+  error char(16) options(*varsize);
+end-pr;
+
+dcl-ds g_apiError qualified;
+  bytesProvided int(10) inz(16);
+  bytesAvailable int(10);
+  exceptionId char(7);
+  reserved char(1);
+end-ds;
+
 // ------------------------------------------------------------------
 // A name is safe when it is a special value (*LIBL, *CURLIB ...) made of
 // letters after the asterisk, or a plain object name. Anything else is
@@ -192,4 +212,40 @@ dcl-proc DirExists export;
   endif;
   closedir(l_dirp);
   return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// Messages to the caller from message file IACNVMSG (found in *LIBL).
+dcl-proc SendMessage;
+  dcl-pi *n;
+    i_msgId char(7) const;
+    i_msgData char(256) const;
+    i_msgType char(10) const;
+  end-pi;
+
+  dcl-s l_key char(4);
+
+  g_apiError.bytesProvided = 16;
+  QMHSNDPM(i_msgId:'IACNVMSG  *LIBL':i_msgData:%len(i_msgData)
+           :i_msgType:'*PGMBDY':1:l_key:g_apiError);
+end-proc;
+
+// Sends an escape message, which ends the calling program with an error.
+dcl-proc SendEscape export;
+  dcl-pi *n;
+    i_msgId char(7) const;
+    i_msgData char(256) const;
+  end-pi;
+
+  SendMessage(i_msgId:i_msgData:'*ESCAPE');
+end-proc;
+
+// Sends a completion message to the caller's job log / command line.
+dcl-proc SendCompletion export;
+  dcl-pi *n;
+    i_msgId char(7) const;
+    i_msgData char(256) const;
+  end-pi;
+
+  SendMessage(i_msgId:i_msgData:'*COMP');
 end-proc;

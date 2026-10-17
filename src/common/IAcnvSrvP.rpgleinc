@@ -62,7 +62,7 @@ end-ds;
 // ---- Validation ----------------------------------------------------------
 // Returns 0 when valid. Otherwise returns 1 and sets o_msgId / o_msgData
 // to the first failure (message ids are defined in the IACNVMSG message file).
-dcl-pr ValidateIO int(10) extproc('ValidateIO');
+dcl-pr ValidateIO int(10);
   i_converter int(10) const;
   i_parm likeds(IAcnvParm_t) const;
   o_src likeds(IAcnvDesc_t);
@@ -72,138 +72,138 @@ dcl-pr ValidateIO int(10) extproc('ValidateIO');
 end-pr;
 
 // Source type table helpers
-dcl-pr IsValidSrcType ind extproc('IsValidSrcType');
+dcl-pr IsValidSrcType ind;
   i_converter int(10) const;
   i_type char(10) const;
 end-pr;
 
-dcl-pr IsValidTgtType ind extproc('IsValidTgtType');
+dcl-pr IsValidTgtType ind;
   i_converter int(10) const;
   i_type char(10) const;
 end-pr;
 
-dcl-pr DefaultTgtType char(10) extproc('DefaultTgtType');
+dcl-pr DefaultTgtType char(10);
   i_converter int(10) const;
 end-pr;
 
 // System helpers (module IAcnvSys)
-dcl-pr IsSafeName ind extproc('IsSafeName');
+dcl-pr IsSafeName ind;
   i_name char(10) const;
 end-pr;
 
-dcl-pr ChkQsysObj ind extproc('ChkQsysObj');
+dcl-pr ChkQsysObj ind;
   i_lib char(10) const;
   i_file char(10) const;
   i_mbr char(10) const;
 end-pr;
 
-dcl-pr IfsAccess ind extproc('IfsAccess');
+dcl-pr IfsAccess ind;
   i_path varchar(1024) const;
   i_mode int(10) const;
 end-pr;
 
-dcl-pr FindIfsName int(10) extproc('FindIfsName');
+dcl-pr FindIfsName int(10);
   i_dir varchar(1024) const;
   i_name varchar(256) const;
   o_first varchar(256);
   o_list varchar(512);
 end-pr;
 
-dcl-pr DirExists ind extproc('DirExists');
+dcl-pr DirExists ind;
   i_dir varchar(1024) const;
 end-pr;
 
 // Source member reader/writer (module IAcnvMbr). One source and one target
 // open at a time. Open/write calls return 0, or 1 with o_msgId/o_msgData set.
-dcl-pr MbrOpenSource int(10) extproc('MbrOpenSource');
+dcl-pr MbrOpenSource int(10);
   i_desc likeds(IAcnvDesc_t) const;
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
 
-dcl-pr MbrReadLine ind extproc('MbrReadLine');
+dcl-pr MbrReadLine ind;
   o_text varchar(512);
   o_lineNo int(10);
 end-pr;
 
-dcl-pr MbrCloseSource extproc('MbrCloseSource');
+dcl-pr MbrCloseSource;
 end-pr;
 
-dcl-pr MbrOpenTarget int(10) extproc('MbrOpenTarget');
+dcl-pr MbrOpenTarget int(10);
   i_desc likeds(IAcnvDesc_t) const;
   o_width int(10);
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
 
-dcl-pr MbrWriteLine int(10) extproc('MbrWriteLine');
+dcl-pr MbrWriteLine int(10);
   i_text varchar(512) const;
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
 
-dcl-pr MbrCloseTarget extproc('MbrCloseTarget');
+dcl-pr MbrCloseTarget;
 end-pr;
 
 // IFS stream file reader/writer (module IAcnvIfs). Same conventions as above.
 // IfsReadLine returns *OFF at end of file or on error: call IfsLastError
 // afterwards. It returns *ON (with the message) only for an error.
-dcl-pr IfsOpenSource int(10) extproc('IfsOpenSource');
+dcl-pr IfsOpenSource int(10);
   i_desc likeds(IAcnvDesc_t) const;
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
 
-dcl-pr IfsReadLine ind extproc('IfsReadLine');
+dcl-pr IfsReadLine ind;
   o_text varchar(512);
   o_lineNo int(10);
 end-pr;
 
-dcl-pr IfsLastError ind extproc('IfsLastError');
+dcl-pr IfsLastError ind;
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
 
-dcl-pr IfsCloseSource extproc('IfsCloseSource');
+dcl-pr IfsCloseSource;
 end-pr;
 
-dcl-pr IfsOpenTarget int(10) extproc('IfsOpenTarget');
+dcl-pr IfsOpenTarget int(10);
   i_desc likeds(IAcnvDesc_t) const;
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
 
-dcl-pr IfsWriteLine int(10) extproc('IfsWriteLine');
+dcl-pr IfsWriteLine int(10);
   i_text varchar(512) const;
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
 
-dcl-pr IfsCloseTarget extproc('IfsCloseTarget');
+dcl-pr IfsCloseTarget;
 end-pr;
 
 // Reader/writer for converters (module IAcnvIO). Dispatches by location mode.
-dcl-pr OpenSource int(10) extproc('OpenSource');
+dcl-pr OpenSource int(10);
   i_desc likeds(IAcnvDesc_t) const;
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
 
-dcl-pr ReadLine ind extproc('ReadLine');
+dcl-pr ReadLine ind;
   o_text varchar(512);
   o_lineNo int(10);
 end-pr;
 
 // After ReadLine returned *OFF: *ON when it was an error rather than the end.
-dcl-pr ReadError ind extproc('ReadError');
+dcl-pr ReadError ind;
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
 
-dcl-pr CloseSource extproc('CloseSource');
+dcl-pr CloseSource;
 end-pr;
 
-dcl-pr OpenTarget int(10) extproc('OpenTarget');
+dcl-pr OpenTarget int(10);
   i_desc likeds(IAcnvDesc_t) const;
   o_msgId char(7);
   o_msgData char(256);
@@ -211,7 +211,7 @@ end-pr;
 
 // Writes one logical line, wrapping at a safe point. o_status is
 // C_STS_CONVERTED or C_STS_REVIEW (no safe break available).
-dcl-pr WriteText int(10) extproc('WriteText');
+dcl-pr WriteText int(10);
   i_text varchar(512) const;
   i_style int(10) const;
   o_lines int(10);
@@ -220,25 +220,36 @@ dcl-pr WriteText int(10) extproc('WriteText');
   o_msgData char(256);
 end-pr;
 
-dcl-pr CloseTarget extproc('CloseTarget');
+dcl-pr CloseTarget;
 end-pr;
 
 // Conversion report (module IAcnvRpt): plain spooled file IACNVRPT.
-dcl-pr RptOpen int(10) extproc('RptOpen');
+dcl-pr RptOpen int(10);
   i_converter int(10) const;
   i_src likeds(IAcnvDesc_t) const;
   i_tgt likeds(IAcnvDesc_t) const;
 end-pr;
 
-dcl-pr RptItem extproc('RptItem');
+dcl-pr RptItem;
   i_status char(1) const;
   i_lineNo int(10) const;
   i_text varchar(512) const;
   i_reason varchar(200) const;
 end-pr;
 
-dcl-pr RptClose extproc('RptClose');
+dcl-pr RptClose;
   o_conv int(10) options(*nopass);
   o_assump int(10) options(*nopass);
   o_review int(10) options(*nopass);
+end-pr;
+
+// Messages to the caller (module IAcnvSys), from message file IACNVMSG.
+dcl-pr SendEscape;
+  i_msgId char(7) const;
+  i_msgData char(256) const;
+end-pr;
+
+dcl-pr SendCompletion;
+  i_msgId char(7) const;
+  i_msgData char(256) const;
 end-pr;

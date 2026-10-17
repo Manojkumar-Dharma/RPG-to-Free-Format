@@ -98,7 +98,7 @@ Descriptor fields: mode (member or IFS), resolved library/file/member or resolve
 Safe-point rules (the writer applies the target's own continuation syntax):
 
 - Never break inside a quoted literal, a hex or graphic literal, or an identifier.
-- Prefer breaking after a comma, then before an operator, then at a blank, searching backwards from the width limit.
+- Prefer breaking after a comma that is within 30 characters of the last blank, otherwise after the last blank, searching backwards from the width limit. Breaking before an operator is not done.
 - If no safe point exists before the limit (for example a very long literal), break at the first safe point after it and add a report entry with status `REVIEW`. If there is none at all, the line is written as is and reported as `REVIEW`.
 - Free-format RPG: statements continue on the next line naturally. Comment lines wrap into additional `//` comment lines.
 - CLLE: continuation uses `+` (or `-`) at the end of the line, following CL rules for blanks at the break.
@@ -167,7 +167,7 @@ rules/                  mapping tables (data)
 tests/                  sample source members and expected output
 ```
 
-Build tooling: none for now. The author pulls the repo with Code for IBM i and compiles manually. A project file and build scripts can be added later without changing the source layout.
+Build tooling: none for now. The author pulls the repo with Code for IBM i and compiles manually; the manual steps are in [BUILD.md](BUILD.md). A project file and build scripts can be added later without changing the source layout.
 
 ## 9. Git workflow
 
