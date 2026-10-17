@@ -241,3 +241,28 @@ dcl-proc MbrCloseTarget export;
     g_tgtOpen = *off;
   endif;
 end-proc;
+
+// ------------------------------------------------------------------
+// Data width of the target source file's SRCDTA column, 0 when the file
+// is not a source file or cannot be queried. Does not touch the member.
+dcl-proc MbrTargetWidth export;
+  dcl-pi *n int(10);
+    i_desc likeds(IAcnvDesc_t) const;
+  end-pi;
+
+  dcl-s l_lib varchar(10);
+  dcl-s l_file varchar(10);
+  dcl-s l_width int(10) inz(0);
+
+  l_lib = %trim(i_desc.lib);
+  l_file = %trim(i_desc.file);
+  exec sql select character_maximum_length into :l_width
+    from qsys2/syscolumns
+    where system_table_schema = :l_lib
+      and system_table_name = :l_file
+      and system_column_name = 'SRCDTA';
+  if sqlcode <> 0;
+    return 0;
+  endif;
+  return l_width;
+end-proc;

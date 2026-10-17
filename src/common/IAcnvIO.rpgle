@@ -271,3 +271,18 @@ dcl-proc WriteText export;
   o_lines += 1;
   return 0;
 end-proc;
+
+// ------------------------------------------------------------------
+// Width a converter can plan lines for before the target is opened:
+// the source file's data width for a member, C_STMFWIDTH for a stream file.
+// 0 when a member target's width cannot be found.
+dcl-proc TargetWidthFor export;
+  dcl-pi *n int(10);
+    i_desc likeds(IAcnvDesc_t) const;
+  end-pi;
+
+  if i_desc.mode = C_MODE_MBR;
+    return MbrTargetWidth(i_desc);
+  endif;
+  return C_STMFWIDTH;
+end-proc;

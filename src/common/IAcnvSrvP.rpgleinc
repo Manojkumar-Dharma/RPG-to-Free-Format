@@ -145,6 +145,10 @@ end-pr;
 dcl-pr MbrCloseTarget;
 end-pr;
 
+dcl-pr MbrTargetWidth int(10);
+  i_desc likeds(IAcnvDesc_t) const;
+end-pr;
+
 // IFS stream file reader/writer (module IAcnvIfs). Same conventions as above.
 // IfsReadLine returns *OFF at end of file or on error: call IfsLastError
 // afterwards. It returns *ON (with the message) only for an error.
@@ -221,6 +225,11 @@ dcl-pr WriteText int(10);
 end-pr;
 
 dcl-pr CloseTarget;
+end-pr;
+
+// Width to plan lines for before OpenTarget is called (0 = unknown).
+dcl-pr TargetWidthFor int(10);
+  i_desc likeds(IAcnvDesc_t) const;
 end-pr;
 
 // Conversion report (module IAcnvRpt): plain spooled file IACNVRPT.

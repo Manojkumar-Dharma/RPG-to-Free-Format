@@ -4,28 +4,29 @@ Implemented in `src/oclcle/IAoclCvt.rpgle`. Every OCL statement ends up in one o
 
 ## Sources and their limits
 
-The rules below come from two secondary sources, not from IBM's System/36 environment reference:
+- IBM, *System/36 Environment Programming* (SC41-4730), the OCL examples and statement descriptions. This is the main evidence. It is a programming guide, not the full System/36 Environment Reference, so statement keywords it does not show are not converted.
+- McPress, [Going Native: AS/400 Equivalents to S/36 OCL](https://www.mcpressonline.com/programming-other/cl/going-native-as400-equivalents-to-s36-ocl) and Wikipedia, [Operational Control Language](https://en.wikipedia.org/wiki/Operational_Control_Language) (general syntax).
 
-- McPress, [Going Native: AS/400 Equivalents to S/36 OCL](https://www.mcpressonline.com/programming-other/cl/going-native-as400-equivalents-to-s36-ocl) (comments, substitution expressions; the page was only partly readable)
-- Wikipedia, [Operational Control Language](https://en.wikipedia.org/wiki/Operational_Control_Language) (statement list and general syntax)
-
-Items marked "not verified" should be checked against IBM's reference before this converter is trusted for production procedures.
+Statuses: C converted, A converted with an assumption, R needs review.
 
 ## Statements converted
 
 | OCL | CLLE output | Status | Notes |
 |---|---|---|---|
-| `* text` (asterisk first) | `/* text */` | converted | Text containing `*/` becomes `* /`. Long text is split into several comments. |
-| `// LOAD pgm` then `// RUN` | `CALL PGM(pgm)` | converted | The CALL is written when RUN arrives. |
-| `// LOAD pgm,lib` then `// RUN` | `CALL PGM(lib/pgm)` | A | Second operand taken as the library (not verified). |
-| `// FILE NAME-x[,LABEL-y][,LIBRARY-z]` | `OVRDBF FILE(x) TOFILE([z/]y)` | converted | LABEL defaults to NAME. |
+| `* text` (asterisk first) | `/* text */` | C | Text kept exactly as written (leading blank kept, trailing blanks removed). `*/` inside becomes `* /`. A comment is split only when it would not fit the target width, preferably at a blank. |
+| `// LOAD pgm[,lib]` then `// RUN` | `CALL PGM([lib/]pgm)` | C | The second LOAD operand is the library (shown in the IBM guide). The CALL is written when RUN arrives. |
+| `// FILE NAME-x[,LABEL-y][,LIBRARY-z]` | `OVRDBF FILE(x) TOFILE([z/]y)` | C | LABEL defaults to NAME. |
 | `// FILE ...,DISP-SHR` (or OLD) | same `OVRDBF` | A | DISP is not converted. |
-| `// FILE ...` with other keywords | `OVRDBF` plus the original as a comment | R | The keywords not converted are listed in the report. |
+| `// FILE ...` with other keywords | `OVRDBF` plus the original as a comment | R | The keywords not converted are listed. |
+| `// FILE ...,JOB-YES` | `OVRDBF` plus comment | R | Not given the end-of-step removal; the override is meant to last for the job. |
 | `// FILE ...,DISP-NEW` | comment only | R | Creating the file is not converted. |
-| `// LOCAL OFFSET-n,DATA-'text'` | `CHGDTAARA DTAARA(*LDA (n+1 len)) VALUE('text')` | R | The OFFSET base (0 or 1) is not verified. The line is written assuming zero-based. |
-| `// TAG name` | `NAME:` | converted | Label must be a valid CL label (10 characters). |
-| `// GOTO name` | `GOTO CMDLBL(NAME)` | converted | |
-| `// RETURN` | `RETURN` | converted | |
+| `// LOCAL OFFSET-n,DATA-'text'[,AREA-USER]` | `CHGDTAARA DTAARA(*LDA (n len)) VALUE('text')` | A | OFFSET taken as a 1-based position; 0 is rejected (R). Other keywords are R. |
+| `// TAG name` | `NAME:` | C | Text after the label becomes a comment. |
+| `// GOTO name` | `GOTO CMDLBL(NAME)` | C | Text after the label becomes a comment. |
+| `// RETURN` | `RETURN` | C | |
+| `statement /\ text \/` | statement plus `/* text */` | C | Trailing comment, outside quotes. |
+
+After each `CALL` the converter writes `DLTOVR FILE(names)` for the files overridden by `FILE` statements since the previous `RUN`, because an OCL `FILE` statement applies to one step.
 
 ## Substitution expressions
 
@@ -38,11 +39,11 @@ Items marked "not verified" should be checked against IBM's reference before thi
 
 ## Other rules
 
-- A statement that ends with a comma continues on the next line (a leading `//` on that line is dropped). Reported as A. Not verified.
+- A statement that ends with a comma continues on the next line (a leading `//` on that line is dropped). Confirmed by the IBM guide.
 - Lines after `// RUN` that are not statements are treated as program data and copied as comments (R), until the next `//` statement.
 - `/*` and `/&` marker lines are copied as comments (R).
 - Statement keywords are matched ignoring case; names are written in upper case.
 
 ## Not converted yet
 
-`IF`, `IFF`, `PAUSE`, `CANCEL`, `SWITCH`, `SCRATCH`, `INCLUDE`, `EVALUATE`, `ATTR` and every other statement. The McPress article describes how `IF` tests map (for example file existence to `CHKOBJ`), which is the likely next piece.
+Statements seen in the IBM guide but not converted: `IF`, `IFF`, `ELSE` (with `?CD?` and similar tests), `EVALUATE`, `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `PRINTER`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SWITCH`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R. `IF`/`IFF`/`ELSE`/`EVALUATE` are the next piece.
