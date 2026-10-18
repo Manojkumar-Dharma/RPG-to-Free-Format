@@ -62,6 +62,8 @@ dcl-s g_useSql ind;
 dcl-s g_parKind char(1) dim(40);   // ' ' unused, 'P' passed, 'L' local (set by EVALUATE)
 dcl-s g_parLen int(10) dim(40);
 dcl-s g_useDate ind;
+dcl-s g_ifLast varchar(500);     // condition of the IF line before (for ELSE)
+dcl-s g_ifCtx varchar(500);      // condition context when that line was an ELSE IF
 dcl-s g_tmpVar int(10);
 dcl-s g_isSort ind;              // the pending LOAD is #GSORT
 
@@ -1662,6 +1664,269 @@ dcl-proc StripTrailing;
 end-proc;
 
 // ------------------------------------------------------------------
+// One operand of a condition as a CL operand: a variable for a single
+// ?...? expression, otherwise a quoted constant. '' when not supported.
+dcl-proc CondOperand;
+  dcl-pi *n varchar(60);
+    i_t varchar(200) const;
+  end-pi;
+
+  dcl-s l_len int(10);
+  dcl-s l_v varchar(200);
+
+  if %len(i_t) = 0;
+    return C_QUOTE + ' ' + C_QUOTE;
+  endif;
+  if %subst(i_t:1:1) = '?';
+    if %len(i_t) >= 3 and %subst(i_t:%len(i_t):1) = '?'
+       and %scan('?':i_t:2) = %len(i_t);
+      return ExprVar(%subst(i_t:2:%len(i_t) - 2):l_len);
+    endif;
+    return '';
+  endif;
+  if %scan('?':i_t) > 0;
+    return '';
+  endif;
+  l_v = i_t;
+  if %len(l_v) >= 2 and %subst(l_v:1:1) = C_QUOTE
+     and %subst(l_v:%len(l_v):1) = C_QUOTE;
+    l_v = %subst(l_v:2:%len(l_v) - 2);   // inner text, doubled quotes kept
+  else;
+    l_v = %scanrpl(C_QUOTE:C_QUOTE + C_QUOTE:l_v);
+  endif;
+  if %len(l_v) = 0;
+    l_v = ' ';
+  endif;
+  return C_QUOTE + l_v + C_QUOTE;
+end-proc;
+
+// ------------------------------------------------------------------
+// A condition string as a CL expression: value1/value2 and value1=value2
+// (equal, compared as text) and SWITCHn-0 / SWITCHn-1. '' when the
+// condition is not supported.
+dcl-proc CondExpr;
+  dcl-pi *n varchar(200);
+    i_cond varchar(300) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_ch char(1);
+  dcl-s l_inQ ind inz(*off);
+  dcl-s l_inE ind inz(*off);
+  dcl-s l_split int(10) inz(0);
+  dcl-s l_left varchar(200);
+  dcl-s l_right varchar(200);
+  dcl-s l_a varchar(60);
+  dcl-s l_b varchar(60);
+  dcl-s l_mask varchar(8);
+  dcl-s l_u varchar(300);
+
+  l_u = Up(i_cond);
+  if %len(l_u) = 9 and %subst(l_u:1:6) = 'SWITCH'
+     and %check('12345678':%subst(l_u:7:1)) = 0
+     and %subst(l_u:8:1) = '-' and %check('01':%subst(l_u:9:1)) = 0;
+    l_mask = 'XXXXXXXX';
+    %subst(l_mask:%int(%subst(l_u:7:1)):1) = %subst(l_u:9:1);
+    return '%SWITCH(' + l_mask + ')';
+  endif;
+
+  for l_i = 1 to %len(i_cond);
+    l_ch = %subst(i_cond:l_i:1);
+    if l_ch = C_QUOTE;
+      l_inQ = not l_inQ;
+    elseif l_ch = '?' and not l_inQ;
+      l_inE = not l_inE;
+    elseif (l_ch = '/' or l_ch = '=') and not l_inQ and not l_inE;
+      l_split = l_i;
+      leave;
+    endif;
+  endfor;
+  if l_split = 0;
+    return '';
+  endif;
+  if l_split > 1;
+    l_left = %subst(i_cond:1:l_split - 1);
+  else;
+    l_left = '';
+  endif;
+  if l_split < %len(i_cond);
+    l_right = %subst(i_cond:l_split + 1);
+  else;
+    l_right = '';
+  endif;
+  l_a = CondOperand(l_left);
+  l_b = CondOperand(l_right);
+  if l_a = '' or l_b = '';
+    return '';
+  endif;
+  return l_a + ' *EQ ' + l_b;
+end-proc;
+
+// ------------------------------------------------------------------
+// Takes the leading IF / IFT / IFF / ELSE words off the statement text and
+// returns the CL condition they make (empty when there are none). An ELSE
+// must be the first word and refers to the IF on the line before it.
+// Returns *OFF (with o_why) when a condition cannot be converted.
+dcl-proc IfChain;
+  dcl-pi *n ind;
+    io_s varchar(512);
+    o_cond varchar(500);
+    o_why varchar(100);
+  end-pi;
+
+  dcl-s l_kw varchar(10);
+  dcl-s l_p int(10);
+  dcl-s l_i int(10);
+  dcl-s l_inQ ind;
+  dcl-s l_tok varchar(300);
+  dcl-s l_e varchar(200);
+  dcl-s l_lineLast varchar(500) inz('');
+  dcl-s l_elseCond varchar(500) inz('');
+  dcl-s l_sawIf ind inz(*off);
+  dcl-s l_sawElse ind inz(*off);
+
+  o_cond = '';
+  dow *on;
+    l_p = %scan(' ':io_s);
+    if l_p = 0;
+      l_kw = Up(io_s);
+    else;
+      l_kw = Up(%subst(io_s:1:%min(l_p - 1:10)));
+    endif;
+
+    if l_kw = 'ELSE';
+      if l_sawIf or l_sawElse or g_ifLast = '';
+        o_why = 'ELSE does not directly follow an IF line';
+        g_ifLast = '';
+        g_ifCtx = '';
+        return *off;
+      endif;
+      if g_ifCtx = '';
+        l_elseCond = '*NOT (' + g_ifLast + ')';
+      else;
+        l_elseCond = '(' + g_ifCtx + ') *AND *NOT (' + g_ifLast + ')';
+      endif;
+      o_cond = l_elseCond;
+      l_sawElse = *on;
+      if l_p = 0;
+        io_s = '';
+      else;
+        io_s = %trim(%subst(io_s:l_p + 1));
+      endif;
+
+    elseif l_kw = 'IF' or l_kw = 'IFT' or l_kw = 'IFF';
+      if l_p = 0;
+        o_why = 'IF without a condition';
+        g_ifLast = '';
+        g_ifCtx = '';
+        return *off;
+      endif;
+      io_s = %trim(%subst(io_s:l_p + 1));
+      l_inQ = *off;
+      l_i = 1;
+      dow l_i <= %len(io_s);
+        if %subst(io_s:l_i:1) = C_QUOTE;
+          l_inQ = not l_inQ;
+        endif;
+        if %subst(io_s:l_i:1) = ' ' and not l_inQ;
+          leave;
+        endif;
+        l_i += 1;
+      enddo;
+      l_tok = %subst(io_s:1:l_i - 1);
+      if l_i > %len(io_s);
+        io_s = '';
+      else;
+        io_s = %trim(%subst(io_s:l_i + 1));
+      endif;
+      l_e = CondExpr(l_tok);
+      if l_e = '';
+        o_why = 'Condition ' + l_tok + ' is not converted';
+        g_ifLast = '';
+        g_ifCtx = '';
+        return *off;
+      endif;
+      if l_kw = 'IFF';
+        l_e = '*NOT (' + l_e + ')';
+      endif;
+      if l_lineLast = '';
+        l_lineLast = l_e;
+      else;
+        l_lineLast = '(' + l_lineLast + ') *AND (' + l_e + ')';
+      endif;
+      if o_cond = '';
+        o_cond = l_e;
+      else;
+        o_cond = '(' + o_cond + ') *AND (' + l_e + ')';
+      endif;
+      l_sawIf = *on;
+
+    else;
+      leave;
+    endif;
+  enddo;
+
+  if l_sawIf;
+    g_ifLast = l_lineLast;
+    if l_sawElse;
+      g_ifCtx = l_elseCond;
+    else;
+      g_ifCtx = '';
+    endif;
+  else;
+    g_ifLast = '';
+    g_ifCtx = '';
+  endif;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// Cuts operands at the first blank outside apostrophes: what follows is a
+// comment. Returns the comment text.
+dcl-proc SplitTail;
+  dcl-pi *n varchar(512);
+    io_ops varchar(512);
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_inQ ind inz(*off);
+  dcl-s l_tail varchar(512);
+
+  for l_i = 1 to %len(io_ops);
+    if %subst(io_ops:l_i:1) = C_QUOTE;
+      l_inQ = not l_inQ;
+    endif;
+    if %subst(io_ops:l_i:1) = ' ' and not l_inQ;
+      l_tail = %trim(%subst(io_ops:l_i + 1));
+      io_ops = %subst(io_ops:1:l_i - 1);
+      return l_tail;
+    endif;
+  endfor;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// // SWITCH nnnnnnnn   (0 off, 1 on, X unchanged)
+dcl-proc DoSwitch;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_s varchar(512);
+
+  l_s = Up(%trim(i_operands));
+  if %len(l_s) <> 8 or %check('01X':l_s) > 0;
+    ReviewLine(i_lineNo:i_text:'SWITCH needs 8 characters of 0, 1 or X');
+    return;
+  endif;
+  AddBody('CHGJOB SWS(' + l_s + ')');
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+          :'S/36 UPSI switches taken as the job switches (CHGJOB SWS)');
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc ProcessStatement;
   dcl-pi *n;
     i_lineNo int(10) const;
@@ -1673,6 +1938,12 @@ dcl-proc ProcessStatement;
   dcl-s l_ops varchar(512);
   dcl-s l_p int(10);
   dcl-s l_cmt varchar(512);
+  dcl-s l_tail varchar(512);
+  dcl-s l_cond varchar(500);
+  dcl-s l_why varchar(100);
+  dcl-s l_start int(10);
+  dcl-s l_i int(10);
+  dcl-s l_has ind;
 
   g_afterRun = *off;
   l_s = %trim(%subst(%trim(i_text):3));
@@ -1682,6 +1953,16 @@ dcl-proc ProcessStatement;
     return;
   endif;
 
+  if not IfChain(l_s:l_cond:l_why);
+    ReviewLine(i_lineNo:i_text:l_why);
+    return;
+  endif;
+  if %len(l_s) = 0;
+    ReviewLine(i_lineNo:i_text:'IF or ELSE without a statement');
+    return;
+  endif;
+  l_start = g_bodyCnt;
+
   l_p = %scan(' ':l_s);
   if l_p = 0;
     l_kw = Up(l_s);
@@ -1690,8 +1971,22 @@ dcl-proc ProcessStatement;
     l_kw = Up(%subst(l_s:1:l_p - 1));
     l_ops = %trim(%subst(l_s:l_p + 1));
   endif;
+  if l_kw <> 'EVALUATE' and %len(l_ops) > 0;
+    l_tail = SplitTail(l_ops);      // text after the operands is a comment
+    if %len(l_tail) > 0;
+      if %len(l_cmt) > 0;
+        l_cmt = l_tail + ' ' + l_cmt;
+      else;
+        l_cmt = l_tail;
+      endif;
+    endif;
+  endif;
 
   select;
+    when l_cond <> '' and (l_kw = 'LOAD' or l_kw = 'RUN' or l_kw = 'FILE'
+         or l_kw = 'TAG');
+      ReviewLine(i_lineNo:i_text
+                 :'A conditional ' + l_kw + ' statement is not converted');
     when l_kw = 'LOAD';
       DoLoad(i_lineNo:i_text:l_ops);
     when l_kw = 'RUN';
@@ -1706,6 +2001,8 @@ dcl-proc ProcessStatement;
       DoTagGoto(i_lineNo:i_text:*on:l_ops);
     when l_kw = 'GOTO';
       DoTagGoto(i_lineNo:i_text:*off:l_ops);
+    when l_kw = 'SWITCH';
+      DoSwitch(i_lineNo:i_text:l_ops);
     when l_kw = 'RETURN' and %len(l_ops) = 0;
       AddBody('RETURN');
       RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
@@ -1713,6 +2010,28 @@ dcl-proc ProcessStatement;
       ReviewLine(i_lineNo:i_text
                  :'OCL statement ' + l_kw + ' is not converted in this version');
   endsl;
+
+  // A condition wraps what the statement wrote into IF ... THEN(DO).
+  if l_cond <> '' and g_bodyCnt > l_start;
+    l_has = *off;
+    for l_i = l_start + 1 to g_bodyCnt;
+      if %len(g_body(l_i)) < 2 or %subst(g_body(l_i):1:2) <> '/*';
+        l_has = *on;
+      endif;
+    endfor;
+    if l_has and g_bodyCnt + 2 <= C_MAXBODY;
+      for l_i = g_bodyCnt downto l_start + 1;
+        g_body(l_i + 1) = g_body(l_i);
+      endfor;
+      g_body(l_start + 1) = 'IF COND(' + l_cond + ') THEN(DO)';
+      g_bodyCnt += 1;
+      AddBody('ENDDO');
+      RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+              :'IF/IFF/ELSE condition compared as text');
+    elseif l_has;
+      g_overflow = *on;
+    endif;
+  endif;
 
   if %len(l_cmt) > 0;
     AddComment(l_cmt);
@@ -1952,6 +2271,8 @@ dcl-proc OclConvert export;
   g_useDate = *off;
   g_tmpVar = 0;
   g_ldaCnt = 0;
+  g_ifLast = '';
+  g_ifCtx = '';
   g_useUser = *off;
   g_useWs = *off;
   g_pendLoad = *off;

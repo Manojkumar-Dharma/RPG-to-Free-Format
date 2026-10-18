@@ -28,6 +28,24 @@ Statuses: C converted, A converted with an assumption, R needs review.
 
 After each `CALL` the converter writes `DLTOVR FILE(names)` for the files overridden by `FILE` statements since the previous `RUN`, because an OCL `FILE` statement applies to one step.
 
+## IF, IFF, ELSE and SWITCH
+
+Evidence: SC41-4731, chapter 3 ("IF", "ELSE", "string1=string2") and chapter 5 ("SWITCH OCL Statement"). An IF condition covers only the statement on the same line, and the condition is one string without blanks.
+
+| OCL | CLLE output | Status |
+|---|---|---|
+| `// IF cond statement` (also `IFT`) | the statement's CL lines wrapped in `IF COND(...) THEN(DO)` ... `ENDDO` | A |
+| `// IFF cond statement` | same with `*NOT (...)` | A |
+| `// IF c1 IF c2 statement` | `(c1) *AND (c2)` | A |
+| `// ELSE statement` directly after an IF line | `*NOT (condition of the IF line)`; `ELSE IF` chains keep the earlier condition as context | A |
+| condition `a/b` or `a=b` | `a *EQ b`; a and b are a constant or one `?...?` expression; compared as text | A |
+| condition `SWITCHn-0` / `SWITCHn-1` | `%SWITCH(XXXXXXXX)` with the 0 or 1 at position n | A |
+| `// SWITCH nnnnnnnn` | `CHGJOB SWS(nnnnnnnn)` | A |
+
+Other conditions (`DATAF1-`, `ACTIVE-`, `BLOCKS-` and so on) and a conditional `LOAD`, `RUN`, `FILE` or `TAG` are not converted (R). The reference compares two all-numeric values as numbers, so `3` and `03` differ here.
+
+Text after the operands of a statement (after the first blank outside apostrophes) is a comment and becomes a CL comment, except for `EVALUATE`.
+
 ## Sort steps (`#GSORT`)
 
 Evidence: IBM, *System/36 Environment Reference* (SC41-4731, `docs/sc414731.pdf`), appendix A "#GSORT Utility", and the "IF", "ELSE" sections of chapter 3; plus two sample procedures from the author. The reference states that #GSORT does its sorting with the `FMTDTA` command and reads the sort specifications either inline (ended by `// END`) or from a source member (`// SOURCE member,library`).
@@ -81,4 +99,4 @@ CL cannot put a variable inside a word or a quoted text. Where OCL has an expres
 
 ## Not converted yet
 
-Statements seen in the IBM guide but not converted: `IF`, `IFF`, `ELSE` (with `?CD?` and similar tests), `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `PRINTER`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SWITCH`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R. `IF`/`IFF`/`ELSE`/`EVALUATE` are the next piece.
+Statements seen in the IBM guides but not converted: `PRINTER` (the page size and printing rules need care), `BLDFILE` and other procedure calls, `?F'...'?` file-size expressions, `DATAF1-`/`ACTIVE-` conditions, `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R.
