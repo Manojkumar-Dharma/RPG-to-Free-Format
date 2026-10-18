@@ -30,17 +30,22 @@ After each `CALL` the converter writes `DLTOVR FILE(names)` for the files overri
 
 ## Sort steps (`#GSORT`)
 
-Evidence: two sample procedures supplied by the author (HSORTR/FNC/FDC specification lines).
+Evidence: IBM, *System/36 Environment Reference* (SC41-4731, `docs/sc414731.pdf`), appendix A "#GSORT Utility", and the "IF", "ELSE" sections of chapter 3; plus two sample procedures from the author. The reference states that #GSORT does its sorting with the `FMTDTA` command and reads the sort specifications either inline (ended by `// END`) or from a source member (`// SOURCE member,library`).
 
 | OCL | CLLE output | Status |
 |---|---|---|
-| `// LOAD #GSORT`, `FILE NAME-INPUT,LABEL-a`, `FILE NAME-OUTPUT,LABEL-b[,keywords]`, `// RUN`, spec lines, `/*` | `DLTF`/`CRTSRCPF` of `QTEMP/IASORTn`, one `RUNSQL INSERT` per spec line (built in `&SQL` with `*CAT`), then `FMTDTA INFILE(a) OUTFILE(b) SRCFILE(QTEMP/IASORTn) SRCMBR(IASORTn)` | A |
-| Output keywords such as `RECORDS-`, `EXTEND-` | not converted; the output file may need creating first | R |
-| Spec lines with `// IF`, `IFF`, `ELSE` inside the block | whole block kept as comments | R |
+| `// LOAD #GSORT`, `FILE NAME-INPUT[n],LABEL-a`, `FILE NAME-OUTPUT,LABEL-b`, `// RUN`, spec lines, `// END` or `/*` | `RTVDTAARA` for the LDA values used, `DLTF`/`CRTSRCPF` of `QTEMP/IASORTn` (CCSID 65535), one `RUNSQL INSERT` per spec line (built in `&SQL` with `*CAT`), then `FMTDTA INFILE(a) OUTFILE(b) SRCFILE(QTEMP/IASORTn) SRCMBR(IASORTn)` | A |
+| `NAME-INPUT1` to `INPUT8` | up to eight files in `INFILE` | A |
+| `FILE NAME-WORK,...` | dropped (ignored on the AS/400 system, per the reference) | C |
+| `// SOURCE member,library` | `FMTDTA ... SRCFILE(library/QS36SRC) SRCMBR(member)` | A |
+| Output keywords such as `RECORDS-`, `BLOCKS-`, `DISP-NEW` | not converted; the output file may need creating first | R |
+| `// IF`, `IFT`, `IFF` *cond* *spec*, and `// ELSE` *spec* | the insert for that line is wrapped in `IF COND(...) THEN(DO)` / `ENDDO` | A |
 
-The spec block ends at `/*`, `/&`, `// END` (end of the inline data) or the next `//` statement that is not a conditional.
+Spec lines are copied unchanged. The reference describes the specs as ordinary S/36 sort specifications and the sample columns line up with the `FMTDTA` layout.
 
-Conditional spec lines (`// IF cond spec text`) are not converted: the sample lines do not show how the spec text lines up with the columns after the condition.
+Conditions, from the reference: the condition is one string with no blanks (blanks only inside apostrophes); `?expr?/value` and `?expr?=value` both mean equal; `IFF` is true when the condition is false; `ELSE` applies only when it is the first thing on the line right after the IF line. Supported here: `?n?` (1 to 9) and `?L'p,n'?` (local data area text) compared with a literal or blank. Compared as text; the reference compares two all-numeric values as numbers, so `3` and `03` would differ here (reported as an assumption). Anything else (nested IF, other expressions) leaves the whole sort block as comments (R).
+
+The text after a condition is taken to supply columns 4 onward of the specification line (the line is built as three blanks plus that text). This is an assumption from the sample lines, where it puts the spec letter (`I`, `F`) in column 6 (reported as an assumption). `?L'p,n'?` inside a spec line (for example `EQC?L'56,1'?`) is replaced by the value at run time.
 
 ## Lines without `//`
 

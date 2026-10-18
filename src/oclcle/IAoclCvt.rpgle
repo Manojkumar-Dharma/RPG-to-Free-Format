@@ -40,9 +40,22 @@ dcl-s g_sortLines varchar(512) dim(C_MAXSORT);
 dcl-s g_sortCnt int(10);
 dcl-s g_sortNo int(10);
 dcl-s g_sortFirst int(10);
-dcl-s g_sortIn varchar(60);
+dcl-s g_sortIn varchar(60) dim(8);
 dcl-s g_sortOut varchar(60);
-dcl-s g_sortInLib varchar(60);
+dcl-s g_sortInLib varchar(60) dim(8);
+dcl-s g_sortSrcMbr varchar(60);
+dcl-s g_sortSrcLib varchar(60);
+dcl-s g_conditions ind;
+dcl-c C_MAXTMP 600;
+dcl-c C_MAXLDA 20;
+dcl-s g_tmp varchar(512) dim(C_MAXTMP);
+dcl-s g_tmpCnt int(10);
+dcl-s g_blkP int(10) dim(C_MAXLDA);
+dcl-s g_blkN int(10) dim(C_MAXLDA);
+dcl-s g_blkCnt int(10);
+dcl-s g_ldaP int(10) dim(C_MAXLDA);
+dcl-s g_ldaN int(10) dim(C_MAXLDA);
+dcl-s g_ldaCnt int(10);
 dcl-s g_sortOutLib varchar(60);
 dcl-s g_sortExtra varchar(200);
 dcl-s g_useSql ind;
@@ -360,6 +373,9 @@ dcl-proc DoRun;
     g_sortMode = *on;
     g_sortCond = *off;
     g_sortCnt = 0;
+    g_sortSrcMbr = '';
+    g_sortSrcLib = '';
+    g_conditions = *off;
     g_sortFirst = i_lineNo;
     g_pendLoad = *off;
     return;
@@ -410,6 +426,7 @@ dcl-proc DoFile;
   dcl-s l_other varchar(200) inz('');
   dcl-s l_cmd varchar(200);
   dcl-s l_job ind inz(*off);
+  dcl-s l_idx int(10);
 
   l_ops = Subst(i_operands:l_open);
   l_cnt = SplitItems(l_ops:l_items);
@@ -454,10 +471,22 @@ dcl-proc DoFile;
   endif;
 
   // Files of a #GSORT step become FMTDTA INFILE/OUTFILE (see FinishSort).
-  if g_isSort and g_pendLoad and (l_name = 'INPUT' or l_name = 'OUTPUT');
-    if l_name = 'INPUT';
-      g_sortIn = l_label;
-      g_sortInLib = l_lib;
+  if g_isSort and g_pendLoad and l_name = 'WORK';
+    RptItem(C_STS_CONVERTED:i_lineNo:i_text
+            :'Sort work file is ignored on the AS/400 system');
+    return;
+  endif;
+  if g_isSort and g_pendLoad and (l_name = 'OUTPUT'
+     or l_name = 'INPUT' or (%len(l_name) = 6 and %subst(l_name:1:5) = 'INPUT'
+     and %check('12345678':%subst(l_name:6:1)) = 0));
+    if l_name <> 'OUTPUT';
+      if l_name = 'INPUT';
+        l_idx = 1;
+      else;
+        l_idx = %int(%subst(l_name:6:1));
+      endif;
+      g_sortIn(l_idx) = l_label;
+      g_sortInLib(l_idx) = l_lib;
     else;
       g_sortOut = l_label;
       g_sortOutLib = l_lib;
@@ -623,83 +652,485 @@ dcl-proc QuoteSpec;
 end-proc;
 
 // ------------------------------------------------------------------
-// Writes the collected #GSORT step: FMTDTA with the specification lines
-// inserted into a source member in QTEMP by CL at run time. A block with
-// IF/IFF/ELSE/END is not converted (the lines are kept as comments).
+dcl-proc AddTmp;
+  dcl-pi *n;
+    i_text varchar(512) const;
+  end-pi;
+
+  if g_tmpCnt >= C_MAXTMP;
+    g_overflow = *on;
+    return;
+  endif;
+  g_tmpCnt += 1;
+  g_tmp(g_tmpCnt) = i_text;
+end-proc;
+
+// ------------------------------------------------------------------
+// Maps the inside of a ?...? expression to a CL variable name.
+// ?1? to ?9? -> &P1..&P9, ?L'p,n'? -> &Lp_n (local data area text).
+// Returns '' when the expression is not supported.
+dcl-proc SortVar;
+  dcl-pi *n varchar(20);
+    i_tok varchar(60) const;
+  end-pi;
+
+  dcl-s l_t varchar(60);
+  dcl-s l_cp int(10);
+  dcl-s l_ps varchar(60);
+  dcl-s l_ns varchar(60);
+  dcl-s l_p int(10);
+  dcl-s l_n int(10);
+  dcl-s l_i int(10);
+  dcl-s l_found ind;
+
+  l_t = Up(%trim(i_tok));
+  if %len(l_t) = 1 and %check('123456789':l_t) = 0;
+    g_maxParm = %max(g_maxParm:%int(l_t));
+    return '&P' + l_t;
+  endif;
+
+  if %len(l_t) >= 6 and %subst(l_t:1:2) = 'L''' 
+     and %subst(l_t:%len(l_t):1) = '''';
+    l_cp = %scan(',':l_t);
+    if l_cp < 4;
+      return '';
+    endif;
+    l_ps = %subst(l_t:3:l_cp - 3);
+    l_ns = %subst(l_t:l_cp + 1:%len(l_t) - l_cp - 1);
+    if %len(l_ps) = 0 or %len(l_ps) > 4 or %len(l_ns) = 0
+       or %len(l_ns) > 3 or %check('0123456789':l_ps) > 0
+       or %check('0123456789':l_ns) > 0;
+      return '';
+    endif;
+    l_p = %int(l_ps);
+    l_n = %int(l_ns);
+    if l_p < 1 or l_n < 1 or l_p + l_n > 1025;
+      return '';
+    endif;
+
+    l_found = *off;
+    for l_i = 1 to g_blkCnt;
+      if g_blkP(l_i) = l_p and g_blkN(l_i) = l_n;
+        l_found = *on;
+      endif;
+    endfor;
+    if not l_found and g_blkCnt < C_MAXLDA;
+      g_blkCnt += 1;
+      g_blkP(g_blkCnt) = l_p;
+      g_blkN(g_blkCnt) = l_n;
+    endif;
+    l_found = *off;
+    for l_i = 1 to g_ldaCnt;
+      if g_ldaP(l_i) = l_p and g_ldaN(l_i) = l_n;
+        l_found = *on;
+      endif;
+    endfor;
+    if not l_found and g_ldaCnt < C_MAXLDA;
+      g_ldaCnt += 1;
+      g_ldaP(g_ldaCnt) = l_p;
+      g_ldaN(g_ldaCnt) = l_n;
+    endif;
+    return '&L' + %trim(%char(l_p)) + '_' + %trim(%char(l_n));
+  endif;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// Writes the two statements that insert one specification line into the
+// QTEMP source member. ?...? expressions inside the line are replaced by
+// the value of a CL variable. Returns *OFF when an expression is not
+// supported (o_why says which).
+dcl-proc SortInsert;
+  dcl-pi *n ind;
+    i_member varchar(10) const;
+    i_seq int(10) const;
+    i_spec varchar(512) const;
+    o_why varchar(100);
+  end-pi;
+
+  dcl-s l_stmt varchar(512);
+  dcl-s l_rest varchar(512);
+  dcl-s l_p1 int(10);
+  dcl-s l_p2 int(10);
+  dcl-s l_lit varchar(512);
+  dcl-s l_var varchar(20);
+  dcl-s l_pos int(10);
+  dcl-s l_len int(10);
+  dcl-s l_piece varchar(512);
+
+  l_stmt = 'CHGVAR VAR(&SQL) VALUE(' + C_QUOTE + 'INSERT INTO QTEMP/'
+           + i_member + ' VALUES(' + %trim(%char(i_seq)) + ',0,'
+           + C_QUOTE + C_QUOTE + C_QUOTE;
+  l_rest = i_spec;
+  dow %len(l_rest) > 0;
+    l_p1 = %scan('?':l_rest);
+    if l_p1 = 0;
+      l_lit = l_rest;
+      l_rest = '';
+    else;
+      l_p2 = %scan('?':l_rest:l_p1 + 1);
+      if l_p2 = 0;
+        o_why = 'Unmatched ? in a specification line';
+        return *off;
+      endif;
+      l_var = SortVar(%subst(l_rest:l_p1 + 1:l_p2 - l_p1 - 1));
+      if l_var = '';
+        o_why = 'Substitution expression ' + %subst(l_rest:l_p1:l_p2 - l_p1 + 1)
+                + ' is not supported in sort specifications';
+        return *off;
+      endif;
+      if l_p1 > 1;
+        l_lit = %subst(l_rest:1:l_p1 - 1);
+      else;
+        l_lit = '';
+      endif;
+      l_rest = %subst(l_rest:l_p2 + 1);
+    endif;
+
+    // The literal part is cut into short pieces joined by *CAT so the CL
+    // line can wrap between them.
+    l_pos = 1;
+    l_len = %len(l_lit);
+    dow l_pos <= l_len;
+      l_piece = %subst(l_lit:l_pos:%min(30:l_len - l_pos + 1));
+      l_stmt += ' *CAT ' + C_QUOTE + QuoteSpec(l_piece) + C_QUOTE;
+      l_pos += 30;
+    enddo;
+    if l_p1 > 0;
+      l_stmt += ' *CAT ' + l_var;
+    endif;
+  enddo;
+  l_stmt += ' *CAT ' + C_QUOTE + C_QUOTE + C_QUOTE + ')' + C_QUOTE + ')';
+  AddTmp(l_stmt);
+  AddTmp('RUNSQL SQL(&SQL) COMMIT(*NONE) NAMING(*SYS)');
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// Analyses a conditional line  // IF|IFT|IFF cond spec   or  // ELSE spec.
+// o_kind: 'I' (IF, IFT), 'F' (IFF) or 'E' (ELSE). For IF/IFF the condition
+// must be  ?expr?/value  or  ?expr?=value. o_spec is the text after the
+// condition (one blank separates them), empty when there is none.
+dcl-proc SortCond;
+  dcl-pi *n ind;
+    i_line varchar(512) const;
+    o_kind char(1);
+    o_var varchar(20);
+    o_lit varchar(128);
+    o_spec varchar(512);
+    o_why varchar(100);
+  end-pi;
+
+  dcl-s l_t varchar(512);
+  dcl-s l_p int(10);
+  dcl-s l_q int(10);
+  dcl-s l_kw varchar(10);
+  dcl-s l_cond varchar(512);
+  dcl-s l_left varchar(512);
+  dcl-s l_right varchar(512);
+  dcl-s l_i int(10);
+  dcl-s l_inQ ind;
+  dcl-s l_inE ind;
+  dcl-s l_ch char(1);
+  dcl-s l_split int(10);
+  dcl-s l_w varchar(10);
+
+  o_var = '';
+  o_lit = '';
+  o_spec = '';
+  l_t = %trimr(i_line);
+  l_p = 3;
+  dow l_p <= %len(l_t) and %subst(l_t:l_p:1) = ' ';
+    l_p += 1;
+  enddo;
+  l_q = %scan(' ':l_t:l_p);
+  if l_q = 0;
+    l_kw = Up(%subst(l_t:l_p));
+    l_q = %len(l_t) + 1;
+  else;
+    l_kw = Up(%subst(l_t:l_p:l_q - l_p));
+  endif;
+
+  if l_kw = 'ELSE';
+    o_kind = 'E';
+    if l_q < %len(l_t);
+      o_spec = %subst(l_t:l_q + 1);
+    endif;
+  else;
+    if l_kw = 'IF' or l_kw = 'IFT';
+      o_kind = 'I';
+    else;
+      o_kind = 'F';
+    endif;
+    l_p = l_q;
+    dow l_p <= %len(l_t) and %subst(l_t:l_p:1) = ' ';
+      l_p += 1;
+    enddo;
+    // The condition ends at the first blank outside apostrophes.
+    l_inQ = *off;
+    l_i = l_p;
+    dow l_i <= %len(l_t);
+      if %subst(l_t:l_i:1) = C_QUOTE;
+        l_inQ = not l_inQ;
+      endif;
+      if %subst(l_t:l_i:1) = ' ' and not l_inQ;
+        leave;
+      endif;
+      l_i += 1;
+    enddo;
+    l_cond = %subst(l_t:l_p:l_i - l_p);
+    if l_i < %len(l_t);
+      o_spec = %subst(l_t:l_i + 1);
+    endif;
+
+    // Split at the first / or = outside ?...? and apostrophes.
+    l_split = 0;
+    l_inQ = *off;
+    l_inE = *off;
+    for l_i = 1 to %len(l_cond);
+      l_ch = %subst(l_cond:l_i:1);
+      if l_ch = C_QUOTE;
+        l_inQ = not l_inQ;
+      elseif l_ch = '?' and not l_inQ;
+        l_inE = not l_inE;
+      elseif (l_ch = '/' or l_ch = '=') and not l_inQ and not l_inE;
+        l_split = l_i;
+        leave;
+      endif;
+    endfor;
+    if l_split < 3;
+      o_why = 'Condition is not of the form ?expression?/value';
+      return *off;
+    endif;
+    l_left = %subst(l_cond:1:l_split - 1);
+    if l_split < %len(l_cond);
+      l_right = %subst(l_cond:l_split + 1);
+    else;
+      l_right = '';
+    endif;
+    if %len(l_left) < 3 or %subst(l_left:1:1) <> '?'
+       or %subst(l_left:%len(l_left):1) <> '?';
+      o_why = 'Left side of the condition is not a substitution expression';
+      return *off;
+    endif;
+    o_var = SortVar(%subst(l_left:2:%len(l_left) - 2));
+    if o_var = '';
+      o_why = 'Condition expression ' + l_left + ' is not supported';
+      return *off;
+    endif;
+    if %scan('?':l_right) > 0;
+      o_why = 'Right side of the condition uses an expression';
+      return *off;
+    endif;
+    if %len(l_right) >= 2 and %subst(l_right:1:1) = C_QUOTE
+       and %subst(l_right:%len(l_right):1) = C_QUOTE;
+      l_right = %scanrpl('''''':'''':%subst(l_right:2:%len(l_right) - 2));
+    endif;
+    if %len(l_right) = 0;
+      l_right = ' ';
+    endif;
+    o_lit = l_right;
+  endif;
+
+  // A nested IF in the statement part is not converted.
+  l_w = Up(%subst(%trim(o_spec) + '    ':1:4));
+  if %subst(l_w:1:3) = 'IF ' or %subst(l_w:1:4) = 'IFF '
+     or %subst(l_w:1:4) = 'IFT ' or %subst(l_w:1:5) = 'ELSE ';
+    o_why = 'Nested IF/ELSE on one line is not converted';
+    return *off;
+  endif;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// Writes the collected #GSORT step as FMTDTA. The specification lines
+// (copied unchanged) are inserted into a QTEMP source member by CL at run
+// time, so conditional lines (// IF, // IFF, // ELSE) can test the local
+// data area or a parameter when the program runs. Anything that cannot be
+// converted leaves the whole block as comments.
 dcl-proc FinishSort;
   dcl-pi *n;
   end-pi;
 
   dcl-s l_i int(10);
   dcl-s l_n varchar(10);
-  dcl-s l_pos int(10);
-  dcl-s l_len int(10);
-  dcl-s l_piece varchar(512);
-  dcl-s l_stmt varchar(512);
-  dcl-s l_in varchar(130);
+  dcl-s l_kind char(1);
+  dcl-s l_var varchar(20);
+  dcl-s l_lit varchar(128);
+  dcl-s l_spec varchar(512);
+  dcl-s l_why varchar(100);
+  dcl-s l_ok ind inz(*on);
+  dcl-s l_lastKind char(1) inz(' ');
+  dcl-s l_lastVar varchar(20) inz('');
+  dcl-s l_lastLit varchar(128) inz('');
+  dcl-s l_cond varchar(200);
+  dcl-s l_op varchar(5);
+  dcl-s l_seq int(10) inz(0);
+  dcl-s l_in varchar(300) inz('');
+  dcl-s l_inCnt int(10) inz(0);
   dcl-s l_out varchar(130);
+  dcl-s l_cmd varchar(512);
+  dcl-s l_hasCond ind inz(*off);
+  dcl-s l_ref varchar(130);
 
   g_sortMode = *off;
   g_sortNo += 1;
-  l_n = %trim(%char(g_sortNo));
+  l_n = 'IASORT' + %trim(%char(g_sortNo));
+  g_blkCnt = 0;
+  g_tmpCnt = 0;
 
-  if g_sortCond or g_sortCnt = 0 or g_sortIn = '' or g_sortOut = '';
+  // Files
+  for l_i = 1 to 8;
+    if g_sortIn(l_i) <> '';
+      l_ref = g_sortIn(l_i);
+      if g_sortInLib(l_i) <> '';
+        l_ref = g_sortInLib(l_i) + '/' + g_sortIn(l_i);
+      endif;
+      l_inCnt += 1;
+      if l_inCnt = 1;
+        l_in = l_ref;
+      else;
+        l_in += ' ' + l_ref;
+      endif;
+    endif;
+  endfor;
+  if g_sortOut <> '' and g_sortOutLib <> '';
+    l_out = g_sortOutLib + '/' + g_sortOut;
+  else;
+    l_out = g_sortOut;
+  endif;
+  if l_inCnt = 0 or g_sortOut = '';
+    l_ok = *off;
+    l_why = 'FILE NAME-INPUT and NAME-OUTPUT are both needed';
+  endif;
+  if l_ok and g_sortSrcMbr = '' and g_sortCnt = 0;
+    l_ok = *off;
+    l_why = 'No sort specification lines found';
+  endif;
+
+  // Specification lines
+  if l_ok and g_sortSrcMbr = '';
+    for l_i = 1 to g_sortCnt;
+      l_hasCond = *off;
+      if %len(%trim(g_sortLines(l_i))) >= 2
+         and %subst(%trim(g_sortLines(l_i)):1:2) = '//';
+        if not SortCond(g_sortLines(l_i):l_kind:l_var:l_lit:l_spec:l_why);
+          l_ok = *off;
+          leave;
+        endif;
+        l_hasCond = *on;
+        if l_kind = 'E';
+          if l_lastKind = ' ';
+            l_ok = *off;
+            l_why = 'ELSE without a preceding IF on the line before';
+            leave;
+          endif;
+          l_var = l_lastVar;
+          l_lit = l_lastLit;
+          if l_lastKind = 'I';
+            l_kind = 'F';
+          else;
+            l_kind = 'I';
+          endif;
+          l_lastKind = ' ';
+        else;
+          l_lastKind = l_kind;
+          l_lastVar = l_var;
+          l_lastLit = l_lit;
+        endif;
+        if %len(%trim(l_spec)) = 0;
+          l_ok = *off;
+          l_why = 'IF/ELSE line has no specification text after the condition';
+          leave;
+        endif;
+        // The statement part supplies columns 4 onward of the line.
+        l_spec = %trimr('   ' + l_spec);
+        if %len(l_spec) < 6 or (%subst(l_spec:6:1) <> 'H'
+           and %subst(l_spec:6:1) <> 'I' and %subst(l_spec:6:1) <> 'F');
+          l_ok = *off;
+          l_why = 'Text after the condition is not a sort specification';
+          leave;
+        endif;
+      else;
+        l_spec = g_sortLines(l_i);
+        l_lastKind = ' ';
+      endif;
+
+      l_seq += 1;
+      if l_hasCond;
+        if l_kind = 'I';
+          l_op = '*EQ';
+        else;
+          l_op = '*NE';
+        endif;
+        l_cond = l_var + ' ' + l_op + ' ' + C_QUOTE
+                 + %scanrpl(C_QUOTE:C_QUOTE + C_QUOTE:l_lit) + C_QUOTE;
+        AddTmp('IF COND(' + l_cond + ') THEN(DO)');
+      endif;
+      if not SortInsert(l_n:l_seq:l_spec:l_why);
+        l_ok = *off;
+        leave;
+      endif;
+      if l_hasCond;
+        AddTmp('ENDDO');
+      endif;
+    endfor;
+  endif;
+
+  if g_sortSrcMbr <> '' and g_sortSrcLib = '#LIBRARY';
+    l_ok = *off;
+    l_why = 'SOURCE with #LIBRARY is not converted';
+  endif;
+
+  if not l_ok or g_overflow;
     AddComment('OCL: sort step (#GSORT) not converted');
     for l_i = 1 to g_sortCnt;
       AddCommentRaw(' ' + g_sortLines(l_i));
     endfor;
-    select;
-      when g_sortCond;
-        RptItem(C_STS_REVIEW:g_sortFirst:'#GSORT step'
-                :'Sort specification lines with IF/IFF/ELSE are not converted');
-      when g_sortIn = '' or g_sortOut = '';
-        RptItem(C_STS_REVIEW:g_sortFirst:'#GSORT step'
-                :'FILE NAME-INPUT and NAME-OUTPUT are both needed');
-      other;
-        RptItem(C_STS_REVIEW:g_sortFirst:'#GSORT step'
-                :'No sort specification lines found');
-    endsl;
+    RptItem(C_STS_REVIEW:g_sortFirst:'#GSORT step':l_why);
     return;
   endif;
 
   g_useSql = *on;
-  l_in = g_sortIn;
-  if g_sortInLib <> '';
-    l_in = g_sortInLib + '/' + g_sortIn;
-  endif;
-  l_out = g_sortOut;
-  if g_sortOutLib <> '';
-    l_out = g_sortOutLib + '/' + g_sortOut;
+  if g_sortSrcMbr <> '';
+    AddBody('FMTDTA INFILE(' + %trim(l_in) + ') OUTFILE(' + l_out
+            + ') SRCFILE(' + g_sortSrcLib + '/QS36SRC) SRCMBR('
+            + g_sortSrcMbr + ')');
+    RptItem(C_STS_ASSUMPTION:g_sortFirst:'#GSORT step'
+            :'// SOURCE member read from file QS36SRC in the named library');
+  else;
+    for l_i = 1 to g_blkCnt;
+      AddBody('RTVDTAARA DTAARA(*LDA (' + %trim(%char(g_blkP(l_i))) + ' '
+              + %trim(%char(g_blkN(l_i))) + ')) RTNVAR(&L'
+              + %trim(%char(g_blkP(l_i))) + '_'
+              + %trim(%char(g_blkN(l_i))) + ')');
+    endfor;
+    AddBody('DLTF FILE(QTEMP/' + l_n + ')');
+    AddBody('MONMSG MSGID(CPF2105)');
+    AddBody('CRTSRCPF FILE(QTEMP/' + l_n + ') RCDLEN(112) MBR(' + l_n
+            + ') CCSID(65535)');
+    for l_i = 1 to g_tmpCnt;
+      AddBody(g_tmp(l_i));
+    endfor;
+    l_cmd = 'FMTDTA INFILE(';
+    if l_inCnt > 1;
+      l_cmd += '(' + %scanrpl(' ':') (':%trim(l_in)) + ')';
+    else;
+      l_cmd += %trim(l_in);
+    endif;
+    l_cmd += ') OUTFILE(' + l_out + ') SRCFILE(QTEMP/' + l_n + ') SRCMBR('
+             + l_n + ')';
+    AddBody(l_cmd);
+    RptItem(C_STS_ASSUMPTION:g_sortFirst:'#GSORT step'
+            :'Mapped to FMTDTA; specification lines are copied unchanged into '
+            + 'QTEMP/' + l_n + ' (CCSID 65535) by RUNSQL');
   endif;
 
-  AddBody('DLTF FILE(QTEMP/IASORT' + l_n + ')');
-  AddBody('MONMSG MSGID(CPF2105)');
-  AddBody('CRTSRCPF FILE(QTEMP/IASORT' + l_n + ') RCDLEN(112) MBR(IASORT'
-          + l_n + ')');
-  for l_i = 1 to g_sortCnt;
-    // Each line is inserted as one record; the literal is cut into short
-    // pieces joined by *CAT so the CL line can wrap between them.
-    l_stmt = 'CHGVAR VAR(&SQL) VALUE(' + C_QUOTE
-             + 'INSERT INTO QTEMP/IASORT' + l_n + ' VALUES('
-             + %trim(%char(l_i)) + ',0,' + C_QUOTE + C_QUOTE + C_QUOTE
-             + ' *CAT ';
-    l_pos = 1;
-    l_len = %len(g_sortLines(l_i));
-    dow l_pos <= l_len;
-      l_piece = %subst(g_sortLines(l_i):l_pos:%min(30:l_len - l_pos + 1));
-      l_stmt += C_QUOTE + QuoteSpec(l_piece) + C_QUOTE + ' *CAT ';
-      l_pos += 30;
-    enddo;
-    l_stmt += C_QUOTE + C_QUOTE + C_QUOTE + ')' + C_QUOTE + ')';
-    AddBody(l_stmt);
-    AddBody('RUNSQL SQL(&SQL) COMMIT(*NONE) NAMING(*SYS)');
-  endfor;
-  AddBody('FMTDTA INFILE(' + l_in + ') OUTFILE(' + l_out
-          + ') SRCFILE(QTEMP/IASORT' + l_n + ') SRCMBR(IASORT' + l_n + ')');
-
-  RptItem(C_STS_ASSUMPTION:g_sortFirst:'#GSORT step'
-          :'Mapped to FMTDTA; specification lines are loaded into QTEMP/IASORT'
-          + l_n + ' by RUNSQL. Check that FMTDTA accepts them unchanged');
+  if g_conditions;
+    RptItem(C_STS_ASSUMPTION:g_sortFirst:'#GSORT conditions'
+            :'IF/IFF/ELSE compared as text; statement text taken to start at '
+            + 'column 4 of the specification line');
+  endif;
   if g_sortExtra <> '';
     RptItem(C_STS_REVIEW:g_sortFirst:'FILE NAME-OUTPUT'
             :'Output file keywords not converted: ' + g_sortExtra
@@ -708,8 +1139,9 @@ dcl-proc FinishSort;
 end-proc;
 
 // ------------------------------------------------------------------
-// The data lines of a #GSORT step are collected until /* or the next
-// statement. Returns *ON when the line was taken as part of the block.
+// The data lines of a #GSORT step are collected until // END, /*, // SOURCE
+// or the next statement. Returns *ON when the line was taken as part of
+// the block.
 dcl-proc SortLine;
   dcl-pi *n ind;
     i_lineNo int(10) const;
@@ -719,6 +1151,8 @@ dcl-proc SortLine;
   dcl-s l_t varchar(512);
   dcl-s l_kw varchar(60);
   dcl-s l_p int(10);
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_cnt int(10);
 
   l_t = %trim(i_text);
   if %len(l_t) = 0;
@@ -728,25 +1162,41 @@ dcl-proc SortLine;
   if %len(l_t) >= 2 and %subst(l_t:1:2) = '//';
     l_p = %scan(' ':l_t:3);
     if l_p = 0;
-      l_kw = Up(%subst(l_t:3));
+      l_kw = Up(%trim(%subst(l_t:3)));
     else;
       l_kw = Up(%trim(%subst(l_t:3:l_p - 3)));
     endif;
-    if l_kw = 'END';               // ends the inline data of the step
-      FinishSort();
-      RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
-      return *on;
-    endif;
-    if l_kw = 'IF' or l_kw = 'IFF' or l_kw = 'ELSE';
-      g_sortCond = *on;
-      if g_sortCnt < C_MAXSORT;
-        g_sortCnt += 1;
-        g_sortLines(g_sortCnt) = %trimr(i_text);
-      endif;
-      return *on;
-    endif;
-    FinishSort();
-    return *off;
+    select;
+      when l_kw = 'END';             // ends the inline data of the step
+        FinishSort();
+        RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
+        return *on;
+      when l_kw = 'SOURCE';          // specifications come from a member
+        if l_p > 0;
+          l_cnt = SplitItems(%trim(%subst(l_t:l_p + 1)):l_items);
+        else;
+          l_cnt = 0;
+        endif;
+        if l_cnt = 2;
+          g_sortSrcMbr = Up(l_items(1));
+          g_sortSrcLib = Up(l_items(2));
+        endif;
+        FinishSort();
+        RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
+        return *on;
+      when l_kw = 'IF' or l_kw = 'IFT' or l_kw = 'IFF' or l_kw = 'ELSE';
+        g_conditions = *on;
+        if g_sortCnt < C_MAXSORT;
+          g_sortCnt += 1;
+          g_sortLines(g_sortCnt) = %trimr(i_text);
+        else;
+          g_overflow = *on;
+        endif;
+        return *on;
+      other;
+        FinishSort();
+        return *off;
+    endsl;
   endif;
 
   if %subst(l_t:1:1) = '/' and %len(l_t) >= 2
@@ -996,6 +1446,13 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endif;
+  for l_i = 1 to g_ldaCnt;
+    if WriteCl('DCL VAR(&L' + %trim(%char(g_ldaP(l_i))) + '_'
+               + %trim(%char(g_ldaN(l_i))) + ') TYPE(*CHAR) LEN('
+               + %trim(%char(g_ldaN(l_i))) + ')':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endfor;
   if g_useSql;
     if WriteCl('DCL VAR(&SQL) TYPE(*CHAR) LEN(400)':o_msgId:o_msgData) <> 0;
       return 1;
@@ -1052,9 +1509,14 @@ dcl-proc OclConvert export;
   g_sortMode = *off;
   g_sortNo = 0;
   g_sortCnt = 0;
-  g_sortIn = '';
+  g_sortIn(*) = '';
+  g_sortInLib(*) = '';
+  g_sortSrcMbr = '';
+  g_sortSrcLib = '';
+  g_conditions = *off;
+  g_ldaCnt = 0;
+  g_blkCnt = 0;
   g_sortOut = '';
-  g_sortInLib = '';
   g_sortOutLib = '';
   g_sortExtra = '';
   g_useSql = *off;
