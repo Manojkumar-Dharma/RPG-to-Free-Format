@@ -20,7 +20,7 @@ Statuses: C converted, A converted with an assumption, R needs review.
 | `// FILE ...` with other keywords | `OVRDBF` plus the original as a comment | R | The keywords not converted are listed. |
 | `// FILE ...,JOB-YES` | `OVRDBF` plus comment | R | Not given the end-of-step removal; the override is meant to last for the job. |
 | `// FILE ...,DISP-NEW` | comment only | R | Creating the file is not converted. |
-| `// LOCAL OFFSET-n,DATA-'text'[,AREA-USER]` | `CHGDTAARA DTAARA(*LDA (n len)) VALUE('text')` | A | OFFSET taken as a 1-based position; 0 is rejected (R). Other keywords are R. |
+| `// LOCAL OFFSET-n,DATA-'text'[,AREA-USER]` | `CHGDTAARA DTAARA(*LDA (n len)) VALUE('text')` | A | OFFSET taken as a 1-based position; 0 is rejected (R). Other keywords are R. DATA that is one expression (`?DATE?`, `?USER?`, `?L'p,n'?`) uses its variable: `VALUE(&DATE)`. |
 | `// TAG name` | `NAME:` | C | Text after the label becomes a comment. |
 | `// GOTO name` | `GOTO CMDLBL(NAME)` | C | Text after the label becomes a comment. |
 | `// RETURN` | `RETURN` | C | |
@@ -55,13 +55,22 @@ The text after a condition is taken to supply columns 4 onward of the specificat
 
 ## Substitution expressions
 
+Evidence: SC41-4731, chapter 3. `?n?` is the nth positional parameter of the procedure, n from 1 through 64, and `EVALUATE Pn=...` assigns to it. So `?10?` is parameter 10, not a separate kind of variable. CL allows 40 parameters, so n above 40 is not converted.
+
 | OCL | CL | Notes |
 |---|---|---|
-| `?n?` (1 to 9) | `&Pn` | The program gets `PGM PARM(&P1 ...)`. Each parameter is declared `CHAR(10)` (A, once per run). |
-| `?10?` and above, or a name | not converted | Session variable set by `EVALUATE`, not a parameter. The statement is copied as a comment (R). |
+| `?n?` (1 to 40) | `&Pn` | A parameter first read (before any `EVALUATE` assigns it) is passed by the caller: `PGM PARM(&P1 ...)`, `CHAR(10)` (A). A parameter first assigned by `EVALUATE` is a local variable, declared with the length of the assigned value, and is not in `PARM`. |
 | `?USER?` | `&USER` | `RTVJOBA USER(&USER)` is added. |
 | `?WS?` | `&WS` | `RTVJOBA JOB(&WS)` is added. |
-| anything else between `?` marks | not converted | The statement is copied as a comment (R). |
+| `?DATE?` | `&DATE` | `RTVSYSVAL SYSVAL(QDATE) RTNVAR(&DATE)`. The S/36 date follows the session date format, QDATE follows the system format (A in practice, not reported yet). |
+| `?L'p,n'?` | `&Lp_n` | `RTVDTAARA DTAARA(*LDA (p n)) RTNVAR(&Lp_n)` is written right before the statement that uses it. |
+| `?n'value'?`, `?F'...'?`, `?nT'..'?` and the other forms | not converted | The statement is copied as a comment (R). |
+
+CL cannot put a variable inside a word or a quoted text. Where OCL has an expression inside a name (for example `LABEL-STK?10?TRI`), the converter builds the name into a temporary variable `&Tn` with `CHGVAR ... *TCAT ...` before the statement and uses `&Tn` (FILE and LOAD operands). In a copied command (a line without `//`) an expression inside a word is not converted (R).
+
+## EVALUATE
+
+`// EVALUATE Pn[,length]=value ...` becomes `CHGVAR VAR(&Pn) VALUE(...)` for each item. Converted values: a text constant in apostrophes (or `''` for blank), a number (leading zeros dropped, or padded or cut to the length), `?USER?`, `?WS?`, `?DATE?`, `?L'p,n'?`, `?n?`. Arithmetic (`+ - * /` and parentheses), `?F'...'?` and other expressions are not converted (R, one report line per item). Words that are not `Pn=...` are comment text and become a CL comment. Status C, or A when a passed parameter is assigned.
 
 ## Other rules
 
@@ -72,4 +81,4 @@ The text after a condition is taken to supply columns 4 onward of the specificat
 
 ## Not converted yet
 
-Statements seen in the IBM guide but not converted: `IF`, `IFF`, `ELSE` (with `?CD?` and similar tests), `EVALUATE`, `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `PRINTER`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SWITCH`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R. `IF`/`IFF`/`ELSE`/`EVALUATE` are the next piece.
+Statements seen in the IBM guide but not converted: `IF`, `IFF`, `ELSE` (with `?CD?` and similar tests), `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `PRINTER`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SWITCH`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R. `IF`/`IFF`/`ELSE`/`EVALUATE` are the next piece.

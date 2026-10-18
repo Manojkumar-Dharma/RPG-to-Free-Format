@@ -59,6 +59,10 @@ dcl-s g_ldaCnt int(10);
 dcl-s g_sortOutLib varchar(60);
 dcl-s g_sortExtra varchar(200);
 dcl-s g_useSql ind;
+dcl-s g_parKind char(1) dim(40);   // ' ' unused, 'P' passed, 'L' local (set by EVALUATE)
+dcl-s g_parLen int(10) dim(40);
+dcl-s g_useDate ind;
+dcl-s g_tmpVar int(10);
 dcl-s g_isSort ind;              // the pending LOAD is #GSORT
 
 // ------------------------------------------------------------------
@@ -137,7 +141,220 @@ dcl-proc AddComment;
 end-proc;
 
 // ------------------------------------------------------------------
-// Replaces ?n?, ?USER? and ?WS?. o_open is *ON when some other ?...?
+// A procedure parameter ?n? (1 to 40 here; CL allows 40 parameters) is read.
+// A parameter whose first use is a read is taken as passed by the caller.
+dcl-proc UseParm;
+  dcl-pi *n;
+    i_n int(10) const;
+  end-pi;
+
+  if g_parKind(i_n) = ' ';
+    g_parKind(i_n) = 'P';
+  endif;
+  if g_parKind(i_n) = 'P';
+    g_maxParm = %max(g_maxParm:i_n);
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// Local data area text: returns the CL variable and, when i_emit is *ON,
+// writes the RTVDTAARA that fills it (right before the statement using it).
+dcl-proc LdaName;
+  dcl-pi *n varchar(20);
+    i_p int(10) const;
+    i_n int(10) const;
+    i_emit ind const;
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_found ind inz(*off);
+  dcl-s l_name varchar(20);
+
+  l_name = '&L' + %trim(%char(i_p)) + '_' + %trim(%char(i_n));
+  for l_i = 1 to g_ldaCnt;
+    if g_ldaP(l_i) = i_p and g_ldaN(l_i) = i_n;
+      l_found = *on;
+    endif;
+  endfor;
+  if not l_found and g_ldaCnt < C_MAXLDA;
+    g_ldaCnt += 1;
+    g_ldaP(g_ldaCnt) = i_p;
+    g_ldaN(g_ldaCnt) = i_n;
+  endif;
+  if i_emit;
+    AddBody('RTVDTAARA DTAARA(*LDA (' + %trim(%char(i_p)) + ' '
+            + %trim(%char(i_n)) + ')) RTNVAR(' + l_name + ')');
+  endif;
+  return l_name;
+end-proc;
+
+// ------------------------------------------------------------------
+// Parses L'p,n' (text of a ?L'p,n'? expression). *ON when valid.
+dcl-proc ParseLda;
+  dcl-pi *n ind;
+    i_tok varchar(60) const;
+    o_p int(10);
+    o_n int(10);
+  end-pi;
+
+  dcl-s l_t varchar(60);
+  dcl-s l_cp int(10);
+  dcl-s l_ps varchar(60);
+  dcl-s l_ns varchar(60);
+
+  l_t = Up(%trim(i_tok));
+  if %len(l_t) < 6 or %subst(l_t:1:2) <> 'L''' 
+     or %subst(l_t:%len(l_t):1) <> '''';
+    return *off;
+  endif;
+  l_cp = %scan(',':l_t);
+  if l_cp < 4;
+    return *off;
+  endif;
+  l_ps = %subst(l_t:3:l_cp - 3);
+  l_ns = %subst(l_t:l_cp + 1:%len(l_t) - l_cp - 1);
+  if %len(l_ps) = 0 or %len(l_ps) > 4 or %len(l_ns) = 0 or %len(l_ns) > 3
+     or %check('0123456789':l_ps) > 0 or %check('0123456789':l_ns) > 0;
+    return *off;
+  endif;
+  o_p = %int(l_ps);
+  o_n = %int(l_ns);
+  return o_p >= 1 and o_n >= 1 and o_p + o_n <= 1025;
+end-proc;
+
+// ------------------------------------------------------------------
+// Maps the text inside ?...? to a CL variable and its length. Returns ''
+// when the expression is not supported. Supported: ?n? (1-40), ?USER?,
+// ?WS?, ?DATE?, ?L'p,n'?.
+dcl-proc ExprVar;
+  dcl-pi *n varchar(20);
+    i_tok varchar(60) const;
+    o_len int(10);
+  end-pi;
+
+  dcl-s l_t varchar(60);
+  dcl-s l_n int(10);
+  dcl-s l_p int(10);
+
+  l_t = Up(%trim(i_tok));
+  o_len = 0;
+  if %len(l_t) > 0 and %len(l_t) <= 2 and %check('0123456789':l_t) = 0;
+    l_n = %int(l_t);
+    if l_n < 1 or l_n > 40;
+      return '';
+    endif;
+    UseParm(l_n);
+    if g_parKind(l_n) = 'L';
+      o_len = %max(g_parLen(l_n):1);
+    else;
+      o_len = 10;
+    endif;
+    return '&P' + %trim(%char(l_n));
+  endif;
+  if l_t = 'USER';
+    g_useUser = *on;
+    o_len = 10;
+    return '&USER';
+  endif;
+  if l_t = 'WS';
+    g_useWs = *on;
+    o_len = 10;
+    return '&WS';
+  endif;
+  if l_t = 'DATE';
+    g_useDate = *on;
+    o_len = 6;
+    return '&DATE';
+  endif;
+  if ParseLda(l_t:l_p:l_n);
+    o_len = l_n;
+    return LdaName(l_p:l_n:*on);
+  endif;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// A name or value that may contain ?...? expressions. A single expression
+// becomes its CL variable; a mixture of text and expressions is built into
+// a temporary variable by CHGVAR (written before the statement).
+dcl-proc OperandExpr;
+  dcl-pi *n varchar(60);
+    i_val varchar(200) const;
+    o_ok ind;
+  end-pi;
+
+  dcl-s l_rest varchar(200);
+  dcl-s l_p1 int(10);
+  dcl-s l_p2 int(10);
+  dcl-s l_lit varchar(200);
+  dcl-s l_var varchar(20);
+  dcl-s l_len int(10);
+  dcl-s l_expr varchar(400) inz('');
+  dcl-s l_cnt int(10) inz(0);
+  dcl-s l_tmp varchar(20);
+
+  o_ok = *on;
+  if %scan('?':i_val) = 0;
+    return Up(i_val);
+  endif;
+
+  l_rest = i_val;
+  dow %len(l_rest) > 0;
+    l_p1 = %scan('?':l_rest);
+    l_var = '';
+    if l_p1 = 0;
+      l_lit = l_rest;
+      l_rest = '';
+    else;
+      l_p2 = %scan('?':l_rest:l_p1 + 1);
+      if l_p2 = 0;
+        o_ok = *off;
+        return '';
+      endif;
+      l_var = ExprVar(%subst(l_rest:l_p1 + 1:l_p2 - l_p1 - 1):l_len);
+      if l_var = '';
+        o_ok = *off;
+        return '';
+      endif;
+      if l_p1 > 1;
+        l_lit = %subst(l_rest:1:l_p1 - 1);
+      else;
+        l_lit = '';
+      endif;
+      if l_p2 >= %len(l_rest);
+        l_rest = '';
+      else;
+        l_rest = %subst(l_rest:l_p2 + 1);
+      endif;
+    endif;
+
+    if %len(l_lit) > 0;
+      if l_cnt > 0;
+        l_expr += ' *TCAT ';
+      endif;
+      l_expr += C_QUOTE + Up(l_lit) + C_QUOTE;
+      l_cnt += 1;
+    endif;
+    if l_var <> '';
+      if l_cnt > 0;
+        l_expr += ' *TCAT ';
+      endif;
+      l_expr += l_var;
+      l_cnt += 1;
+    endif;
+  enddo;
+
+  if l_cnt = 1;
+    return l_var;                  // the value is one expression
+  endif;
+  g_tmpVar += 1;
+  l_tmp = '&T' + %trim(%char(g_tmpVar));
+  AddBody('CHGVAR VAR(' + l_tmp + ') VALUE(' + l_expr + ')');
+  return l_tmp;
+end-proc;
+
+// ------------------------------------------------------------------
+// Replaces ?n?, ?USER?, ?WS?, ?DATE? and ?L'p,n'?. o_open is *ON when some other ?...?
 // expression is left (it cannot be converted).
 dcl-proc Subst;
   dcl-pi *n varchar(512);
@@ -150,7 +367,8 @@ dcl-proc Subst;
   dcl-s l_p1 int(10);
   dcl-s l_p2 int(10);
   dcl-s l_tok varchar(60);
-  dcl-s l_n int(10);
+  dcl-s l_var varchar(20);
+  dcl-s l_len int(10);
 
   o_open = *off;
   l_in = i_text;
@@ -182,29 +400,19 @@ dcl-proc Subst;
     endif;
     l_tok = Up(%subst(l_in:l_p1 + 1:l_p2 - l_p1 - 1));
 
-    select;
-      when %len(l_tok) > 0 and %len(l_tok) <= 2
-           and %check('0123456789':l_tok) = 0;
-        l_n = %int(l_tok);
-        // Only ?1? to ?9? are command parameters. ?10? and above (and names)
-        // are session variables set by EVALUATE, which is not converted yet.
-        if l_n < 1 or l_n > 9;
-          o_open = *on;
-          l_out += %subst(l_in:l_p1:l_p2 - l_p1 + 1);
-        else;
-          g_maxParm = %max(g_maxParm:l_n);
-          l_out += '&P' + %trim(%char(l_n));
-        endif;
-      when l_tok = 'USER';
-        g_useUser = *on;
-        l_out += '&USER';
-      when l_tok = 'WS';
-        g_useWs = *on;
-        l_out += '&WS';
-      other;
+    l_var = ExprVar(l_tok:l_len);
+    if l_var = '' or l_len < 0;
+      o_open = *on;
+      l_out += %subst(l_in:l_p1:l_p2 - l_p1 + 1);
+    else;
+      // CL cannot put a variable inside a word or a quoted text.
+      if (%len(l_out) > 0 and %scan(%subst(l_out:%len(l_out):1):' ,()') = 0)
+         or (l_p2 < %len(l_in)
+         and %scan(%subst(l_in:l_p2 + 1:1):' ,()') = 0);
         o_open = *on;
-        l_out += %subst(l_in:l_p1:l_p2 - l_p1 + 1);
-    endsl;
+      endif;
+      l_out += l_var;
+    endif;
 
     if l_p2 >= %len(l_in);
       leave;
@@ -316,8 +524,7 @@ dcl-proc DoLoad;
 
   dcl-s l_items varchar(200) dim(C_MAXITEMS);
   dcl-s l_cnt int(10);
-  dcl-s l_open ind;
-  dcl-s l_ops varchar(512);
+  dcl-s l_ok ind;
   dcl-s l_name varchar(60);
   dcl-s l_lib varchar(60);
 
@@ -327,18 +534,21 @@ dcl-proc DoLoad;
     g_pendLoad = *off;
   endif;
 
-  l_ops = Subst(i_operands:l_open);
-  l_cnt = SplitItems(l_ops:l_items);
-  if l_open or l_cnt < 1 or l_cnt > 2;
+  l_cnt = SplitItems(i_operands:l_items);
+  if l_cnt < 1 or l_cnt > 2;
     ReviewLine(i_lineNo:i_text
                :'LOAD operands not understood (expected program[,library])');
     return;
   endif;
 
-  l_name = Up(l_items(1));
+  l_name = OperandExpr(l_items(1):l_ok);
   l_lib = '';
-  if l_cnt = 2;
-    l_lib = Up(l_items(2));
+  if l_ok and l_cnt = 2;
+    l_lib = OperandExpr(l_items(2):l_ok);
+  endif;
+  if not l_ok;
+    ReviewLine(i_lineNo:i_text:'LOAD uses an expression that is not converted');
+    return;
   endif;
   if not IsName(l_name:10) or (l_lib <> '' and not IsName(l_lib:10));
     ReviewLine(i_lineNo:i_text:'Program or library name is not a valid name');
@@ -415,8 +625,8 @@ dcl-proc DoFile;
   dcl-s l_items varchar(200) dim(C_MAXITEMS);
   dcl-s l_cnt int(10);
   dcl-s l_i int(10);
-  dcl-s l_open ind;
-  dcl-s l_ops varchar(512);
+  dcl-s l_ok ind;
+  dcl-s l_bad ind inz(*off);
   dcl-s l_key varchar(60);
   dcl-s l_val varchar(200);
   dcl-s l_name varchar(60) inz('');
@@ -428,22 +638,22 @@ dcl-proc DoFile;
   dcl-s l_job ind inz(*off);
   dcl-s l_idx int(10);
 
-  l_ops = Subst(i_operands:l_open);
-  l_cnt = SplitItems(l_ops:l_items);
-  if l_open or l_cnt < 1;
+  l_cnt = SplitItems(i_operands:l_items);
+  if l_cnt < 1;
     ReviewLine(i_lineNo:i_text:'FILE operands not understood');
     return;
   endif;
 
   for l_i = 1 to l_cnt;
     SplitKey(l_items(l_i):l_key:l_val);
+    l_ok = *on;
     select;
       when l_key = 'NAME';
-        l_name = Up(l_val);
+        l_name = OperandExpr(l_val:l_ok);
       when l_key = 'LABEL';
-        l_label = Up(l_val);
+        l_label = OperandExpr(l_val:l_ok);
       when l_key = 'LIBRARY';
-        l_lib = Up(l_val);
+        l_lib = OperandExpr(l_val:l_ok);
       when l_key = 'DISP';
         l_disp = Up(l_val);
       other;
@@ -459,7 +669,15 @@ dcl-proc DoFile;
           l_other += l_key;
         endif;
     endsl;
+    if not l_ok;
+      l_bad = *on;
+    endif;
   endfor;
+  if l_bad;
+    ReviewLine(i_lineNo:i_text
+               :'NAME, LABEL or LIBRARY uses an expression that is not converted');
+    return;
+  endif;
 
   if l_label = '';
     l_label = l_name;
@@ -551,6 +769,7 @@ dcl-proc DoLocal;
   dcl-s l_chk varchar(512);
   dcl-s l_len int(10);
   dcl-s l_pos int(10);
+  dcl-s l_var varchar(20);
 
   l_cnt = SplitItems(i_operands:l_items);
   for l_i = 1 to l_cnt;
@@ -587,7 +806,22 @@ dcl-proc DoLocal;
     l_data = %subst(l_data:2:%len(l_data) - 2);
   endif;
 
-  // Substitution inside the data cannot be expressed by CHGDTAARA VALUE.
+  // DATA that is one expression (?DATE?, ?USER?, ?L'p,n'?) uses its variable.
+  if %len(l_data) >= 3 and %subst(l_data:1:1) = '?'
+     and %subst(l_data:%len(l_data):1) = '?'
+     and %scan('?':l_data:2) = %len(l_data);
+    l_var = ExprVar(%subst(l_data:2:%len(l_data) - 2):l_len);
+    if l_var <> '' and %subst(l_var:1:2) <> '&P';
+      AddBody('CHGDTAARA DTAARA(*LDA (' + %trim(%char(l_pos)) + ' '
+              + %trim(%char(l_len)) + ')) VALUE(' + l_var + ')');
+      RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+              :'OFFSET taken as a 1-based position in the local data area (*LDA)'
+              + '; value comes from ' + %subst(l_data:1:%len(l_data)));
+      return;
+    endif;
+  endif;
+
+  // Other substitution inside the data cannot be expressed by CHGDTAARA VALUE.
   l_chk = Subst(l_data:l_open);
   if l_open or l_chk <> l_data or %len(l_data) = 0;
     ReviewLine(i_lineNo:i_text
@@ -595,12 +829,196 @@ dcl-proc DoLocal;
     return;
   endif;
 
-  l_len = %len(%scanrpl(:' ':l_data));
+  l_len = %len(%scanrpl('''''':' ':l_data));
   AddBody('CHGDTAARA DTAARA(*LDA (' + %trim(%char(l_pos)) + ' '
           + %trim(%char(l_len)) + ')) VALUE(' + C_QUOTE + l_data
           + C_QUOTE + ')');
   RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
           :'OFFSET taken as a 1-based position in the local data area (*LDA)');
+end-proc;
+
+// ------------------------------------------------------------------
+// // EVALUATE Pn[,len]=expression ...   (items separated by blanks)
+// Parameters are CL variables. A parameter first assigned here (before any
+// ?n? read) is a local variable; one read first is a passed parameter.
+// Converted: a text or number constant, ?USER?, ?WS?, ?DATE?, ?L'p,n'?,
+// ?n?. Arithmetic and other expressions are reported for review.
+dcl-proc DoEvaluate;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_ch char(1);
+  dcl-s l_inQ ind inz(*off);
+  dcl-s l_item varchar(300) inz('');
+  dcl-s l_items varchar(300) dim(C_MAXITEMS);
+  dcl-s l_cnt int(10) inz(0);
+  dcl-s l_k int(10);
+  dcl-s l_eq int(10);
+  dcl-s l_lhs varchar(60);
+  dcl-s l_expr varchar(300);
+  dcl-s l_cm int(10);
+  dcl-s l_nStr varchar(10);
+  dcl-s l_lenStr varchar(10);
+  dcl-s l_n int(10);
+  dcl-s l_len int(10);
+  dcl-s l_val varchar(300);
+  dcl-s l_var varchar(20);
+  dcl-s l_vlen int(10);
+  dcl-s l_numeric ind;
+  dcl-s l_cmt varchar(300) inz('');
+  dcl-s l_bad ind inz(*off);
+  dcl-s l_note ind inz(*off);
+
+  // Split at blanks outside apostrophes and outside ?...? expressions.
+  dcl-s l_inE ind inz(*off);
+  for l_i = 1 to %len(i_operands);
+    l_ch = %subst(i_operands:l_i:1);
+    if l_ch = C_QUOTE;
+      l_inQ = not l_inQ;
+    elseif l_ch = '?' and not l_inQ;
+      l_inE = not l_inE;
+    endif;
+    if l_ch = ' ' and not l_inQ and not l_inE;
+      if %len(l_item) > 0 and l_cnt < C_MAXITEMS;
+        l_cnt += 1;
+        l_items(l_cnt) = l_item;
+      endif;
+      l_item = '';
+    else;
+      l_item += l_ch;
+    endif;
+  endfor;
+  if %len(l_item) > 0 and l_cnt < C_MAXITEMS;
+    l_cnt += 1;
+    l_items(l_cnt) = l_item;
+  endif;
+
+  for l_k = 1 to l_cnt;
+    l_eq = %scan('=':l_items(l_k));
+    if %subst(Up(l_items(l_k)):1:1) <> 'P' or l_eq < 3;
+      // Not an assignment: anything not recognised is a comment.
+      if %len(l_cmt) > 0;
+        l_cmt += ' ';
+      endif;
+      l_cmt += l_items(l_k);
+      iter;
+    endif;
+
+    l_lhs = %subst(l_items(l_k):2:l_eq - 2);
+    l_expr = %subst(l_items(l_k):l_eq + 1);
+    l_cm = %scan(',':l_lhs);
+    if l_cm = 0;
+      l_nStr = l_lhs;
+      l_lenStr = '';
+    else;
+      l_nStr = %subst(l_lhs:1:l_cm - 1);
+      l_lenStr = %subst(l_lhs:l_cm + 1);
+    endif;
+    if %len(l_nStr) = 0 or %len(l_nStr) > 2
+       or %check('0123456789':l_nStr) > 0
+       or (%len(l_lenStr) > 0 and (%len(l_lenStr) > 2
+       or %check('0123456789':l_lenStr) > 0));
+      ReviewLine(i_lineNo:i_text
+                 :'EVALUATE item ' + l_items(l_k)
+                 + ' is not converted (parameter number or length is an expression)');
+      l_bad = *on;
+      iter;
+    endif;
+    l_n = %int(l_nStr);
+    l_len = 0;
+    if %len(l_lenStr) > 0;
+      l_len = %int(l_lenStr);
+    endif;
+    if l_n < 1 or l_n > 40;
+      ReviewLine(i_lineNo:i_text
+                 :'EVALUATE parameter P' + l_nStr + ' is outside 1 to 40');
+      l_bad = *on;
+      iter;
+    endif;
+
+    // The value
+    l_var = '';
+    l_val = '';
+    l_numeric = *off;
+    l_vlen = 0;
+    select;
+      when l_expr = '''''';
+        l_val = ' ';
+        l_vlen = 1;
+      when %len(l_expr) >= 2 and %subst(l_expr:1:1) = C_QUOTE
+           and %subst(l_expr:%len(l_expr):1) = C_QUOTE;
+        l_val = %subst(l_expr:2:%len(l_expr) - 2);
+        l_vlen = %len(%scanrpl('''''':' ':l_val));
+      when %subst(l_expr:1:1) = '?';
+        if %len(l_expr) >= 3 and %scan('?':l_expr:2) = %len(l_expr);
+          l_var = ExprVar(%subst(l_expr:2:%len(l_expr) - 2):l_vlen);
+        endif;
+        if l_var = '';
+          ReviewLine(i_lineNo:i_text
+                     :'EVALUATE value ' + l_expr + ' is not converted');
+          l_bad = *on;
+          iter;
+        endif;
+      when %scan('?':l_expr) > 0 or %scan('+':l_expr) > 0
+           or %scan('\':l_expr) > 0 or %scan('/':l_expr) > 0
+           or %scan('(':l_expr) > 0 or %scan('-':l_expr) > 0
+           or %scan('*':l_expr) > 0 or %len(l_expr) = 0;
+        ReviewLine(i_lineNo:i_text
+                   :'EVALUATE value ' + l_expr
+                   + ' (arithmetic or mixed expression) is not converted');
+        l_bad = *on;
+        iter;
+      other;
+        l_val = l_expr;
+        l_numeric = %check('0123456789':l_expr) = 0;
+        if l_numeric;
+          // digits only: leading zeros dropped, or padded/cut to the length
+          dow %len(l_val) > 1 and %subst(l_val:1:1) = '0';
+            l_val = %subst(l_val:2);
+          enddo;
+          if l_len > 0;
+            if %len(l_val) > l_len;
+              l_val = %subst(l_val:%len(l_val) - l_len + 1);
+            else;
+              l_val = %subst('000000000000000':1:l_len - %len(l_val)) + l_val;
+            endif;
+          endif;
+        endif;
+        l_vlen = %len(l_val);
+    endsl;
+
+    if g_parKind(l_n) = ' ';
+      g_parKind(l_n) = 'L';
+    endif;
+    if g_parKind(l_n) = 'L';
+      g_parLen(l_n) = %max(g_parLen(l_n):%max(l_vlen:1));
+    else;
+      l_note = *on;
+    endif;
+
+    if l_var <> '';
+      AddBody('CHGVAR VAR(&P' + %trim(%char(l_n)) + ') VALUE(' + l_var + ')');
+    else;
+      AddBody('CHGVAR VAR(&P' + %trim(%char(l_n)) + ') VALUE(' + C_QUOTE
+              + l_val + C_QUOTE + ')');
+    endif;
+  endfor;
+
+  if %len(l_cmt) > 0;
+    AddComment(l_cmt);
+  endif;
+  if not l_bad;
+    if l_note;
+      RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+              :'Assigned parameter is also passed by the caller (CHAR(10))');
+    else;
+      RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
+    endif;
+  endif;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -685,7 +1103,7 @@ dcl-proc SortVar;
 
   l_t = Up(%trim(i_tok));
   if %len(l_t) = 1 and %check('123456789':l_t) = 0;
-    g_maxParm = %max(g_maxParm:%int(l_t));
+    UseParm(%int(l_t));
     return '&P' + l_t;
   endif;
 
@@ -1282,6 +1700,8 @@ dcl-proc ProcessStatement;
       DoFile(i_lineNo:i_text:l_ops);
     when l_kw = 'LOCAL';
       DoLocal(i_lineNo:i_text:l_ops);
+    when l_kw = 'EVALUATE';
+      DoEvaluate(i_lineNo:i_text:l_ops);
     when l_kw = 'TAG';
       DoTagGoto(i_lineNo:i_text:*on:l_ops);
     when l_kw = 'GOTO';
@@ -1436,6 +1856,27 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endfor;
+  // Parameters set by EVALUATE and not passed by the caller are local.
+  for l_i = g_maxParm + 1 to 40;
+    if g_parKind(l_i) = 'L';
+      if WriteCl('DCL VAR(&P' + %trim(%char(l_i)) + ') TYPE(*CHAR) LEN('
+                 + %trim(%char(%max(g_parLen(l_i):1))) + ')'
+                 :o_msgId:o_msgData) <> 0;
+        return 1;
+      endif;
+    endif;
+  endfor;
+  for l_i = 1 to g_tmpVar;
+    if WriteCl('DCL VAR(&T' + %trim(%char(l_i)) + ') TYPE(*CHAR) LEN(50)'
+               :o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endfor;
+  if g_useDate;
+    if WriteCl('DCL VAR(&DATE) TYPE(*CHAR) LEN(6)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
   if g_useUser;
     if WriteCl('DCL VAR(&USER) TYPE(*CHAR) LEN(10)':o_msgId:o_msgData) <> 0;
       return 1;
@@ -1465,6 +1906,11 @@ dcl-proc WriteProgram;
   endif;
   if g_useWs;
     if WriteCl('RTVJOBA JOB(&WS)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
+  if g_useDate;
+    if WriteCl('RTVSYSVAL SYSVAL(QDATE) RTNVAR(&DATE)':o_msgId:o_msgData) <> 0;
       return 1;
     endif;
   endif;
@@ -1501,6 +1947,11 @@ dcl-proc OclConvert export;
   g_bodyCnt = 0;
   g_overflow = *off;
   g_maxParm = 0;
+  g_parKind(*) = ' ';
+  g_parLen(*) = 0;
+  g_useDate = *off;
+  g_tmpVar = 0;
+  g_ldaCnt = 0;
   g_useUser = *off;
   g_useWs = *off;
   g_pendLoad = *off;
