@@ -28,6 +28,24 @@ Statuses: C converted, A converted with an assumption, R needs review.
 
 After each `CALL` the converter writes `DLTOVR FILE(names)` for the files overridden by `FILE` statements since the previous `RUN`, because an OCL `FILE` statement applies to one step.
 
+## Sort steps (`#GSORT`)
+
+Evidence: two sample procedures supplied by the author (HSORTR/FNC/FDC specification lines).
+
+| OCL | CLLE output | Status |
+|---|---|---|
+| `// LOAD #GSORT`, `FILE NAME-INPUT,LABEL-a`, `FILE NAME-OUTPUT,LABEL-b[,keywords]`, `// RUN`, spec lines, `/*` | `DLTF`/`CRTSRCPF` of `QTEMP/IASORTn`, one `RUNSQL INSERT` per spec line (built in `&SQL` with `*CAT`), then `FMTDTA INFILE(a) OUTFILE(b) SRCFILE(QTEMP/IASORTn) SRCMBR(IASORTn)` | A |
+| Output keywords such as `RECORDS-`, `EXTEND-` | not converted; the output file may need creating first | R |
+| Spec lines with `// IF`, `IFF`, `ELSE`, `END` inside the block | whole block kept as comments | R |
+
+The spec block ends at `/*`, `/&`, or the next `//` statement that is not a conditional.
+
+## Lines without `//`
+
+- A `/* ... */` line is already a CL comment and is copied (text kept).
+- A line that starts like a command name (letters, up to 10 characters) is copied as a command with `?n?` substitution applied, status A (check the command exists; for example `OVRDBF`, `OVRPRTF`, `MULTISUP`).
+- Anything else is R.
+
 ## Substitution expressions
 
 | OCL | CL | Notes |

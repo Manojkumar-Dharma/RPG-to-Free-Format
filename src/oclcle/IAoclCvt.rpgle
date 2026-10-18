@@ -33,6 +33,20 @@ dcl-s g_loadText varchar(512);
 dcl-s g_afterRun ind;
 dcl-s g_width int(10);
 dcl-s g_ovr varchar(300);       // FILE names overridden since the last CALL
+dcl-c C_MAXSORT 200;
+dcl-s g_sortMode ind;            // inside the data lines of a #GSORT step
+dcl-s g_sortCond ind;            // the block contains IF/IFF/ELSE/END
+dcl-s g_sortLines varchar(512) dim(C_MAXSORT);
+dcl-s g_sortCnt int(10);
+dcl-s g_sortNo int(10);
+dcl-s g_sortFirst int(10);
+dcl-s g_sortIn varchar(60);
+dcl-s g_sortOut varchar(60);
+dcl-s g_sortInLib varchar(60);
+dcl-s g_sortOutLib varchar(60);
+dcl-s g_sortExtra varchar(200);
+dcl-s g_useSql ind;
+dcl-s g_isSort ind;              // the pending LOAD is #GSORT
 
 // ------------------------------------------------------------------
 dcl-proc Up;
@@ -317,6 +331,7 @@ dcl-proc DoLoad;
   endif;
 
   g_pendLoad = *on;
+  g_isSort = (l_name = '#GSORT');
   g_loadName = l_name;
   g_loadLib = l_lib;
   g_loadLine = i_lineNo;
@@ -336,6 +351,15 @@ dcl-proc DoRun;
   g_afterRun = *on;
   if not g_pendLoad;
     ReviewLine(i_lineNo:i_text:'RUN without a LOAD');
+    return;
+  endif;
+
+  if g_isSort;
+    g_sortMode = *on;
+    g_sortCond = *off;
+    g_sortCnt = 0;
+    g_sortFirst = i_lineNo;
+    g_pendLoad = *off;
     return;
   endif;
 
@@ -424,6 +448,20 @@ dcl-proc DoFile;
   if not IsName(l_name:10) or not IsName(l_label:10)
      or (l_lib <> '' and not IsName(l_lib:10));
     ReviewLine(i_lineNo:i_text:'NAME, LABEL or LIBRARY is missing or not a valid name');
+    return;
+  endif;
+
+  // Files of a #GSORT step become FMTDTA INFILE/OUTFILE (see FinishSort).
+  if g_isSort and g_pendLoad and (l_name = 'INPUT' or l_name = 'OUTPUT');
+    if l_name = 'INPUT';
+      g_sortIn = l_label;
+      g_sortInLib = l_lib;
+    else;
+      g_sortOut = l_label;
+      g_sortOutLib = l_lib;
+      g_sortExtra = l_other;
+    endif;
+    RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
     return;
   endif;
   if l_disp = 'NEW';
@@ -572,6 +610,155 @@ dcl-proc DoTagGoto;
 end-proc;
 
 // ------------------------------------------------------------------
+// Text for a CL literal piece: every quote doubled once for the SQL
+// statement and once more for the CL literal.
+dcl-proc QuoteSpec;
+  dcl-pi *n varchar(512);
+    i_text varchar(512) const;
+  end-pi;
+
+  return %scanrpl(C_QUOTE:C_QUOTE + C_QUOTE + C_QUOTE + C_QUOTE:i_text);
+end-proc;
+
+// ------------------------------------------------------------------
+// Writes the collected #GSORT step: FMTDTA with the specification lines
+// inserted into a source member in QTEMP by CL at run time. A block with
+// IF/IFF/ELSE/END is not converted (the lines are kept as comments).
+dcl-proc FinishSort;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_n varchar(10);
+  dcl-s l_pos int(10);
+  dcl-s l_len int(10);
+  dcl-s l_piece varchar(512);
+  dcl-s l_stmt varchar(512);
+  dcl-s l_in varchar(130);
+  dcl-s l_out varchar(130);
+
+  g_sortMode = *off;
+  g_sortNo += 1;
+  l_n = %trim(%char(g_sortNo));
+
+  if g_sortCond or g_sortCnt = 0 or g_sortIn = '' or g_sortOut = '';
+    AddComment('OCL: sort step (#GSORT) not converted');
+    for l_i = 1 to g_sortCnt;
+      AddCommentRaw(' ' + g_sortLines(l_i));
+    endfor;
+    select;
+      when g_sortCond;
+        RptItem(C_STS_REVIEW:g_sortFirst:'#GSORT step'
+                :'Sort specifications with IF/IFF/ELSE/END are not converted');
+      when g_sortIn = '' or g_sortOut = '';
+        RptItem(C_STS_REVIEW:g_sortFirst:'#GSORT step'
+                :'FILE NAME-INPUT and NAME-OUTPUT are both needed');
+      other;
+        RptItem(C_STS_REVIEW:g_sortFirst:'#GSORT step'
+                :'No sort specification lines found');
+    endsl;
+    return;
+  endif;
+
+  g_useSql = *on;
+  l_in = g_sortIn;
+  if g_sortInLib <> '';
+    l_in = g_sortInLib + '/' + g_sortIn;
+  endif;
+  l_out = g_sortOut;
+  if g_sortOutLib <> '';
+    l_out = g_sortOutLib + '/' + g_sortOut;
+  endif;
+
+  AddBody('DLTF FILE(QTEMP/IASORT' + l_n + ')');
+  AddBody('MONMSG MSGID(CPF2105)');
+  AddBody('CRTSRCPF FILE(QTEMP/IASORT' + l_n + ') RCDLEN(112) MBR(IASORT'
+          + l_n + ')');
+  for l_i = 1 to g_sortCnt;
+    // Each line is inserted as one record; the literal is cut into short
+    // pieces joined by *CAT so the CL line can wrap between them.
+    l_stmt = 'CHGVAR VAR(&SQL) VALUE(' + C_QUOTE
+             + 'INSERT INTO QTEMP/IASORT' + l_n + ' VALUES('
+             + %trim(%char(l_i)) + ',0,' + C_QUOTE + C_QUOTE + C_QUOTE
+             + ' *CAT ';
+    l_pos = 1;
+    l_len = %len(g_sortLines(l_i));
+    dow l_pos <= l_len;
+      l_piece = %subst(g_sortLines(l_i):l_pos:%min(30:l_len - l_pos + 1));
+      l_stmt += C_QUOTE + QuoteSpec(l_piece) + C_QUOTE + ' *CAT ';
+      l_pos += 30;
+    enddo;
+    l_stmt += C_QUOTE + C_QUOTE + C_QUOTE + ')' + C_QUOTE + ')';
+    AddBody(l_stmt);
+    AddBody('RUNSQL SQL(&SQL) COMMIT(*NONE) NAMING(*SYS)');
+  endfor;
+  AddBody('FMTDTA INFILE(' + l_in + ') OUTFILE(' + l_out
+          + ') SRCFILE(QTEMP/IASORT' + l_n + ') SRCMBR(IASORT' + l_n + ')');
+
+  RptItem(C_STS_ASSUMPTION:g_sortFirst:'#GSORT step'
+          :'Mapped to FMTDTA; specification lines are loaded into QTEMP/IASORT'
+          + l_n + ' by RUNSQL. Check that FMTDTA accepts them unchanged');
+  if g_sortExtra <> '';
+    RptItem(C_STS_REVIEW:g_sortFirst:'FILE NAME-OUTPUT'
+            :'Output file keywords not converted: ' + g_sortExtra
+            + '. Create the output file before FMTDTA if it does not exist');
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// The data lines of a #GSORT step are collected until /* or the next
+// statement. Returns *ON when the line was taken as part of the block.
+dcl-proc SortLine;
+  dcl-pi *n ind;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+  end-pi;
+
+  dcl-s l_t varchar(512);
+  dcl-s l_kw varchar(60);
+  dcl-s l_p int(10);
+
+  l_t = %trim(i_text);
+  if %len(l_t) = 0;
+    return *on;
+  endif;
+
+  if %len(l_t) >= 2 and %subst(l_t:1:2) = '//';
+    l_p = %scan(' ':l_t:3);
+    if l_p = 0;
+      l_kw = Up(%subst(l_t:3));
+    else;
+      l_kw = Up(%trim(%subst(l_t:3:l_p - 3)));
+    endif;
+    if l_kw = 'IF' or l_kw = 'IFF' or l_kw = 'ELSE' or l_kw = 'END';
+      g_sortCond = *on;
+      if g_sortCnt < C_MAXSORT;
+        g_sortCnt += 1;
+        g_sortLines(g_sortCnt) = %trimr(i_text);
+      endif;
+      return *on;
+    endif;
+    FinishSort();
+    return *off;
+  endif;
+
+  if %subst(l_t:1:1) = '/' and %len(l_t) >= 2
+     and (%subst(l_t:2:1) = '*' or %subst(l_t:2:1) = '&');
+    FinishSort();
+    RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
+    return *on;
+  endif;
+
+  if g_sortCnt < C_MAXSORT;
+    g_sortCnt += 1;
+    g_sortLines(g_sortCnt) = %trimr(i_text);
+  else;
+    g_overflow = *on;
+  endif;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
 // Removes a trailing comment  /\ text \/  (outside quotes) from the
 // statement text and returns its text (empty when there is none).
 dcl-proc StripTrailing;
@@ -656,6 +843,44 @@ dcl-proc ProcessStatement;
 end-proc;
 
 // ------------------------------------------------------------------
+// A line without // that starts like a command name is taken as a CL (or
+// S/36 environment) command and copied with substitution applied.
+dcl-proc PassThrough;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+  end-pi;
+
+  dcl-s l_p int(10);
+  dcl-s l_cmd varchar(60);
+  dcl-s l_out varchar(512);
+  dcl-s l_open ind;
+
+  l_p = %scan(' ':i_text);
+  if l_p = 0;
+    l_cmd = Up(i_text);
+  else;
+    l_cmd = Up(%subst(i_text:1:l_p - 1));
+  endif;
+  if %len(l_cmd) > 10 or %len(l_cmd) = 0
+     or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ':%subst(l_cmd:1:1)) > 0
+     or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$':l_cmd) > 0;
+    ReviewLine(i_lineNo:i_text:'Line is not an OCL statement or a command');
+    return;
+  endif;
+
+  l_out = Subst(i_text:l_open);
+  if l_open;
+    ReviewLine(i_lineNo:i_text
+               :'Command uses a substitution expression that is not converted');
+    return;
+  endif;
+  AddBody(l_out);
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+          :'Copied as a command; check that command ' + l_cmd + ' exists');
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc ProcessLine;
   dcl-pi *n;
     i_lineNo int(10) const;
@@ -667,9 +892,20 @@ dcl-proc ProcessLine;
 
   l_t = %trim(i_text);
 
+  if g_sortMode;
+    if SortLine(i_lineNo:i_text);
+      return;
+    endif;
+  endif;
+
   select;
     when %len(l_t) = 0;
       AddBody('');
+    when %len(l_t) >= 4 and %subst(l_t:1:2) = '/*'
+         and %subst(l_t:%len(l_t) - 1:2) = '*/';
+      // Already a CL comment: keep the text.
+      AddCommentRaw(%trimr(%subst(l_t:3:%len(l_t) - 4)));
+      RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
     when %subst(l_t:1:1) = '*';
       // Keep the comment text exactly as written (after the asterisk).
       l_c = %trimr(%subst(i_text:%scan('*':i_text) + 1));
@@ -687,11 +923,7 @@ dcl-proc ProcessLine;
     when %len(l_t) >= 2 and %subst(l_t:1:2) = '//';
       ProcessStatement(i_lineNo:i_text);
     other;
-      if g_afterRun;
-        ReviewLine(i_lineNo:i_text:'Data line after RUN is not converted');
-      else;
-        ReviewLine(i_lineNo:i_text:'Line is not an OCL statement');
-      endif;
+      PassThrough(i_lineNo:l_t);
   endsl;
 end-proc;
 
@@ -757,6 +989,11 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endif;
+  if g_useSql;
+    if WriteCl('DCL VAR(&SQL) TYPE(*CHAR) LEN(400)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
   if g_useUser;
     if WriteCl('RTVJOBA USER(&USER)':o_msgId:o_msgData) <> 0;
       return 1;
@@ -805,6 +1042,16 @@ dcl-proc OclConvert export;
   g_pendLoad = *off;
   g_afterRun = *off;
   g_ovr = '';
+  g_sortMode = *off;
+  g_sortNo = 0;
+  g_sortCnt = 0;
+  g_sortIn = '';
+  g_sortOut = '';
+  g_sortInLib = '';
+  g_sortOutLib = '';
+  g_sortExtra = '';
+  g_useSql = *off;
+  g_isSort = *off;
   g_width = TargetWidthFor(i_tgt);
   if g_width <= 0;
     g_width = C_DFTWIDTH;
@@ -855,6 +1102,9 @@ dcl-proc OclConvert export;
     return 1;
   endif;
 
+  if g_sortMode;
+    FinishSort();
+  endif;
   if g_pendLoad;
     ReviewLine(g_loadLine:g_loadText:'LOAD was never followed by RUN');
     g_pendLoad = *off;
