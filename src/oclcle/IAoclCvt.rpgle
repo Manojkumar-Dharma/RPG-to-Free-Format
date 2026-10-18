@@ -173,7 +173,9 @@ dcl-proc Subst;
       when %len(l_tok) > 0 and %len(l_tok) <= 2
            and %check('0123456789':l_tok) = 0;
         l_n = %int(l_tok);
-        if l_n = 0;
+        // Only ?1? to ?9? are command parameters. ?10? and above (and names)
+        // are session variables set by EVALUATE, which is not converted yet.
+        if l_n < 1 or l_n > 9;
           o_open = *on;
           l_out += %subst(l_in:l_p1:l_p2 - l_p1 + 1);
         else;
@@ -649,7 +651,7 @@ dcl-proc FinishSort;
     select;
       when g_sortCond;
         RptItem(C_STS_REVIEW:g_sortFirst:'#GSORT step'
-                :'Sort specifications with IF/IFF/ELSE/END are not converted');
+                :'Sort specification lines with IF/IFF/ELSE are not converted');
       when g_sortIn = '' or g_sortOut = '';
         RptItem(C_STS_REVIEW:g_sortFirst:'#GSORT step'
                 :'FILE NAME-INPUT and NAME-OUTPUT are both needed');
@@ -730,7 +732,12 @@ dcl-proc SortLine;
     else;
       l_kw = Up(%trim(%subst(l_t:3:l_p - 3)));
     endif;
-    if l_kw = 'IF' or l_kw = 'IFF' or l_kw = 'ELSE' or l_kw = 'END';
+    if l_kw = 'END';               // ends the inline data of the step
+      FinishSort();
+      RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
+      return *on;
+    endif;
+    if l_kw = 'IF' or l_kw = 'IFF' or l_kw = 'ELSE';
       g_sortCond = *on;
       if g_sortCnt < C_MAXSORT;
         g_sortCnt += 1;

@@ -36,9 +36,11 @@ Evidence: two sample procedures supplied by the author (HSORTR/FNC/FDC specifica
 |---|---|---|
 | `// LOAD #GSORT`, `FILE NAME-INPUT,LABEL-a`, `FILE NAME-OUTPUT,LABEL-b[,keywords]`, `// RUN`, spec lines, `/*` | `DLTF`/`CRTSRCPF` of `QTEMP/IASORTn`, one `RUNSQL INSERT` per spec line (built in `&SQL` with `*CAT`), then `FMTDTA INFILE(a) OUTFILE(b) SRCFILE(QTEMP/IASORTn) SRCMBR(IASORTn)` | A |
 | Output keywords such as `RECORDS-`, `EXTEND-` | not converted; the output file may need creating first | R |
-| Spec lines with `// IF`, `IFF`, `ELSE`, `END` inside the block | whole block kept as comments | R |
+| Spec lines with `// IF`, `IFF`, `ELSE` inside the block | whole block kept as comments | R |
 
-The spec block ends at `/*`, `/&`, or the next `//` statement that is not a conditional.
+The spec block ends at `/*`, `/&`, `// END` (end of the inline data) or the next `//` statement that is not a conditional.
+
+Conditional spec lines (`// IF cond spec text`) are not converted: the sample lines do not show how the spec text lines up with the columns after the condition.
 
 ## Lines without `//`
 
@@ -50,7 +52,8 @@ The spec block ends at `/*`, `/&`, or the next `//` statement that is not a cond
 
 | OCL | CL | Notes |
 |---|---|---|
-| `?n?` (1 to 99) | `&Pn` | The program gets `PGM PARM(&P1 ...)`. Each parameter is declared `CHAR(10)` (A, once per run). |
+| `?n?` (1 to 9) | `&Pn` | The program gets `PGM PARM(&P1 ...)`. Each parameter is declared `CHAR(10)` (A, once per run). |
+| `?10?` and above, or a name | not converted | Session variable set by `EVALUATE`, not a parameter. The statement is copied as a comment (R). |
 | `?USER?` | `&USER` | `RTVJOBA USER(&USER)` is added. |
 | `?WS?` | `&WS` | `RTVJOBA JOB(&WS)` is added. |
 | anything else between `?` marks | not converted | The statement is copied as a comment (R). |
