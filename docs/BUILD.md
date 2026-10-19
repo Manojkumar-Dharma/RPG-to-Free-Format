@@ -20,15 +20,15 @@ Put `MYLIB` on the library list afterwards (the programs find the message file a
 
 ## 2. Service program IAcnvSrv
 
-Modules, in any order (use `INCDIR('REPO/src/common')` so `/copy IAcnvSrvP` is found):
+Every source is `.sqlrpgle` and is compiled with CRTSQLRPGI (module). The activation group is set on CRTPGM/CRTSRVPGM, never in the source (no `dftactgrp` in a module). Modules, in any order (use `INCDIR('REPO/src/common')` so `/copy IAcnvSrvP` is found):
 
 ```
-CRTRPGMOD MODULE(MYLIB/IAcnvTyp) SRCSTMF('REPO/src/common/IAcnvTyp.rpgle') INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
-CRTRPGMOD MODULE(MYLIB/IAcnvSys) SRCSTMF('REPO/src/common/IAcnvSys.rpgle') INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
-CRTRPGMOD MODULE(MYLIB/IAcnvVal) SRCSTMF('REPO/src/common/IAcnvVal.rpgle') INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
-CRTRPGMOD MODULE(MYLIB/IAcnvIfs) SRCSTMF('REPO/src/common/IAcnvIfs.rpgle') INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
-CRTRPGMOD MODULE(MYLIB/IAcnvIO)  SRCSTMF('REPO/src/common/IAcnvIO.rpgle')  INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
-CRTRPGMOD MODULE(MYLIB/IAcnvRpt) SRCSTMF('REPO/src/common/IAcnvRpt.rpgle') INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTSQLRPGI OBJ(MYLIB/IAcnvTyp) SRCSTMF('REPO/src/common/IAcnvTyp.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTSQLRPGI OBJ(MYLIB/IAcnvSys) SRCSTMF('REPO/src/common/IAcnvSys.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTSQLRPGI OBJ(MYLIB/IAcnvVal) SRCSTMF('REPO/src/common/IAcnvVal.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTSQLRPGI OBJ(MYLIB/IAcnvIfs) SRCSTMF('REPO/src/common/IAcnvIfs.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTSQLRPGI OBJ(MYLIB/IAcnvIO) SRCSTMF('REPO/src/common/IAcnvIO.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTSQLRPGI OBJ(MYLIB/IAcnvRpt) SRCSTMF('REPO/src/common/IAcnvRpt.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
 CRTSQLRPGI OBJ(MYLIB/IAcnvMbr) SRCSTMF('REPO/src/common/IAcnvMbr.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
 ```
 
@@ -41,9 +41,9 @@ CRTSRVPGM SRVPGM(MYLIB/IAcnvSrv) MODULE(MYLIB/IAcnvTyp MYLIB/IAcnvSys MYLIB/IAcn
 ## 3. IAOCLTOCLE
 
 ```
-CRTRPGMOD MODULE(MYLIB/IAoclCvt)   SRCSTMF('REPO/src/oclcle/IAoclCvt.rpgle')   INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
-CRTRPGMOD MODULE(MYLIB/IAoclToCle) SRCSTMF('REPO/src/oclcle/IAoclToCle.rpgle') INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
-CRTPGM PGM(MYLIB/IAOCLTOCLE) MODULE(MYLIB/IAOCLTOCLE MYLIB/IAOCLCVT) BNDSRVPGM(MYLIB/IAcnvSrv) ACTGRP(*NEW)
+CRTSQLRPGI OBJ(MYLIB/IAoclCvt) SRCSTMF('REPO/src/oclcle/IAoclCvt.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTSQLRPGI OBJ(MYLIB/IAoclToCle) SRCSTMF('REPO/src/oclcle/IAoclToCle.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTPGM PGM(MYLIB/IAOCLTOCLE) MODULE(MYLIB/IAoclToCle MYLIB/IAoclCvt) BNDSRVPGM(MYLIB/IAcnvSrv) ACTGRP(*NEW)
 CRTCMD CMD(MYLIB/IAOCLTOCLE) PGM(MYLIB/IAOCLTOCLE) SRCSTMF('REPO/src/oclcle/IAOCLTOCLE.cmd')
 ```
 

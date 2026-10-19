@@ -5,7 +5,7 @@
 // conversion (module IAoclCvt) and sends a completion message.
 // Bind with service program IAcnvSrv.
 
-ctl-opt dftactgrp(*no) actgrp(*new) main(Main) option(*srcstmt:*nodebugio);
+ctl-opt main(Main) option(*srcstmt:*nodebugio);
 
 /copy IAcnvSrvP
 

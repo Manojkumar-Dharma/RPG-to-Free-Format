@@ -1,6 +1,6 @@
 # OCL36 to CLLE: mapping rules (version 1)
 
-Implemented in `src/oclcle/IAoclCvt.rpgle`. Every OCL statement ends up in one of three states in the spooled report: converted, converted with an assumption (A), or needing review (R). Anything not listed below is copied into the output as a CL comment (`/* OCL: ... */`) and reported as R, so nothing disappears silently.
+Implemented in `src/oclcle/IAoclCvt.sqlrpgle`. Every OCL statement ends up in one of three states in the spooled report: converted, converted with an assumption (A), or needing review (R). Anything not listed below is copied into the output as a CL comment (`/* OCL: ... */`) and reported as R, so nothing disappears silently.
 
 ## Sources and their limits
 

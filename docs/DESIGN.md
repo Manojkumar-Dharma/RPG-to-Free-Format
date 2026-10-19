@@ -135,7 +135,7 @@ Follow the `IA` prefix convention used for the COBOL parser programs, adjusted f
 | Shared service program | `IAcnvSrv` |
 | Library | One library holds all objects. Source never hard-codes its name. |
 
-- Source files use `.sqlrpgle` when the program has embedded SQL, otherwise `.rpgle`.
+- All sources use `.sqlrpgle` (a shop requirement: every module is compiled with CRTSQLRPGI). The activation group is set at CRTPGM/CRTSRVPGM, not with `dftactgrp` in a module.
 - Procedures are PascalCase verbs (`ValidateIO`, `OpenSource`, `ReadLine`, `WriteLine`).
 - Database objects and columns use upper-case names with underscores.
 
