@@ -20,7 +20,7 @@ Put `MYLIB` on the library list afterwards (the programs find the message file a
 
 ## 2. Service program IAcnvSrv
 
-Modules, in any order (use `INCDIR('REPO/src/common')` so `/copy 'IAcnvSrvP.rpgleinc'` is found):
+Modules, in any order (use `INCDIR('REPO/src/common')` so `/copy IAcnvSrvP` is found):
 
 ```
 CRTRPGMOD MODULE(MYLIB/IAcnvTyp) SRCSTMF('REPO/src/common/IAcnvTyp.rpgle') INCDIR('REPO/src/common') DBGVIEW(*SOURCE)

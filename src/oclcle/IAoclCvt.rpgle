@@ -10,7 +10,7 @@
 
 ctl-opt nomain option(*srcstmt:*nodebugio);
 
-/copy 'IAcnvSrvP.rpgleinc'
+/copy IAcnvSrvP
 
 dcl-c C_MAXBODY 5000;
 dcl-c C_MAXITEMS 20;
@@ -2085,6 +2085,8 @@ dcl-proc ProcessLine;
 
   dcl-s l_t varchar(512);
   dcl-s l_c varchar(512);
+  dcl-s l_first2 varchar(2);
+  dcl-s l_last2 varchar(2);
 
   l_t = %trim(i_text);
 
@@ -2094,29 +2096,38 @@ dcl-proc ProcessLine;
     endif;
   endif;
 
+  l_first2 = '';
+  l_last2 = '';
+  if %len(l_t) >= 2;
+    l_first2 = %subst(l_t:1:2);
+    l_last2 = %subst(l_t:%len(l_t) - 1:2);
+  endif;
+
   select;
     when %len(l_t) = 0;
       AddBody('');
-    when %len(l_t) >= 4 and %subst(l_t:1:2) = '/*'
-         and %subst(l_t:%len(l_t) - 1:2) = '*/';
+    when %len(l_t) >= 4 and l_first2 = '/*' and l_last2 = '*/';
       // Already a CL comment: keep the text.
       AddCommentRaw(%trimr(%subst(l_t:3:%len(l_t) - 4)));
       RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
     when %subst(l_t:1:1) = '*';
       // Keep the comment text exactly as written (after the asterisk).
-      l_c = %trimr(%subst(i_text:%scan('*':i_text) + 1));
+      if %len(l_t) > 1;
+        l_c = %trimr(%subst(l_t:2));
+      else;
+        l_c = '';
+      endif;
       if %len(%trim(l_c)) = 0;
         AddBody('');
       else;
         AddCommentRaw(l_c);
       endif;
       RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
-    when %len(l_t) >= 2 and (%subst(l_t:1:2) = '/*'
-         or %subst(l_t:1:2) = '/&');
+    when l_first2 = '/*' or l_first2 = '/&';
       g_afterRun = *off;
       ReviewLine(i_lineNo:i_text
                  :'End-of-data or end-of-job marker is not converted');
-    when %len(l_t) >= 2 and %subst(l_t:1:2) = '//';
+    when l_first2 = '//';
       ProcessStatement(i_lineNo:i_text);
     other;
       PassThrough(i_lineNo:l_t);

@@ -12,7 +12,7 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 exec sql set option commit = *none, naming = *sys,
                     closqlcsr = *endactgrp, dlyprp = *yes;
 
-/copy 'IAcnvSrvP.rpgleinc'
+/copy IAcnvSrvP
 
 dcl-pr QCmdExc extpgm('QCMDEXC');
   cmd char(3000) const options(*varsize);

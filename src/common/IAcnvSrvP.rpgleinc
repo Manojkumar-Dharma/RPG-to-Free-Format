@@ -1,7 +1,8 @@
+**FREE
 // IAcnvSrvP - shared constants, structures and prototypes for the
 // legacy source converters (IAcnvSrv service program).
-// Free-format include (no **FREE line; every includer is **FREE).
-// Include with: /copy 'IAcnvSrvP.rpgleinc'
+// Free-format include; starts with **FREE.
+// Include with: /copy IAcnvSrvP
 // and compile with INCDIR pointing at the repo's src/common folder.
 // Target release V7R3.
 

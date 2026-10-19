@@ -11,7 +11,7 @@
 
 ctl-opt nomain option(*srcstmt:*nodebugio);
 
-/copy 'IAcnvSrvP.rpgleinc'
+/copy IAcnvSrvP
 
 dcl-c C_O_RDONLY 1;
 dcl-c C_O_WRONLY 2;

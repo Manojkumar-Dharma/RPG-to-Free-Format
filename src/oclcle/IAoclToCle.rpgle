@@ -7,7 +7,7 @@
 
 ctl-opt dftactgrp(*no) actgrp(*new) main(Main) option(*srcstmt:*nodebugio);
 
-/copy 'IAcnvSrvP.rpgleinc'
+/copy IAcnvSrvP
 
 dcl-pr OclConvert int(10);
   i_src likeds(IAcnvDesc_t) const;
