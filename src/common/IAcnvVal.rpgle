@@ -175,7 +175,8 @@ dcl-proc ValidateIO export;
   endif;
 
   // A member target needs a real library: its record width is read from it.
-  if l_tgt.mode = C_MODE_MBR and %subst(%trim(l_tgtLib):1:1) = '*';
+  if l_tgt.mode = C_MODE_MBR and %len(%trim(l_tgtLib)) > 0
+     and %subst(%trim(l_tgtLib):1:1) = '*';
     return Fail('IAC0018':%trim(l_tgtLib):o_msgId:o_msgData);
   endif;
 

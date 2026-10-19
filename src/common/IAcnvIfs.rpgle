@@ -100,7 +100,11 @@ dcl-proc Deliver;
 
   l_line = i_line;
   if %len(l_line) > 0 and %subst(l_line:%len(l_line):1) = C_CR;
-    l_line = %subst(l_line:1:%len(l_line) - 1);
+    if %len(l_line) = 1;
+      l_line = '';
+    else;
+      l_line = %subst(l_line:1:%len(l_line) - 1);
+    endif;
   endif;
 
   g_lineNo += 1;
@@ -137,7 +141,11 @@ dcl-proc IfsReadLine export;
   dow *on;
     l_pos = %scan(C_LF:g_pending);
     if l_pos > 0;
-      l_line = %subst(g_pending:1:l_pos - 1);
+      if l_pos > 1;
+        l_line = %subst(g_pending:1:l_pos - 1);
+      else;
+        l_line = '';
+      endif;
       if l_pos >= %len(g_pending);
         g_pending = '';
       else;

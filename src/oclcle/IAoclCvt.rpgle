@@ -77,6 +77,43 @@ dcl-proc Up;
 end-proc;
 
 // ------------------------------------------------------------------
+// Safe substring helpers: never fail on an empty string, a zero length or
+// a start past the end (RPG %SUBST raises an error in those cases).
+dcl-proc SubStr;
+  dcl-pi *n varchar(512);
+    i_text varchar(512) const;
+    i_from int(10) const;
+    i_len int(10) const;
+  end-pi;
+
+  dcl-s l_from int(10);
+  dcl-s l_len int(10);
+
+  l_from = %max(i_from:1);
+  l_len = i_len;
+  if l_len <= 0 or l_from > %len(i_text);
+    return '';
+  endif;
+  l_len = %min(l_len:%len(i_text) - l_from + 1);
+  return %subst(i_text:l_from:l_len);
+end-proc;
+
+dcl-proc SubEnd;
+  dcl-pi *n varchar(512);
+    i_text varchar(512) const;
+    i_from int(10) const;
+  end-pi;
+
+  dcl-s l_from int(10);
+
+  l_from = %max(i_from:1);
+  if l_from > %len(i_text);
+    return '';
+  endif;
+  return %subst(i_text:l_from);
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc AddBody;
   dcl-pi *n;
     i_text varchar(512) const;
@@ -114,13 +151,13 @@ dcl-proc AddCommentRaw;
     if %len(l_rest) > l_max;
       l_cut = l_max;
       for l_i = l_max downto 2;
-        if %subst(l_rest:l_i:1) = ' ';
+        if SubStr(l_rest:l_i:1) = ' ';
           l_cut = l_i - 1;         // break before the blank
           leave;
         endif;
       endfor;
-      l_piece = %subst(l_rest:1:l_cut);
-      l_rest = %subst(l_rest:l_cut + 1);
+      l_piece = SubStr(l_rest:1:l_cut);
+      l_rest = SubEnd(l_rest:l_cut + 1);
     else;
       l_piece = l_rest;
       l_rest = '';
@@ -205,16 +242,16 @@ dcl-proc ParseLda;
   dcl-s l_ns varchar(60);
 
   l_t = Up(%trim(i_tok));
-  if %len(l_t) < 6 or %subst(l_t:1:2) <> 'L''' 
-     or %subst(l_t:%len(l_t):1) <> '''';
+  if %len(l_t) < 6 or SubStr(l_t:1:2) <> 'L''' 
+     or SubStr(l_t:%len(l_t):1) <> '''';
     return *off;
   endif;
   l_cp = %scan(',':l_t);
   if l_cp < 4;
     return *off;
   endif;
-  l_ps = %subst(l_t:3:l_cp - 3);
-  l_ns = %subst(l_t:l_cp + 1:%len(l_t) - l_cp - 1);
+  l_ps = SubStr(l_t:3:l_cp - 3);
+  l_ns = SubStr(l_t:l_cp + 1:%len(l_t) - l_cp - 1);
   if %len(l_ps) = 0 or %len(l_ps) > 4 or %len(l_ns) = 0 or %len(l_ns) > 3
      or %check('0123456789':l_ps) > 0 or %check('0123456789':l_ns) > 0;
     return *off;
@@ -313,20 +350,20 @@ dcl-proc OperandExpr;
         o_ok = *off;
         return '';
       endif;
-      l_var = ExprVar(%subst(l_rest:l_p1 + 1:l_p2 - l_p1 - 1):l_len);
+      l_var = ExprVar(SubStr(l_rest:l_p1 + 1:l_p2 - l_p1 - 1):l_len);
       if l_var = '';
         o_ok = *off;
         return '';
       endif;
       if l_p1 > 1;
-        l_lit = %subst(l_rest:1:l_p1 - 1);
+        l_lit = SubStr(l_rest:1:l_p1 - 1);
       else;
         l_lit = '';
       endif;
       if l_p2 >= %len(l_rest);
         l_rest = '';
       else;
-        l_rest = %subst(l_rest:l_p2 + 1);
+        l_rest = SubEnd(l_rest:l_p2 + 1);
       endif;
     endif;
 
@@ -389,7 +426,7 @@ dcl-proc Subst;
     endif;
 
     if l_p1 > 1;
-      l_out += %subst(l_in:1:l_p1 - 1);
+      l_out += SubStr(l_in:1:l_p1 - 1);
     endif;
     if l_p2 = l_p1 + 1;          // "??" is not an expression
       o_open = *on;
@@ -397,20 +434,20 @@ dcl-proc Subst;
       if l_p2 >= %len(l_in);
         leave;
       endif;
-      l_in = %subst(l_in:l_p2 + 1);
+      l_in = SubEnd(l_in:l_p2 + 1);
       iter;
     endif;
-    l_tok = Up(%subst(l_in:l_p1 + 1:l_p2 - l_p1 - 1));
+    l_tok = Up(SubStr(l_in:l_p1 + 1:l_p2 - l_p1 - 1));
 
     l_var = ExprVar(l_tok:l_len);
     if l_var = '' or l_len < 0;
       o_open = *on;
-      l_out += %subst(l_in:l_p1:l_p2 - l_p1 + 1);
+      l_out += SubStr(l_in:l_p1:l_p2 - l_p1 + 1);
     else;
       // CL cannot put a variable inside a word or a quoted text.
-      if (%len(l_out) > 0 and %scan(%subst(l_out:%len(l_out):1):' ,()') = 0)
+      if (%len(l_out) > 0 and %scan(SubStr(l_out:%len(l_out):1):' ,()') = 0)
          or (l_p2 < %len(l_in)
-         and %scan(%subst(l_in:l_p2 + 1:1):' ,()') = 0);
+         and %scan(SubStr(l_in:l_p2 + 1:1):' ,()') = 0);
         o_open = *on;
       endif;
       l_out += l_var;
@@ -419,7 +456,7 @@ dcl-proc Subst;
     if l_p2 >= %len(l_in);
       leave;
     endif;
-    l_in = %subst(l_in:l_p2 + 1);
+    l_in = SubEnd(l_in:l_p2 + 1);
   enddo;
 
   return l_out;
@@ -440,7 +477,7 @@ dcl-proc SplitItems;
   dcl-s l_ch char(1);
 
   for l_i = 1 to %len(i_text);
-    l_ch = %subst(i_text:l_i:1);
+    l_ch = SubStr(i_text:l_i:1);
     if l_ch = C_QUOTE;
       l_inQuote = not l_inQuote;
     endif;
@@ -476,10 +513,10 @@ dcl-proc SplitKey;
 
   l_p = %scan('-':i_item);
   if l_p > 1;
-    l_key = Up(%trim(%subst(i_item:1:l_p - 1)));
+    l_key = Up(%trim(SubStr(i_item:1:l_p - 1)));
     if %scan(' ':l_key) = 0 and %scan(C_QUOTE:l_key) = 0;
       o_key = l_key;
-      o_value = %trim(%subst(i_item:l_p + 1));
+      o_value = %trim(SubEnd(i_item:l_p + 1));
       return;
     endif;
   endif;
@@ -497,7 +534,7 @@ dcl-proc IsName;
   if %len(i_name) = 0 or %len(i_name) > i_maxLen;
     return *off;
   endif;
-  if %subst(i_name:1:1) = '&';
+  if SubStr(i_name:1:1) = '&';
     return *on;                  // a variable made by Subst
   endif;
   return %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_#@$':Up(i_name)) = 0;
@@ -697,13 +734,13 @@ dcl-proc DoFile;
     return;
   endif;
   if g_isSort and g_pendLoad and (l_name = 'OUTPUT'
-     or l_name = 'INPUT' or (%len(l_name) = 6 and %subst(l_name:1:5) = 'INPUT'
-     and %check('12345678':%subst(l_name:6:1)) = 0));
+     or l_name = 'INPUT' or (%len(l_name) = 6 and SubStr(l_name:1:5) = 'INPUT'
+     and %check('12345678':SubStr(l_name:6:1)) = 0));
     if l_name <> 'OUTPUT';
       if l_name = 'INPUT';
         l_idx = 1;
       else;
-        l_idx = %int(%subst(l_name:6:1));
+        l_idx = %int(SubStr(l_name:6:1));
       endif;
       g_sortIn(l_idx) = l_label;
       g_sortInLib(l_idx) = l_lib;
@@ -803,22 +840,22 @@ dcl-proc DoLocal;
   endif;
 
   // Strip the quotes round the data.
-  if %len(l_data) >= 2 and %subst(l_data:1:1) = C_QUOTE
-     and %subst(l_data:%len(l_data):1) = C_QUOTE;
-    l_data = %subst(l_data:2:%len(l_data) - 2);
+  if %len(l_data) >= 2 and SubStr(l_data:1:1) = C_QUOTE
+     and SubStr(l_data:%len(l_data):1) = C_QUOTE;
+    l_data = SubStr(l_data:2:%len(l_data) - 2);
   endif;
 
   // DATA that is one expression (?DATE?, ?USER?, ?L'p,n'?) uses its variable.
-  if %len(l_data) >= 3 and %subst(l_data:1:1) = '?'
-     and %subst(l_data:%len(l_data):1) = '?'
+  if %len(l_data) >= 3 and SubStr(l_data:1:1) = '?'
+     and SubStr(l_data:%len(l_data):1) = '?'
      and %scan('?':l_data:2) = %len(l_data);
-    l_var = ExprVar(%subst(l_data:2:%len(l_data) - 2):l_len);
-    if l_var <> '' and %subst(l_var:1:2) <> '&P';
+    l_var = ExprVar(SubStr(l_data:2:%len(l_data) - 2):l_len);
+    if l_var <> '' and SubStr(l_var:1:2) <> '&P';
       AddBody('CHGDTAARA DTAARA(*LDA (' + %trim(%char(l_pos)) + ' '
               + %trim(%char(l_len)) + ')) VALUE(' + l_var + ')');
       RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
               :'OFFSET taken as a 1-based position in the local data area (*LDA)'
-              + '; value comes from ' + %subst(l_data:1:%len(l_data)));
+              + '; value comes from ' + SubStr(l_data:1:%len(l_data)));
       return;
     endif;
   endif;
@@ -878,7 +915,7 @@ dcl-proc DoEvaluate;
   // Split at blanks outside apostrophes and outside ?...? expressions.
   dcl-s l_inE ind inz(*off);
   for l_i = 1 to %len(i_operands);
-    l_ch = %subst(i_operands:l_i:1);
+    l_ch = SubStr(i_operands:l_i:1);
     if l_ch = C_QUOTE;
       l_inQ = not l_inQ;
     elseif l_ch = '?' and not l_inQ;
@@ -901,7 +938,7 @@ dcl-proc DoEvaluate;
 
   for l_k = 1 to l_cnt;
     l_eq = %scan('=':l_items(l_k));
-    if %subst(Up(l_items(l_k)):1:1) <> 'P' or l_eq < 3;
+    if SubStr(Up(l_items(l_k)):1:1) <> 'P' or l_eq < 3;
       // Not an assignment: anything not recognised is a comment.
       if %len(l_cmt) > 0;
         l_cmt += ' ';
@@ -910,15 +947,15 @@ dcl-proc DoEvaluate;
       iter;
     endif;
 
-    l_lhs = %subst(l_items(l_k):2:l_eq - 2);
-    l_expr = %subst(l_items(l_k):l_eq + 1);
+    l_lhs = SubStr(l_items(l_k):2:l_eq - 2);
+    l_expr = SubEnd(l_items(l_k):l_eq + 1);
     l_cm = %scan(',':l_lhs);
     if l_cm = 0;
       l_nStr = l_lhs;
       l_lenStr = '';
     else;
-      l_nStr = %subst(l_lhs:1:l_cm - 1);
-      l_lenStr = %subst(l_lhs:l_cm + 1);
+      l_nStr = SubStr(l_lhs:1:l_cm - 1);
+      l_lenStr = SubEnd(l_lhs:l_cm + 1);
     endif;
     if %len(l_nStr) = 0 or %len(l_nStr) > 2
        or %check('0123456789':l_nStr) > 0
@@ -951,13 +988,13 @@ dcl-proc DoEvaluate;
       when l_expr = '''''';
         l_val = ' ';
         l_vlen = 1;
-      when %len(l_expr) >= 2 and %subst(l_expr:1:1) = C_QUOTE
-           and %subst(l_expr:%len(l_expr):1) = C_QUOTE;
-        l_val = %subst(l_expr:2:%len(l_expr) - 2);
+      when %len(l_expr) >= 2 and SubStr(l_expr:1:1) = C_QUOTE
+           and SubStr(l_expr:%len(l_expr):1) = C_QUOTE;
+        l_val = SubStr(l_expr:2:%len(l_expr) - 2);
         l_vlen = %len(%scanrpl('''''':' ':l_val));
-      when %subst(l_expr:1:1) = '?';
+      when SubStr(l_expr:1:1) = '?';
         if %len(l_expr) >= 3 and %scan('?':l_expr:2) = %len(l_expr);
-          l_var = ExprVar(%subst(l_expr:2:%len(l_expr) - 2):l_vlen);
+          l_var = ExprVar(SubStr(l_expr:2:%len(l_expr) - 2):l_vlen);
         endif;
         if l_var = '';
           ReviewLine(i_lineNo:i_text
@@ -979,14 +1016,14 @@ dcl-proc DoEvaluate;
         l_numeric = %check('0123456789':l_expr) = 0;
         if l_numeric;
           // digits only: leading zeros dropped, or padded/cut to the length
-          dow %len(l_val) > 1 and %subst(l_val:1:1) = '0';
-            l_val = %subst(l_val:2);
+          dow %len(l_val) > 1 and SubStr(l_val:1:1) = '0';
+            l_val = SubEnd(l_val:2);
           enddo;
           if l_len > 0;
             if %len(l_val) > l_len;
-              l_val = %subst(l_val:%len(l_val) - l_len + 1);
+              l_val = SubEnd(l_val:%len(l_val) - l_len + 1);
             else;
-              l_val = %subst('000000000000000':1:l_len - %len(l_val)) + l_val;
+              l_val = SubStr('000000000000000':1:l_len - %len(l_val)) + l_val;
             endif;
           endif;
         endif;
@@ -1040,11 +1077,11 @@ dcl-proc DoTagGoto;
   l_label = Up(%trim(i_operands));
   l_p = %scan(' ':l_label);
   if l_p > 0;                      // text after the label is a comment
-    l_extra = %trim(%subst(%trim(i_operands):l_p + 1));
-    l_label = %subst(l_label:1:l_p - 1);
+    l_extra = %trim(SubEnd(%trim(i_operands):l_p + 1));
+    l_label = SubStr(l_label:1:l_p - 1);
   endif;
   if not IsName(l_label:10) or %scan(' ':l_label) > 0
-     or %subst(l_label:1:1) = '&';
+     or SubStr(l_label:1:1) = '&';
     ReviewLine(i_lineNo:i_text:'Label is not a valid CL label (10 characters)');
     return;
   endif;
@@ -1109,14 +1146,14 @@ dcl-proc SortVar;
     return '&P' + l_t;
   endif;
 
-  if %len(l_t) >= 6 and %subst(l_t:1:2) = 'L''' 
-     and %subst(l_t:%len(l_t):1) = '''';
+  if %len(l_t) >= 6 and SubStr(l_t:1:2) = 'L''' 
+     and SubStr(l_t:%len(l_t):1) = '''';
     l_cp = %scan(',':l_t);
     if l_cp < 4;
       return '';
     endif;
-    l_ps = %subst(l_t:3:l_cp - 3);
-    l_ns = %subst(l_t:l_cp + 1:%len(l_t) - l_cp - 1);
+    l_ps = SubStr(l_t:3:l_cp - 3);
+    l_ns = SubStr(l_t:l_cp + 1:%len(l_t) - l_cp - 1);
     if %len(l_ps) = 0 or %len(l_ps) > 4 or %len(l_ns) = 0
        or %len(l_ns) > 3 or %check('0123456789':l_ps) > 0
        or %check('0123456789':l_ns) > 0;
@@ -1193,18 +1230,18 @@ dcl-proc SortInsert;
         o_why = 'Unmatched ? in a specification line';
         return *off;
       endif;
-      l_var = SortVar(%subst(l_rest:l_p1 + 1:l_p2 - l_p1 - 1));
+      l_var = SortVar(SubStr(l_rest:l_p1 + 1:l_p2 - l_p1 - 1));
       if l_var = '';
-        o_why = 'Substitution expression ' + %subst(l_rest:l_p1:l_p2 - l_p1 + 1)
+        o_why = 'Substitution expression ' + SubStr(l_rest:l_p1:l_p2 - l_p1 + 1)
                 + ' is not supported in sort specifications';
         return *off;
       endif;
       if l_p1 > 1;
-        l_lit = %subst(l_rest:1:l_p1 - 1);
+        l_lit = SubStr(l_rest:1:l_p1 - 1);
       else;
         l_lit = '';
       endif;
-      l_rest = %subst(l_rest:l_p2 + 1);
+      l_rest = SubEnd(l_rest:l_p2 + 1);
     endif;
 
     // The literal part is cut into short pieces joined by *CAT so the CL
@@ -1212,7 +1249,7 @@ dcl-proc SortInsert;
     l_pos = 1;
     l_len = %len(l_lit);
     dow l_pos <= l_len;
-      l_piece = %subst(l_lit:l_pos:%min(30:l_len - l_pos + 1));
+      l_piece = SubStr(l_lit:l_pos:%min(30:l_len - l_pos + 1));
       l_stmt += ' *CAT ' + C_QUOTE + QuoteSpec(l_piece) + C_QUOTE;
       l_pos += 30;
     enddo;
@@ -1260,21 +1297,21 @@ dcl-proc SortCond;
   o_spec = '';
   l_t = %trimr(i_line);
   l_p = 3;
-  dow l_p <= %len(l_t) and %subst(l_t:l_p:1) = ' ';
+  dow l_p <= %len(l_t) and SubStr(l_t:l_p:1) = ' ';
     l_p += 1;
   enddo;
   l_q = %scan(' ':l_t:l_p);
   if l_q = 0;
-    l_kw = Up(%subst(l_t:l_p));
+    l_kw = Up(SubEnd(l_t:l_p));
     l_q = %len(l_t) + 1;
   else;
-    l_kw = Up(%subst(l_t:l_p:l_q - l_p));
+    l_kw = Up(SubStr(l_t:l_p:l_q - l_p));
   endif;
 
   if l_kw = 'ELSE';
     o_kind = 'E';
     if l_q < %len(l_t);
-      o_spec = %subst(l_t:l_q + 1);
+      o_spec = SubEnd(l_t:l_q + 1);
     endif;
   else;
     if l_kw = 'IF' or l_kw = 'IFT';
@@ -1283,24 +1320,24 @@ dcl-proc SortCond;
       o_kind = 'F';
     endif;
     l_p = l_q;
-    dow l_p <= %len(l_t) and %subst(l_t:l_p:1) = ' ';
+    dow l_p <= %len(l_t) and SubStr(l_t:l_p:1) = ' ';
       l_p += 1;
     enddo;
     // The condition ends at the first blank outside apostrophes.
     l_inQ = *off;
     l_i = l_p;
     dow l_i <= %len(l_t);
-      if %subst(l_t:l_i:1) = C_QUOTE;
+      if SubStr(l_t:l_i:1) = C_QUOTE;
         l_inQ = not l_inQ;
       endif;
-      if %subst(l_t:l_i:1) = ' ' and not l_inQ;
+      if SubStr(l_t:l_i:1) = ' ' and not l_inQ;
         leave;
       endif;
       l_i += 1;
     enddo;
-    l_cond = %subst(l_t:l_p:l_i - l_p);
+    l_cond = SubStr(l_t:l_p:l_i - l_p);
     if l_i < %len(l_t);
-      o_spec = %subst(l_t:l_i + 1);
+      o_spec = SubEnd(l_t:l_i + 1);
     endif;
 
     // Split at the first / or = outside ?...? and apostrophes.
@@ -1308,7 +1345,7 @@ dcl-proc SortCond;
     l_inQ = *off;
     l_inE = *off;
     for l_i = 1 to %len(l_cond);
-      l_ch = %subst(l_cond:l_i:1);
+      l_ch = SubStr(l_cond:l_i:1);
       if l_ch = C_QUOTE;
         l_inQ = not l_inQ;
       elseif l_ch = '?' and not l_inQ;
@@ -1322,18 +1359,18 @@ dcl-proc SortCond;
       o_why = 'Condition is not of the form ?expression?/value';
       return *off;
     endif;
-    l_left = %subst(l_cond:1:l_split - 1);
+    l_left = SubStr(l_cond:1:l_split - 1);
     if l_split < %len(l_cond);
-      l_right = %subst(l_cond:l_split + 1);
+      l_right = SubEnd(l_cond:l_split + 1);
     else;
       l_right = '';
     endif;
-    if %len(l_left) < 3 or %subst(l_left:1:1) <> '?'
-       or %subst(l_left:%len(l_left):1) <> '?';
+    if %len(l_left) < 3 or SubStr(l_left:1:1) <> '?'
+       or SubStr(l_left:%len(l_left):1) <> '?';
       o_why = 'Left side of the condition is not a substitution expression';
       return *off;
     endif;
-    o_var = SortVar(%subst(l_left:2:%len(l_left) - 2));
+    o_var = SortVar(SubStr(l_left:2:%len(l_left) - 2));
     if o_var = '';
       o_why = 'Condition expression ' + l_left + ' is not supported';
       return *off;
@@ -1342,9 +1379,9 @@ dcl-proc SortCond;
       o_why = 'Right side of the condition uses an expression';
       return *off;
     endif;
-    if %len(l_right) >= 2 and %subst(l_right:1:1) = C_QUOTE
-       and %subst(l_right:%len(l_right):1) = C_QUOTE;
-      l_right = %scanrpl('''''':'''':%subst(l_right:2:%len(l_right) - 2));
+    if %len(l_right) >= 2 and SubStr(l_right:1:1) = C_QUOTE
+       and SubStr(l_right:%len(l_right):1) = C_QUOTE;
+      l_right = %scanrpl('''''':'''':SubStr(l_right:2:%len(l_right) - 2));
     endif;
     if %len(l_right) = 0;
       l_right = ' ';
@@ -1353,9 +1390,9 @@ dcl-proc SortCond;
   endif;
 
   // A nested IF in the statement part is not converted.
-  l_w = Up(%subst(%trim(o_spec) + '    ':1:4));
-  if %subst(l_w:1:3) = 'IF ' or %subst(l_w:1:4) = 'IFF '
-     or %subst(l_w:1:4) = 'IFT ' or %subst(l_w:1:5) = 'ELSE ';
+  l_w = Up(SubStr(%trim(o_spec) + '    ':1:4));
+  if SubStr(l_w:1:3) = 'IF ' or SubStr(l_w:1:4) = 'IFF '
+     or SubStr(l_w:1:4) = 'IFT ' or SubStr(l_w:1:5) = 'ELSE ';
     o_why = 'Nested IF/ELSE on one line is not converted';
     return *off;
   endif;
@@ -1433,7 +1470,7 @@ dcl-proc FinishSort;
     for l_i = 1 to g_sortCnt;
       l_hasCond = *off;
       if %len(%trim(g_sortLines(l_i))) >= 2
-         and %subst(%trim(g_sortLines(l_i)):1:2) = '//';
+         and SubStr(%trim(g_sortLines(l_i)):1:2) = '//';
         if not SortCond(g_sortLines(l_i):l_kind:l_var:l_lit:l_spec:l_why);
           l_ok = *off;
           leave;
@@ -1465,8 +1502,8 @@ dcl-proc FinishSort;
         endif;
         // The statement part supplies columns 4 onward of the line.
         l_spec = %trimr('   ' + l_spec);
-        if %len(l_spec) < 6 or (%subst(l_spec:6:1) <> 'H'
-           and %subst(l_spec:6:1) <> 'I' and %subst(l_spec:6:1) <> 'F');
+        if %len(l_spec) < 6 or (SubStr(l_spec:6:1) <> 'H'
+           and SubStr(l_spec:6:1) <> 'I' and SubStr(l_spec:6:1) <> 'F');
           l_ok = *off;
           l_why = 'Text after the condition is not a sort specification';
           leave;
@@ -1579,12 +1616,12 @@ dcl-proc SortLine;
     return *on;
   endif;
 
-  if %len(l_t) >= 2 and %subst(l_t:1:2) = '//';
+  if %len(l_t) >= 2 and SubStr(l_t:1:2) = '//';
     l_p = %scan(' ':l_t:3);
     if l_p = 0;
-      l_kw = Up(%trim(%subst(l_t:3)));
+      l_kw = Up(%trim(SubEnd(l_t:3)));
     else;
-      l_kw = Up(%trim(%subst(l_t:3:l_p - 3)));
+      l_kw = Up(%trim(SubStr(l_t:3:l_p - 3)));
     endif;
     select;
       when l_kw = 'END';             // ends the inline data of the step
@@ -1593,7 +1630,7 @@ dcl-proc SortLine;
         return *on;
       when l_kw = 'SOURCE';          // specifications come from a member
         if l_p > 0;
-          l_cnt = SplitItems(%trim(%subst(l_t:l_p + 1)):l_items);
+          l_cnt = SplitItems(%trim(SubEnd(l_t:l_p + 1)):l_items);
         else;
           l_cnt = 0;
         endif;
@@ -1619,8 +1656,8 @@ dcl-proc SortLine;
     endsl;
   endif;
 
-  if %subst(l_t:1:1) = '/' and %len(l_t) >= 2
-     and (%subst(l_t:2:1) = '*' or %subst(l_t:2:1) = '&');
+  if SubStr(l_t:1:1) = '/' and %len(l_t) >= 2
+     and (SubStr(l_t:2:1) = '*' or SubStr(l_t:2:1) = '&');
     FinishSort();
     RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
     return *on;
@@ -1648,14 +1685,14 @@ dcl-proc StripTrailing;
   dcl-s l_cmt varchar(512) inz('');
 
   for l_i = 1 to %len(io_s) - 1;
-    if %subst(io_s:l_i:1) = C_QUOTE;
+    if SubStr(io_s:l_i:1) = C_QUOTE;
       l_inQuote = not l_inQuote;
     endif;
-    if not l_inQuote and %subst(io_s:l_i:2) = '/\';
-      l_cmt = %trim(%subst(io_s:l_i + 2));
-      io_s = %trim(%subst(io_s:1:l_i - 1));
-      if %len(l_cmt) >= 2 and %subst(l_cmt:%len(l_cmt) - 1:2) = '\/';
-        l_cmt = %trim(%subst(l_cmt:1:%len(l_cmt) - 2));
+    if not l_inQuote and SubStr(io_s:l_i:2) = '/\';
+      l_cmt = %trim(SubEnd(io_s:l_i + 2));
+      io_s = %trim(SubStr(io_s:1:l_i - 1));
+      if %len(l_cmt) >= 2 and SubStr(l_cmt:%len(l_cmt) - 1:2) = '\/';
+        l_cmt = %trim(SubStr(l_cmt:1:%len(l_cmt) - 2));
       endif;
       return l_cmt;
     endif;
@@ -1677,10 +1714,10 @@ dcl-proc CondOperand;
   if %len(i_t) = 0;
     return C_QUOTE + ' ' + C_QUOTE;
   endif;
-  if %subst(i_t:1:1) = '?';
-    if %len(i_t) >= 3 and %subst(i_t:%len(i_t):1) = '?'
+  if SubStr(i_t:1:1) = '?';
+    if %len(i_t) >= 3 and SubStr(i_t:%len(i_t):1) = '?'
        and %scan('?':i_t:2) = %len(i_t);
-      return ExprVar(%subst(i_t:2:%len(i_t) - 2):l_len);
+      return ExprVar(SubStr(i_t:2:%len(i_t) - 2):l_len);
     endif;
     return '';
   endif;
@@ -1688,9 +1725,9 @@ dcl-proc CondOperand;
     return '';
   endif;
   l_v = i_t;
-  if %len(l_v) >= 2 and %subst(l_v:1:1) = C_QUOTE
-     and %subst(l_v:%len(l_v):1) = C_QUOTE;
-    l_v = %subst(l_v:2:%len(l_v) - 2);   // inner text, doubled quotes kept
+  if %len(l_v) >= 2 and SubStr(l_v:1:1) = C_QUOTE
+     and SubStr(l_v:%len(l_v):1) = C_QUOTE;
+    l_v = SubStr(l_v:2:%len(l_v) - 2);   // inner text, doubled quotes kept
   else;
     l_v = %scanrpl(C_QUOTE:C_QUOTE + C_QUOTE:l_v);
   endif;
@@ -1722,16 +1759,16 @@ dcl-proc CondExpr;
   dcl-s l_u varchar(300);
 
   l_u = Up(i_cond);
-  if %len(l_u) = 9 and %subst(l_u:1:6) = 'SWITCH'
-     and %check('12345678':%subst(l_u:7:1)) = 0
-     and %subst(l_u:8:1) = '-' and %check('01':%subst(l_u:9:1)) = 0;
+  if %len(l_u) = 9 and SubStr(l_u:1:6) = 'SWITCH'
+     and %check('12345678':SubStr(l_u:7:1)) = 0
+     and SubStr(l_u:8:1) = '-' and %check('01':SubStr(l_u:9:1)) = 0;
     l_mask = 'XXXXXXXX';
-    %subst(l_mask:%int(%subst(l_u:7:1)):1) = %subst(l_u:9:1);
+    %subst(l_mask:%int(%subst(l_u:7:1)):1) = SubStr(l_u:9:1);
     return '%SWITCH(' + l_mask + ')';
   endif;
 
   for l_i = 1 to %len(i_cond);
-    l_ch = %subst(i_cond:l_i:1);
+    l_ch = SubStr(i_cond:l_i:1);
     if l_ch = C_QUOTE;
       l_inQ = not l_inQ;
     elseif l_ch = '?' and not l_inQ;
@@ -1745,12 +1782,12 @@ dcl-proc CondExpr;
     return '';
   endif;
   if l_split > 1;
-    l_left = %subst(i_cond:1:l_split - 1);
+    l_left = SubStr(i_cond:1:l_split - 1);
   else;
     l_left = '';
   endif;
   if l_split < %len(i_cond);
-    l_right = %subst(i_cond:l_split + 1);
+    l_right = SubEnd(i_cond:l_split + 1);
   else;
     l_right = '';
   endif;
@@ -1791,7 +1828,7 @@ dcl-proc IfChain;
     if l_p = 0;
       l_kw = Up(io_s);
     else;
-      l_kw = Up(%subst(io_s:1:%min(l_p - 1:10)));
+      l_kw = Up(SubStr(io_s:1:%min(l_p - 1:10)));
     endif;
 
     if l_kw = 'ELSE';
@@ -1811,7 +1848,7 @@ dcl-proc IfChain;
       if l_p = 0;
         io_s = '';
       else;
-        io_s = %trim(%subst(io_s:l_p + 1));
+        io_s = %trim(SubEnd(io_s:l_p + 1));
       endif;
 
     elseif l_kw = 'IF' or l_kw = 'IFT' or l_kw = 'IFF';
@@ -1821,23 +1858,23 @@ dcl-proc IfChain;
         g_ifCtx = '';
         return *off;
       endif;
-      io_s = %trim(%subst(io_s:l_p + 1));
+      io_s = %trim(SubEnd(io_s:l_p + 1));
       l_inQ = *off;
       l_i = 1;
       dow l_i <= %len(io_s);
-        if %subst(io_s:l_i:1) = C_QUOTE;
+        if SubStr(io_s:l_i:1) = C_QUOTE;
           l_inQ = not l_inQ;
         endif;
-        if %subst(io_s:l_i:1) = ' ' and not l_inQ;
+        if SubStr(io_s:l_i:1) = ' ' and not l_inQ;
           leave;
         endif;
         l_i += 1;
       enddo;
-      l_tok = %subst(io_s:1:l_i - 1);
+      l_tok = SubStr(io_s:1:l_i - 1);
       if l_i > %len(io_s);
         io_s = '';
       else;
-        io_s = %trim(%subst(io_s:l_i + 1));
+        io_s = %trim(SubEnd(io_s:l_i + 1));
       endif;
       l_e = CondExpr(l_tok);
       if l_e = '';
@@ -1893,12 +1930,12 @@ dcl-proc SplitTail;
   dcl-s l_tail varchar(512);
 
   for l_i = 1 to %len(io_ops);
-    if %subst(io_ops:l_i:1) = C_QUOTE;
+    if SubStr(io_ops:l_i:1) = C_QUOTE;
       l_inQ = not l_inQ;
     endif;
-    if %subst(io_ops:l_i:1) = ' ' and not l_inQ;
-      l_tail = %trim(%subst(io_ops:l_i + 1));
-      io_ops = %subst(io_ops:1:l_i - 1);
+    if SubStr(io_ops:l_i:1) = ' ' and not l_inQ;
+      l_tail = %trim(SubEnd(io_ops:l_i + 1));
+      io_ops = SubStr(io_ops:1:l_i - 1);
       return l_tail;
     endif;
   endfor;
@@ -1946,7 +1983,7 @@ dcl-proc ProcessStatement;
   dcl-s l_has ind;
 
   g_afterRun = *off;
-  l_s = %trim(%subst(%trim(i_text):3));
+  l_s = %trim(SubEnd(%trim(i_text):3));
   l_cmt = StripTrailing(l_s);
   if %len(l_s) = 0;
     ReviewLine(i_lineNo:i_text:'Empty OCL statement');
@@ -1968,8 +2005,8 @@ dcl-proc ProcessStatement;
     l_kw = Up(l_s);
     l_ops = '';
   else;
-    l_kw = Up(%subst(l_s:1:l_p - 1));
-    l_ops = %trim(%subst(l_s:l_p + 1));
+    l_kw = Up(SubStr(l_s:1:l_p - 1));
+    l_ops = %trim(SubEnd(l_s:l_p + 1));
   endif;
   if l_kw <> 'EVALUATE' and %len(l_ops) > 0;
     l_tail = SplitTail(l_ops);      // text after the operands is a comment
@@ -2015,7 +2052,7 @@ dcl-proc ProcessStatement;
   if l_cond <> '' and g_bodyCnt > l_start;
     l_has = *off;
     for l_i = l_start + 1 to g_bodyCnt;
-      if %len(g_body(l_i)) < 2 or %subst(g_body(l_i):1:2) <> '/*';
+      if %len(g_body(l_i)) < 2 or SubStr(g_body(l_i):1:2) <> '/*';
         l_has = *on;
       endif;
     endfor;
@@ -2056,10 +2093,10 @@ dcl-proc PassThrough;
   if l_p = 0;
     l_cmd = Up(i_text);
   else;
-    l_cmd = Up(%subst(i_text:1:l_p - 1));
+    l_cmd = Up(SubStr(i_text:1:l_p - 1));
   endif;
   if %len(l_cmd) > 10 or %len(l_cmd) = 0
-     or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ':%subst(l_cmd:1:1)) > 0
+     or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ':SubStr(l_cmd:1:1)) > 0
      or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$':l_cmd) > 0;
     ReviewLine(i_lineNo:i_text:'Line is not an OCL statement or a command');
     return;
@@ -2099,8 +2136,8 @@ dcl-proc ProcessLine;
   l_first2 = '';
   l_last2 = '';
   if %len(l_t) >= 2;
-    l_first2 = %subst(l_t:1:2);
-    l_last2 = %subst(l_t:%len(l_t) - 1:2);
+    l_first2 = SubStr(l_t:1:2);
+    l_last2 = SubStr(l_t:%len(l_t) - 1:2);
   endif;
 
   select;
@@ -2108,12 +2145,12 @@ dcl-proc ProcessLine;
       AddBody('');
     when %len(l_t) >= 4 and l_first2 = '/*' and l_last2 = '*/';
       // Already a CL comment: keep the text.
-      AddCommentRaw(%trimr(%subst(l_t:3:%len(l_t) - 4)));
+      AddCommentRaw(%trimr(SubStr(l_t:3:%len(l_t) - 4)));
       RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
-    when %subst(l_t:1:1) = '*';
+    when SubStr(l_t:1:1) = '*';
       // Keep the comment text exactly as written (after the asterisk).
       if %len(l_t) > 1;
-        l_c = %trimr(%subst(l_t:2));
+        l_c = %trimr(SubEnd(l_t:2));
       else;
         l_c = '';
       endif;
@@ -2318,20 +2355,20 @@ dcl-proc OclConvert export;
     l_t = %trim(l_text);
 
     // A statement continues when it ends with a comma.
-    if %len(l_t) >= 2 and %subst(l_t:1:2) = '//';
-      dow %len(l_t) > 0 and %subst(l_t:%len(l_t):1) = ',';
+    if %len(l_t) >= 2 and SubStr(l_t:1:2) = '//';
+      dow %len(l_t) > 0 and SubStr(l_t:%len(l_t):1) = ',';
         if not ReadLine(l_next:l_no);
           leave;
         endif;
         l_nt = %trim(l_next);
-        if %len(l_nt) >= 2 and %subst(l_nt:1:2) = '//';
-          l_nt = %trim(%subst(l_nt:3));
+        if %len(l_nt) >= 2 and SubStr(l_nt:1:2) = '//';
+          l_nt = %trim(SubEnd(l_nt:3));
         endif;
         l_t += l_nt;
       enddo;
     endif;
 
-    if %len(l_t) >= 2 and %subst(l_t:1:2) = '//';
+    if %len(l_t) >= 2 and SubStr(l_t:1:2) = '//';
       ProcessLine(l_first:l_t);
     else;
       ProcessLine(l_first:l_text);   // comments keep their exact text

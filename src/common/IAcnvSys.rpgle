@@ -85,7 +85,10 @@ dcl-proc IsSafeName export;
   endif;
 
   if %subst(l_name:1:1) = '*';
-    l_body = %subst(l_name:2);
+    l_body = '';
+    if %len(l_name) > 1;
+      l_body = %subst(l_name:2);
+    endif;
     if %len(l_body) = 0;
       return *off;
     endif;
