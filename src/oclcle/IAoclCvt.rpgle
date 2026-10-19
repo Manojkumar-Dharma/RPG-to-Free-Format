@@ -1608,6 +1608,7 @@ dcl-proc SortLine;
   dcl-s l_t varchar(512);
   dcl-s l_kw varchar(60);
   dcl-s l_p int(10);
+  dcl-s l_q int(10);
   dcl-s l_items varchar(200) dim(C_MAXITEMS);
   dcl-s l_cnt int(10);
 
@@ -1617,11 +1618,18 @@ dcl-proc SortLine;
   endif;
 
   if %len(l_t) >= 2 and SubStr(l_t:1:2) = '//';
-    l_p = %scan(' ':l_t:3);
-    if l_p = 0;
-      l_kw = Up(%trim(SubEnd(l_t:3)));
+    // The keyword follows the slashes after optional blanks (// IF ...).
+    l_p = 3;
+    dow l_p <= %len(l_t) and SubStr(l_t:l_p:1) = ' ';
+      l_p += 1;
+    enddo;
+    l_q = %scan(' ':l_t:l_p);
+    if l_q = 0;
+      l_kw = Up(SubEnd(l_t:l_p));
+      l_p = 0;
     else;
-      l_kw = Up(%trim(SubStr(l_t:3:l_p - 3)));
+      l_kw = Up(SubStr(l_t:l_p:l_q - l_p));
+      l_p = l_q;
     endif;
     select;
       when l_kw = 'END';             // ends the inline data of the step
