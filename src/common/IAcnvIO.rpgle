@@ -214,13 +214,28 @@ dcl-proc WriteText export;
   o_status = C_STS_CONVERTED;
   l_rest = %trimr(i_text);
 
+  // A blank line is written as is (no prefix or wrap work).
+  if %len(l_rest) = 0;
+    if RawWrite(l_rest:o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+    o_lines = 1;
+    return 0;
+  endif;
+
   l_lead = %len(l_rest) - %len(%triml(l_rest));
-  l_isComment = %len(%triml(l_rest)) >= 2
-                and %subst(%triml(l_rest):1:2) = '//';
+  l_isComment = *off;
+  if %len(%triml(l_rest)) >= 2;
+    l_isComment = (%subst(%triml(l_rest):1:2) = '//');
+  endif;
+  l_prefix = '';
+  if l_lead > 0;
+    l_prefix = %subst(l_rest:1:l_lead);
+  endif;
   if l_isComment;
-    l_prefix = %subst(l_rest:1:l_lead) + '// ';
+    l_prefix += '// ';
   else;
-    l_prefix = %subst(l_rest:1:l_lead) + %subst('   ':1:C_CONTINDENT);
+    l_prefix += %subst('   ':1:C_CONTINDENT);
   endif;
 
   l_minPos = l_lead + 1;
