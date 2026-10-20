@@ -18,11 +18,13 @@ CHGVAR     VAR(&TXT) VALUE('Parameter &1 is required.')
 CALLSUBR   SUBR(ADDMSG)
 
 CHGVAR     VAR(&ID) VALUE('IAC0002')
-CHGVAR     VAR(&TXT) VALUE('Source location: give library and file, or an IFS directory, not both and not neither.')
+CHGVAR     VAR(&TXT) VALUE('Source location: give library and file,' *TCAT +
+                           ' or an IFS directory, not both and not neither.')
 CALLSUBR   SUBR(ADDMSG)
 
 CHGVAR     VAR(&ID) VALUE('IAC0003')
-CHGVAR     VAR(&TXT) VALUE('Target location: give library and file, or an IFS directory, not both and not neither.')
+CHGVAR     VAR(&TXT) VALUE('Target location: give library and file,' *TCAT + 
+                           ' or an IFS directory, not both and not neither.')
 CALLSUBR   SUBR(ADDMSG)
 
 CHGVAR     VAR(&ID) VALUE('IAC0004')
@@ -78,7 +80,8 @@ CHGVAR     VAR(&TXT) VALUE('Name &1 is not valid.')
 CALLSUBR   SUBR(ADDMSG)
 
 CHGVAR     VAR(&ID) VALUE('IAC0017')
-CHGVAR     VAR(&TXT) VALUE('An explicit CCSID for IFS input is not supported yet. Use *DFT.')
+CHGVAR     VAR(&TXT) VALUE('An explicit CCSID for IFS input ' *TCAT + 
+                           ' is not supported yet. Use *DFT.')
 CALLSUBR   SUBR(ADDMSG)
 
 CHGVAR     VAR(&ID) VALUE('IAC0018')
