@@ -29,6 +29,17 @@ dcl-c C_STS_CONVERTED 'C';       // report status: converted
 dcl-c C_STS_ASSUMPTION 'A';      // report status: converted with assumption
 dcl-c C_STS_REVIEW 'R';          // report status: needs manual review
 
+// ---- Grouped command parameter (file and member) ------------------------
+// SRC(lib/file member) and TGT(lib/file member) arrive as one mixed list:
+// a 2-byte count of the elements entered, then the qualified file name
+// (file 10, library 10) and the member (10).
+dcl-ds IAcnvFileMbr_t qualified template;
+  count int(5);
+  file char(10);
+  lib char(10);
+  mbr char(10);
+end-ds;
+
 // ---- Command parameters as received ----------------------------------
 // Blank (or *NONE-style empty) values mean "not given".
 dcl-ds IAcnvParm_t qualified template;

@@ -50,8 +50,7 @@ CRTCMD CMD(MYLIB/IAOCLTOCLE) PGM(MYLIB/IAOCLTOCLE) SRCSTMF('REPO/src/oclcle/IAOC
 ## 4. First test
 
 ```
-IAOCLTOCLE SRCLIB(MYLIB) SRCFILE(QS36PRC) SRCMBR(MYPROC) SRCTYPE(OCL36)
-           TGTLIB(*SRCLIB) TGTFILE(QCLLESRC) TGTMBR(*SRCMBR) TGTTYPE(CLLE)
+IAOCLTOCLE SRC(MYLIB/QS36PRC MYPROC) SRCTYPE(OCL36) TGT(QCLLESRC)
 ```
 
 Then look at the spooled report (`IACNVRPT`) and the new member. Send the compile messages or the result back so fixes can be pushed.
@@ -70,8 +69,19 @@ CRTCMD CMD(MYLIB/IACNVDSPF) PGM(MYLIB/IACNVDSPF) SRCSTMF('REPO/src/dspf/IACNVDSP
 First test, with the sample member copied into a source file as type DSP36:
 
 ```
-IACNVDSPF SRCLIB(MYLIB) SRCFILE(QS36SRC) SRCMBR(EMPSCR) SRCTYPE(DSP36)
-          TGTLIB(*SRCLIB) TGTFILE(QDDSSRC) TGTMBR(*SRCMBR) TGTTYPE(DSPF)
+IACNVDSPF SRC(MYLIB/QS36SRC EMPSCR) SRCTYPE(DSP36) TGT(QDDSSRC)
 ```
 
 Then `CRTDSPF FILE(MYLIB/EMPSCR) SRCFILE(MYLIB/QDDSSRC) SRCMBR(EMPSCR)`.
+
+## Grouped file and member parameters
+
+`SRC(lib/file member)` and `TGT(lib/file member)` replace the separate library, file and member keywords:
+
+```
+IAOCLTOCLE SRC(MYLIB/QS36PRC MYPROC) SRCTYPE(OCL36)                 /* target library = source library, member = MYPROC */
+IAOCLTOCLE SRC(MYLIB/QS36PRC MYPROC) SRCTYPE(OCL36) TGT(OTHERLIB/QCLLESRC NEWNAME)
+IAOCLTOCLE SRC(*NONE MYPROC) SRCTYPE(OCL36) SRCIFS('/home/me/ocl') TGT(*NONE *SRCMBR) TGTIFS('/home/me/out')
+```
+
+`TGT(file)` alone uses the source library and the source member name. `*NONE` as the file means an IFS location (then use SRCIFS or TGTIFS). When the target is omitted, the target is an IFS directory only if TGTIFS is given; otherwise the validation fails with the usual message.

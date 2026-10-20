@@ -2,6 +2,8 @@
 
 Status: draft v0.1. Decisions marked **(open)** still need confirmation.
 
+> The commands take `SRC(lib/file member)` and `TGT(lib/file member)` as grouped values. The tables below describe what each part means.
+
 ## 1. Scope
 
 Three converters, one program (and one command) each. Smallest first.
@@ -34,7 +36,7 @@ All three commands take the same parameters.
 | Input | `SRCMBR` | Source member name. **Mandatory** in both modes |
 | Input | `SRCTYPE` | Source type, must be a valid type. **Mandatory** in both modes |
 | Input | `SRCCCSID` | CCSID for reading, default `*DFT` |
-| Output | `TGTLIB` | Output library (`*SRCLIB` allowed) |
+| Output | `TGT` (grouped: file, library, member) replaces `TGTLIB`, `TGTFILE`, `TGTMBR`; see BUILD.md. Meaning of the old rows: `TGTLIB` | Output library (`*SRCLIB` allowed) |
 | Output | `TGTFILE` | Output source physical file |
 | Output | `TGTIFS` | IFS output **directory** |
 | Output | `TGTMBR` | Output member name. **Mandatory** in both modes (`*SRCMBR` allowed) |

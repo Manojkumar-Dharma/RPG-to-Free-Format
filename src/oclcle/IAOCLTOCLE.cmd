@@ -1,30 +1,31 @@
-/* IAOCLTOCLE - convert an OCL36 procedure to CLLE source.            */
-/* CPP: IAOCLTOCLE. Parameter order here must match the program's.   */
-/* Source: SRCLIB + SRCFILE (member) or SRCIFS (directory); the IFS   */
-/* file name is SRCMBR.SRCTYPE. Target: same rule with TGT*.          */
-/* TGTFILE has no default on purpose: for an IFS target it stays      */
-/* empty.                                                             */
+/* IAOCLTOCLE - convert an OCL36 procedure to CLLE source. */
+/* CPP: IAOCLTOCLE. Parameter order here must match the program's.         */
+/* SRC(lib/file member) and TGT(lib/file member) are grouped values:   */
+/*   IAOCLTOCLE SRC(MYLIB/QS36PRC MYPROC) SRCTYPE(OCL36) TGT(QCLLESRC)    */
+/* For an IFS source or target give *NONE as the file and use SRCIFS   */
+/* or TGTIFS (a directory); the IFS file name is member.type.          */
 CMD        PROMPT('OCL36 to CLLE converter')
 
-PARM       KWD(SRCLIB) TYPE(*NAME) LEN(10) DFT(*NONE) +
-             SPCVAL((*NONE ' ') (*LIBL) (*CURLIB)) +
-             PROMPT('Source library')
-PARM       KWD(SRCFILE) TYPE(*NAME) LEN(10) DFT(*NONE) +
-             SPCVAL((*NONE ' ')) PROMPT('Source file')
-PARM       KWD(SRCMBR) TYPE(*NAME) LEN(10) MIN(1) +
-             PROMPT('Source member')
+PARM       KWD(SRC) TYPE(SRC_T) MIN(1) PROMPT('Source file and member')
+SRC_T:     ELEM       TYPE(SRCFILE_Q) MIN(1) PROMPT('Source file')
+           ELEM       TYPE(*NAME) LEN(10) MIN(1) PROMPT('Source member')
+SRCFILE_Q: QUAL       TYPE(*NAME) LEN(10) MIN(1) SPCVAL((*NONE ' '))
+           QUAL       TYPE(*NAME) LEN(10) DFT(*LIBL) +
+                        SPCVAL((*LIBL) (*CURLIB)) PROMPT('Library')
 PARM       KWD(SRCTYPE) TYPE(*CHAR) LEN(10) MIN(1) +
              PROMPT('Source type')
 PARM       KWD(SRCIFS) TYPE(*CHAR) LEN(1024) VARY(*YES) +
              DFT(*NONE) SPCVAL((*NONE ' ')) +
              PROMPT('Source IFS directory')
 
-PARM       KWD(TGTLIB) TYPE(*NAME) LEN(10) DFT(*NONE) +
-             SPCVAL((*NONE ' ') (*SRCLIB)) PROMPT('Target library')
-PARM       KWD(TGTFILE) TYPE(*NAME) LEN(10) DFT(*NONE) +
-             SPCVAL((*NONE ' ')) PROMPT('Target file')
-PARM       KWD(TGTMBR) TYPE(*NAME) LEN(10) MIN(1) +
-             SPCVAL((*SRCMBR)) PROMPT('Target member')
+PARM       KWD(TGT) TYPE(TGT_T) PROMPT('Target file and member')
+TGT_T:     ELEM       TYPE(TGTFILE_Q) PROMPT('Target file')
+           ELEM       TYPE(*NAME) LEN(10) DFT(*SRCMBR) +
+                        SPCVAL((*SRCMBR)) PROMPT('Target member')
+TGTFILE_Q: QUAL       TYPE(*NAME) LEN(10) DFT(*NONE) +
+                        SPCVAL((*NONE ' '))
+           QUAL       TYPE(*NAME) LEN(10) DFT(*SRCLIB) +
+                        SPCVAL((*SRCLIB)) PROMPT('Library')
 PARM       KWD(TGTTYPE) TYPE(*CHAR) LEN(10) DFT(CLLE) +
              PROMPT('Target type')
 PARM       KWD(TGTIFS) TYPE(*CHAR) LEN(1024) VARY(*YES) +
