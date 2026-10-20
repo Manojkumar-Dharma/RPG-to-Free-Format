@@ -8,7 +8,7 @@
 
 ctl-opt main(Main) option(*srcstmt:*nodebugio);
 
-/copy IAcnvSrvP
+/copy qcpysrc,IAcnvSrvP
 
 dcl-pr DspConvert int(10);
   i_src likeds(IAcnvDesc_t) const;

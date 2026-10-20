@@ -5,7 +5,7 @@
 
 ctl-opt nomain option(*srcstmt:*nodebugio);
 
-/copy IAcnvSrvP
+/copy qcpysrc,IAcnvSrvP
 
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';

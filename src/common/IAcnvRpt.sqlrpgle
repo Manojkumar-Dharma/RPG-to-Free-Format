@@ -6,7 +6,7 @@
 
 ctl-opt nomain option(*srcstmt:*nodebugio);
 
-/copy IAcnvSrvP
+/copy qcpysrc,IAcnvSrvP
 
 dcl-f IACNVRPT printer usage(*output) usropn;
 

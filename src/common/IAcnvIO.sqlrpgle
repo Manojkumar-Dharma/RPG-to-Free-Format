@@ -12,7 +12,7 @@
 
 ctl-opt nomain option(*srcstmt:*nodebugio);
 
-/copy IAcnvSrvP
+/copy qcpysrc,IAcnvSrvP
 
 dcl-c C_QUOTE '''';
 dcl-c C_COMMAWINDOW 30;          // a comma this close to the last blank wins

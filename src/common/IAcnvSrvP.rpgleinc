@@ -2,7 +2,7 @@
 // IAcnvSrvP - shared constants, structures and prototypes for the
 // legacy source converters (IAcnvSrv service program).
 // Free-format include; starts with **FREE.
-// Include with: /copy IAcnvSrvP
+// Include with: /copy qcpysrc,IAcnvSrvP (member IAcnvSrvP of source file QCPYSRC)
 // and compile with INCDIR pointing at the repo's src/common folder.
 // Target release V7R3.
 

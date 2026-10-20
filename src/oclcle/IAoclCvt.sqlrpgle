@@ -10,7 +10,7 @@
 
 ctl-opt nomain option(*srcstmt:*nodebugio);
 
-/copy IAcnvSrvP
+/copy qcpysrc,IAcnvSrvP
 
 dcl-c C_MAXBODY 5000;
 dcl-c C_MAXITEMS 20;

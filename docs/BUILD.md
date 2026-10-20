@@ -20,7 +20,15 @@ Put `MYLIB` on the library list afterwards (the programs find the message file a
 
 ## 2. Service program IAcnvSrv
 
-Every source is `.sqlrpgle` and is compiled with CRTSQLRPGI (module). The activation group is set on CRTPGM/CRTSRVPGM, never in the source (no `dftactgrp` in a module). Modules, in any order (use `INCDIR('REPO/src/common')` so `/copy IAcnvSrvP` is found):
+Every source is `.sqlrpgle` and is compiled with CRTSQLRPGI (module). The activation group is set on CRTPGM/CRTSRVPGM, never in the source (no `dftactgrp` in a module). The include is read as `/copy qcpysrc,IAcnvSrvP`, so first put it in a source member of file QCPYSRC (in a library on the library list):
+
+```
+CRTSRCPF FILE(MYLIB/QCPYSRC) RCDLEN(112)
+CPYFRMSTMF FROMSTMF('REPO/src/common/IAcnvSrvP.rpgleinc') TOMBR('/QSYS.LIB/MYLIB.LIB/QCPYSRC.FILE/IAcnvSrvP.MBR') MBROPT(*REPLACE)
+CHGPFM FILE(MYLIB/QCPYSRC) MBR(IAcnvSrvP) SRCTYPE(RPGLEINC)
+```
+
+Repeat the CPYFRMSTMF after every change to `IAcnvSrvP.rpgleinc`. Modules, in any order (the `INCDIR` entry is no longer needed, but harmless):
 
 ```
 CRTSQLRPGI OBJ(MYLIB/IAcnvTyp) SRCSTMF('REPO/src/common/IAcnvTyp.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)

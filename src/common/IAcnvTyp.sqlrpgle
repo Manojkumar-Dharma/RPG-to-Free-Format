@@ -6,7 +6,7 @@
 
 ctl-opt nomain option(*srcstmt:*nodebugio);
 
-/copy IAcnvSrvP
+/copy qcpysrc,IAcnvSrvP
 
 dcl-c C_SRC_OCL '|OCL36|';
 dcl-c C_SRC_DSPF '|DSP36|DSP38|';
