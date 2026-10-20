@@ -690,7 +690,7 @@ dcl-proc ConvertFieldDefinition;
   dcl-s l_length int(10);
   dcl-s l_line int(10);
   dcl-s l_column int(10);
-  dcl-s l_outS varchar(3);
+  dcl-s l_outputSpec varchar(3);
   dcl-s l_indicator varchar(2);
   dcl-s l_isInput ind;
   dcl-s l_dataType char(1);
@@ -703,7 +703,7 @@ dcl-proc ConvertFieldDefinition;
   dcl-s l_status char(1) inz(C_STS_CONVERTED);
   dcl-s l_reason varchar(200) inz('');
   dcl-s l_ctype char(1);
-  dcl-s l_flen int(10);
+  dcl-s l_fieldLength int(10);
   dcl-s l_decimals int(10);
   dcl-s l_front char(80);
   dcl-s l_nameGenerated ind inz(*off);
@@ -716,7 +716,7 @@ dcl-proc ConvertFieldDefinition;
   l_length = ToNumber(ColumnText(l_record:15:18));
   l_line = ToNumber(ColumnText(l_record:19:20));
   l_column = DecodeColumn(ColumnText(l_record:21:22));
-  l_outS = ParseIndicatorSpec(ColumnText(l_record:23:24));
+  l_outputSpec = ParseIndicatorSpec(ColumnText(l_record:23:24));
   l_isInput = (%subst(l_record:26:1) = 'Y' or %subst(l_record:26:1) = 'y');
   l_dataType = %xlate(C_LOWER:C_UPPER:%subst(l_record:27:1));
   l_ctype = %xlate(C_LOWER:C_UPPER:%subst(l_record:56:1));
@@ -737,16 +737,16 @@ dcl-proc ConvertFieldDefinition;
             :'Field length, line or column is missing or not valid');
     return;
   endif;
-  if l_outS = '?';
+  if l_outputSpec = '?';
     RptItem(C_STS_REVIEW:l_lineNo:%trimr(l_record)
             :'Output data entry is not Y, N or an indicator');
     return;
   endif;
-  l_indicator = IndicatorNumber(l_outS);
+  l_indicator = IndicatorNumber(l_outputSpec);
   g_keywordCount = 0;
 
   // ----- constant text: neither an output field nor an input field -----
-  if l_outS = 'N' and not l_isInput;
+  if l_outputSpec = 'N' and not l_isInput;
     if %len(l_data) = 0;
       RptItem(C_STS_ASSUMPTION:l_lineNo:%trimr(l_record)
               :'Field has no constant text and no data; skipped');
@@ -769,19 +769,19 @@ dcl-proc ConvertFieldDefinition;
   if l_isInput;
     l_ddsType = DdsType(l_dataType);
   endif;
-  l_flen = l_length;
+  l_fieldLength = l_length;
   l_decimals = -1;
   if l_ddsType = 'S';
-    l_flen = l_length - 1;
+    l_fieldLength = l_length - 1;
     l_decimals = 0;
-    if l_flen < 1;
+    if l_fieldLength < 1;
       RptItem(C_STS_REVIEW:l_lineNo:%trimr(l_record)
               :'Signed numeric field needs a length of at least 2');
       return;
     endif;
   endif;
 
-  if l_isInput and l_outS <> 'N';
+  if l_isInput and l_outputSpec <> 'N';
     l_usage = 'B';
   elseif l_isInput;
     l_usage = 'I';
@@ -808,7 +808,7 @@ dcl-proc ConvertFieldDefinition;
     l_status = C_STS_REVIEW;
     l_reason = 'Message (MIC) field: kept as a program output field';
   endif;
-  if l_usage = 'B' and %subst(l_outS:1:1) = 'I';
+  if l_usage = 'B' and %subst(l_outputSpec:1:1) = 'I';
     l_status = C_STS_REVIEW;
     l_reason = 'Output indicator on an input/output field: written as a plain'
             + ' input/output field';
@@ -823,14 +823,15 @@ dcl-proc ConvertFieldDefinition;
   // The field record. A pure output field with an output indicator is
   // shown only while the indicator is on; the constant text (if any) is
   // shown while it is off.
-  if l_usage = 'O' and %subst(l_outS:1:1) = 'I';
-    AddOutputLine(BuildDdsLine(l_indicator:*off:' ':l_name:l_flen:l_ddsType:l_decimals:l_usage:l_line:l_column
-               :''));
+  if l_usage = 'O' and %subst(l_outputSpec:1:1) = 'I';
+    AddOutputLine(BuildDdsLine(l_indicator:*off:' ':l_name:l_fieldLength:
+                  l_ddsType:l_decimals:l_usage:l_line:l_column:''));
   else;
-    AddOutputLine(BuildDdsLine('':*off:' ':l_name:l_flen:l_ddsType:l_decimals:l_usage:l_line:l_column:''));
+    AddOutputLine(BuildDdsLine('':*off:' ':l_name:l_fieldLength:
+                  l_ddsType:l_decimals:l_usage:l_line:l_column:''));
   endif;
 
-  if l_usage = 'O' and %len(l_data) > 0 and l_outS = 'Y';
+  if l_usage = 'O' and %len(l_data) > 0 and l_outputSpec = 'Y';
     AddLiteral(BuildDdsLine('':*off:' ':'':0:' ':-1:' ':0:0:''):'DFT(':l_data:')');
   endif;
 
@@ -842,14 +843,14 @@ dcl-proc ConvertFieldDefinition;
     if l_attrInd;
       CollectKeyword('':'OVRATR');
     endif;
-    if %subst(l_outS:1:1) = 'I';
+    if %subst(l_outputSpec:1:1) = 'I';
       CollectKeyword(l_indicator:'OVRDTA');
     endif;
   endif;
   WriteCollectedKeywords();
 
   // constant shown while the output indicator is off
-  if l_usage = 'O' and %subst(l_outS:1:1) = 'I' and %len(l_data) > 0;
+  if l_usage = 'O' and %subst(l_outputSpec:1:1) = 'I' and %len(l_data) > 0;
     l_front = BuildDdsLine(l_indicator:*on:' ':'':0:' ':-1:' ':l_line:l_column:'');
     AddLiteral(l_front:'':l_data:'');
     l_attrInd = CollectAttrs(l_record:*off);
@@ -868,8 +869,10 @@ dcl-proc AddFileLevelKeywords;
   dcl-s l_first ind inz(*on);
 
   for l_index = 1 to g_sourceCount;
-    if %subst(g_sourceLines(l_index):6:1) = 'S' and %subst(g_sourceLines(l_index):7:1) <> '*';
-      if %subst(g_sourceLines(l_index):39:1) = 'Y' or %subst(g_sourceLines(l_index):39:1) = 'y';
+    if %subst(g_sourceLines(l_index):6:1) = 'S'
+       and %subst(g_sourceLines(l_index):7:1) <> '*';
+      if %subst(g_sourceLines(l_index):39:1) = 'Y'
+         or %subst(g_sourceLines(l_index):39:1) = 'y';
         l_has132 = *on;
       endif;
       if l_first and (%subst(g_sourceLines(l_index):40:1) = 'Y'

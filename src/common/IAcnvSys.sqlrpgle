@@ -170,7 +170,7 @@ dcl-proc FindIfsName export;
     o_list varchar(512);
   end-pi;
 
-  dcl-s l_dirp pointer;
+  dcl-s l_dirPointer pointer;
   dcl-s l_entp pointer;
   dcl-ds l_entry likeds(dirent_t) based(l_entp);
   dcl-s l_want varchar(256);
@@ -181,12 +181,12 @@ dcl-proc FindIfsName export;
   o_list = '';
   l_want = %xlate(C_LOWER:C_UPPER:i_name);
 
-  l_dirp = opendir(i_directory);
-  if l_dirp = *null;
+  l_dirPointer = opendir(i_directory);
+  if l_dirPointer = *null;
     return 0;
   endif;
 
-  l_entp = readdir(l_dirp);
+  l_entp = readdir(l_dirPointer);
   dow l_entp <> *null;
     if l_entry.namelen > 0 and l_entry.namelen <= 256;
       l_have = %subst(l_entry.name:1:l_entry.namelen);
@@ -203,10 +203,10 @@ dcl-proc FindIfsName export;
         endif;
       endif;
     endif;
-    l_entp = readdir(l_dirp);
+    l_entp = readdir(l_dirPointer);
   enddo;
 
-  closedir(l_dirp);
+  closedir(l_dirPointer);
   return l_count;
 end-proc;
 
@@ -217,13 +217,13 @@ dcl-proc DirExists export;
     i_directory varchar(1024) const;
   end-pi;
 
-  dcl-s l_dirp pointer;
+  dcl-s l_dirPointer pointer;
 
-  l_dirp = opendir(i_directory);
-  if l_dirp = *null;
+  l_dirPointer = opendir(i_directory);
+  if l_dirPointer = *null;
     return *off;
   endif;
-  closedir(l_dirp);
+  closedir(l_dirPointer);
   return *on;
 end-proc;
 

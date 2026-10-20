@@ -104,7 +104,8 @@ CALLSUBR   SUBR(ADDMSG)
 RMVMSGD    MSGID(IAC0100) MSGF(&LIB/IACNVMSG)
 MONMSG     MSGID(CPF0000)
 ADDMSGD    MSGID(IAC0100) MSGF(&LIB/IACNVMSG) +
-             MSG('Conversion complete: &1 converted, &2 with assumption, &3 for review.') +
+             MSG('Conversion complete: &1 converted, &2 with assumption, +
+               &3 for review.') +
              FMT((*CHAR 10) (*CHAR 10) (*CHAR 10))
 
 RETURN

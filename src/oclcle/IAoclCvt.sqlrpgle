@@ -59,7 +59,8 @@ dcl-s g_ldaCnt int(10);
 dcl-s g_sortOutLib varchar(60);
 dcl-s g_sortExtra varchar(200);
 dcl-s g_useSql ind;
-dcl-s g_parameterKind char(1) dim(40);   // ' ' unused, 'P' passed, 'L' local (set by EVALUATE)
+// ' ' unused, 'P' passed, 'L' local (set by EVALUATE)
+dcl-s g_parameterKind char(1) dim(40);
 dcl-s g_parameterLength int(10) dim(40);
 dcl-s g_useDate ind;
 dcl-s g_ifLast varchar(500);     // condition of the IF line before (for ELSE)
@@ -251,8 +252,10 @@ dcl-proc ParseLdaExpression;
     return *off;
   endif;
   l_positionText = SafeSubstr(l_upperToken:3:l_commaPos - 3);
-  l_lengthText = SafeSubstr(l_upperToken:l_commaPos + 1:%len(l_upperToken) - l_commaPos - 1);
-  if %len(l_positionText) = 0 or %len(l_positionText) > 4 or %len(l_lengthText) = 0 or %len(l_lengthText) > 3
+  l_lengthText = SafeSubstr(l_upperToken:l_commaPos + 1:
+                   %len(l_upperToken) - l_commaPos - 1);
+  if %len(l_positionText) = 0 or %len(l_positionText) > 4
+     or %len(l_lengthText) = 0 or %len(l_lengthText) > 3
      or %check('0123456789':l_positionText) > 0 or %check('0123456789':l_lengthText) > 0;
     return *off;
   endif;
@@ -277,7 +280,8 @@ dcl-proc ExpressionVariable;
 
   l_upperToken = ToUpper(%trim(i_token));
   o_length = 0;
-  if %len(l_upperToken) > 0 and %len(l_upperToken) <= 2 and %check('0123456789':l_upperToken) = 0;
+  if %len(l_upperToken) > 0 and %len(l_upperToken) <= 2
+     and %check('0123456789':l_upperToken) = 0;
     l_number = %int(l_upperToken);
     if l_number < 1 or l_number > 40;
       return '';
@@ -350,7 +354,8 @@ dcl-proc ConvertOperand;
         o_isValid = *off;
         return '';
       endif;
-      l_variable = ExpressionVariable(SafeSubstr(l_rest:l_openMark + 1:l_closeMark - l_openMark - 1):l_variableLength);
+      l_variable = ExpressionVariable(SafeSubstr(l_rest:l_openMark + 1:
+                     l_closeMark - l_openMark - 1):l_variableLength);
       if l_variable = '';
         o_isValid = *off;
         return '';
@@ -437,7 +442,8 @@ dcl-proc SubstituteExpressions;
       l_remaining = SafeSubstrToEnd(l_remaining:l_closeMark + 1);
       iter;
     endif;
-    l_token = ToUpper(SafeSubstr(l_remaining:l_openMark + 1:l_closeMark - l_openMark - 1));
+    l_token = ToUpper(SafeSubstr(l_remaining:l_openMark + 1:
+                l_closeMark - l_openMark - 1));
 
     l_variable = ExpressionVariable(l_token:l_variableLength);
     if l_variable = '' or l_variableLength < 0;
@@ -697,7 +703,8 @@ dcl-proc ConvertFile;
         l_disp = ToUpper(l_value);
       other;
         if l_keyword = 'JOB' and ToUpper(l_value) = 'YES';
-          l_isJobOverride = *on;               // override for the whole job: not converted
+          // override for the whole job: not converted
+          l_isJobOverride = *on;
         endif;
         if %len(l_other) > 0;
           l_other += ' ';
@@ -900,13 +907,13 @@ dcl-proc ConvertEvaluate;
   dcl-s l_target varchar(60);
   dcl-s l_expr varchar(300);
   dcl-s l_commaPos int(10);
-  dcl-s l_nStr varchar(10);
+  dcl-s l_numberText varchar(10);
   dcl-s l_lenStr varchar(10);
   dcl-s l_parameterNo int(10);
   dcl-s l_length int(10);
   dcl-s l_value varchar(300);
   dcl-s l_variable varchar(20);
-  dcl-s l_vlen int(10);
+  dcl-s l_valueLength int(10);
   dcl-s l_numeric ind;
   dcl-s l_comment varchar(300) inz('');
   dcl-s l_hasProblem ind inz(*off);
@@ -951,14 +958,14 @@ dcl-proc ConvertEvaluate;
     l_expr = SafeSubstrToEnd(l_items(l_itemIndex):l_equalPos + 1);
     l_commaPos = %scan(',':l_target);
     if l_commaPos = 0;
-      l_nStr = l_target;
+      l_numberText = l_target;
       l_lenStr = '';
     else;
-      l_nStr = SafeSubstr(l_target:1:l_commaPos - 1);
+      l_numberText = SafeSubstr(l_target:1:l_commaPos - 1);
       l_lenStr = SafeSubstrToEnd(l_target:l_commaPos + 1);
     endif;
-    if %len(l_nStr) = 0 or %len(l_nStr) > 2
-       or %check('0123456789':l_nStr) > 0
+    if %len(l_numberText) = 0 or %len(l_numberText) > 2
+       or %check('0123456789':l_numberText) > 0
        or (%len(l_lenStr) > 0 and (%len(l_lenStr) > 2
        or %check('0123456789':l_lenStr) > 0));
       ReviewLine(i_lineNo:i_text
@@ -967,14 +974,14 @@ dcl-proc ConvertEvaluate;
       l_hasProblem = *on;
       iter;
     endif;
-    l_parameterNo = %int(l_nStr);
+    l_parameterNo = %int(l_numberText);
     l_length = 0;
     if %len(l_lenStr) > 0;
       l_length = %int(l_lenStr);
     endif;
     if l_parameterNo < 1 or l_parameterNo > 40;
       ReviewLine(i_lineNo:i_text
-                 :'EVALUATE parameter P' + l_nStr + ' is outside 1 to 40');
+                 :'EVALUATE parameter P' + l_numberText + ' is outside 1 to 40');
       l_hasProblem = *on;
       iter;
     endif;
@@ -983,18 +990,19 @@ dcl-proc ConvertEvaluate;
     l_variable = '';
     l_value = '';
     l_numeric = *off;
-    l_vlen = 0;
+    l_valueLength = 0;
     select;
       when l_expr = '''''';
         l_value = ' ';
-        l_vlen = 1;
+        l_valueLength = 1;
       when %len(l_expr) >= 2 and SafeSubstr(l_expr:1:1) = C_QUOTE
            and SafeSubstr(l_expr:%len(l_expr):1) = C_QUOTE;
         l_value = SafeSubstr(l_expr:2:%len(l_expr) - 2);
-        l_vlen = %len(%scanrpl('''''':' ':l_value));
+        l_valueLength = %len(%scanrpl('''''':' ':l_value));
       when SafeSubstr(l_expr:1:1) = '?';
         if %len(l_expr) >= 3 and %scan('?':l_expr:2) = %len(l_expr);
-          l_variable = ExpressionVariable(SafeSubstr(l_expr:2:%len(l_expr) - 2):l_vlen);
+          l_variable = ExpressionVariable(
+                SafeSubstr(l_expr:2:%len(l_expr) - 2):l_valueLength);
         endif;
         if l_variable = '';
           ReviewLine(i_lineNo:i_text
@@ -1023,24 +1031,27 @@ dcl-proc ConvertEvaluate;
             if %len(l_value) > l_length;
               l_value = SafeSubstrToEnd(l_value:%len(l_value) - l_length + 1);
             else;
-              l_value = SafeSubstr('000000000000000':1:l_length - %len(l_value)) + l_value;
+              l_value = SafeSubstr('000000000000000':1:
+                          l_length - %len(l_value)) + l_value;
             endif;
           endif;
         endif;
-        l_vlen = %len(l_value);
+        l_valueLength = %len(l_value);
     endsl;
 
     if g_parameterKind(l_parameterNo) = ' ';
       g_parameterKind(l_parameterNo) = 'L';
     endif;
     if g_parameterKind(l_parameterNo) = 'L';
-      g_parameterLength(l_parameterNo) = %max(g_parameterLength(l_parameterNo):%max(l_vlen:1));
+      g_parameterLength(l_parameterNo) =
+         %max(g_parameterLength(l_parameterNo):%max(l_valueLength:1));
     else;
       l_note = *on;
     endif;
 
     if l_variable <> '';
-      AddBody('CHGVAR VAR(&P' + %trim(%char(l_parameterNo)) + ') VALUE(' + l_variable + ')');
+      AddBody('CHGVAR VAR(&P' + %trim(%char(l_parameterNo))
+              + ') VALUE(' + l_variable + ')');
     else;
       AddBody('CHGVAR VAR(&P' + %trim(%char(l_parameterNo)) + ') VALUE(' + C_QUOTE
               + l_value + C_QUOTE + ')');
@@ -1153,7 +1164,8 @@ dcl-proc SortSpecVariable;
       return '';
     endif;
     l_positionText = SafeSubstr(l_upperToken:3:l_commaPos - 3);
-    l_lengthText = SafeSubstr(l_upperToken:l_commaPos + 1:%len(l_upperToken) - l_commaPos - 1);
+    l_lengthText = SafeSubstr(l_upperToken:l_commaPos + 1:
+                   %len(l_upperToken) - l_commaPos - 1);
     if %len(l_positionText) = 0 or %len(l_positionText) > 4 or %len(l_lengthText) = 0
        or %len(l_lengthText) > 3 or %check('0123456789':l_positionText) > 0
        or %check('0123456789':l_lengthText) > 0;
@@ -1230,9 +1242,12 @@ dcl-proc BuildSortInsert;
         o_reason = 'Unmatched ? in a specification line';
         return *off;
       endif;
-      l_variable = SortSpecVariable(SafeSubstr(l_rest:l_openMark + 1:l_closeMark - l_openMark - 1));
+      l_variable = SortSpecVariable(SafeSubstr(l_rest:l_openMark + 1:
+                     l_closeMark - l_openMark - 1));
       if l_variable = '';
-        o_reason = 'Substitution expression ' + SafeSubstr(l_rest:l_openMark:l_closeMark - l_openMark + 1)
+        o_reason = 'Substitution expression '
+                + SafeSubstr(l_rest:l_openMark:
+                    l_closeMark - l_openMark + 1)
                 + ' is not supported in sort specifications';
         return *off;
       endif;
@@ -1249,7 +1264,8 @@ dcl-proc BuildSortInsert;
     l_piecePos = 1;
     l_literalLength = %len(l_literalText);
     dow l_piecePos <= l_literalLength;
-      l_piece = SafeSubstr(l_literalText:l_piecePos:%min(30:l_literalLength - l_piecePos + 1));
+      l_piece = SafeSubstr(l_literalText:l_piecePos:
+                  %min(30:l_literalLength - l_piecePos + 1));
       l_stmt += ' *CAT ' + C_QUOTE + QuoteSpec(l_piece) + C_QUOTE;
       l_piecePos += 30;
     enddo;
@@ -1471,7 +1487,8 @@ dcl-proc WriteSortStep;
       l_hasCond = *off;
       if %len(%trim(g_sortLines(l_index))) >= 2
          and SafeSubstr(%trim(g_sortLines(l_index)):1:2) = '//';
-        if not ParseSortCondition(g_sortLines(l_index):l_kind:l_variable:l_literal:l_spec:l_reason);
+        if not ParseSortCondition(g_sortLines(l_index):l_kind:l_variable:
+                 l_literal:l_spec:l_reason);
           l_isValid = *off;
           leave;
         endif;
@@ -1575,7 +1592,8 @@ dcl-proc WriteSortStep;
     else;
       l_command += %trim(l_inputList);
     endif;
-    l_command += ') OUTFILE(' + l_outputName + ') SRCFILE(QTEMP/' + l_memberName + ') SRCMBR('
+    l_command += ') OUTFILE(' + l_outputName + ') SRCFILE(QTEMP/'
+             + l_memberName + ') SRCMBR('
              + l_memberName + ')';
     AddBody(l_command);
     RptItem(C_STS_ASSUMPTION:g_sortFirst:'#GSORT step'
@@ -1638,7 +1656,8 @@ dcl-proc CollectSortLine;
         return *on;
       when l_keyword = 'SOURCE';          // specifications come from a member
         if l_textStart > 0;
-          l_itemCount = SplitItems(%trim(SafeSubstrToEnd(l_lineText:l_textStart + 1)):l_items);
+          l_itemCount = SplitItems(
+                %trim(SafeSubstrToEnd(l_lineText:l_textStart + 1)):l_items);
         else;
           l_itemCount = 0;
         endif;
@@ -1649,7 +1668,8 @@ dcl-proc CollectSortLine;
         WriteSortStep();
         RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
         return *on;
-      when l_keyword = 'IF' or l_keyword = 'IFT' or l_keyword = 'IFF' or l_keyword = 'ELSE';
+      when l_keyword = 'IF' or l_keyword = 'IFT' or l_keyword = 'IFF'
+           or l_keyword = 'ELSE';
         g_conditions = *on;
         if g_sortCnt < C_MAXSORT;
           g_sortCnt += 1;
@@ -1735,7 +1755,8 @@ dcl-proc ConditionOperand;
   l_value = i_text;
   if %len(l_value) >= 2 and SafeSubstr(l_value:1:1) = C_QUOTE
      and SafeSubstr(l_value:%len(l_value):1) = C_QUOTE;
-    l_value = SafeSubstr(l_value:2:%len(l_value) - 2);   // inner text, doubled quotes kept
+    // inner text, doubled quotes kept
+    l_value = SafeSubstr(l_value:2:%len(l_value) - 2);
   else;
     l_value = %scanrpl(C_QUOTE:C_QUOTE + C_QUOTE:l_value);
   endif;
@@ -1769,9 +1790,11 @@ dcl-proc ConditionExpression;
   l_upperCondition = ToUpper(i_cond);
   if %len(l_upperCondition) = 9 and SafeSubstr(l_upperCondition:1:6) = 'SWITCH'
      and %check('12345678':SafeSubstr(l_upperCondition:7:1)) = 0
-     and SafeSubstr(l_upperCondition:8:1) = '-' and %check('01':SafeSubstr(l_upperCondition:9:1)) = 0;
+     and SafeSubstr(l_upperCondition:8:1) = '-'
+     and %check('01':SafeSubstr(l_upperCondition:9:1)) = 0;
     l_mask = 'XXXXXXXX';
-    %subst(l_mask:%int(%subst(l_upperCondition:7:1)):1) = SafeSubstr(l_upperCondition:9:1);
+    %subst(l_mask:%int(%subst(l_upperCondition:7:1)):1) =
+       SafeSubstr(l_upperCondition:9:1);
     return '%SWITCH(' + l_mask + ')';
   endif;
 
@@ -2364,7 +2387,8 @@ dcl-proc OclConvert export;
 
     // A statement continues when it ends with a comma.
     if %len(l_trimmedLine) >= 2 and SafeSubstr(l_trimmedLine:1:2) = '//';
-      dow %len(l_trimmedLine) > 0 and SafeSubstr(l_trimmedLine:%len(l_trimmedLine):1) = ',';
+      dow %len(l_trimmedLine) > 0
+          and SafeSubstr(l_trimmedLine:%len(l_trimmedLine):1) = ',';
         if not ReadLine(l_next:l_lineNo);
           leave;
         endif;
