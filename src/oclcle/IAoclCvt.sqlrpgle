@@ -95,7 +95,7 @@ dcl-proc SafeSubstr;
     return '';
   endif;
   l_length = %min(l_length:%len(i_text) - l_from + 1);
-  return %SubstituteExpressions(i_text:l_from:l_length);
+  return %subst(i_text:l_from:l_length);
 end-proc;
 
 dcl-proc SafeSubstrToEnd;
@@ -110,7 +110,7 @@ dcl-proc SafeSubstrToEnd;
   if l_from > %len(i_text);
     return '';
   endif;
-  return %SubstituteExpressions(i_text:l_from);
+  return %subst(i_text:l_from);
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1771,7 +1771,7 @@ dcl-proc ConditionExpression;
      and %check('12345678':SafeSubstr(l_upperCondition:7:1)) = 0
      and SafeSubstr(l_upperCondition:8:1) = '-' and %check('01':SafeSubstr(l_upperCondition:9:1)) = 0;
     l_mask = 'XXXXXXXX';
-    %SubstituteExpressions(l_mask:%int(%SubstituteExpressions(l_upperCondition:7:1)):1) = SafeSubstr(l_upperCondition:9:1);
+    %subst(l_mask:%int(%subst(l_upperCondition:7:1)):1) = SafeSubstr(l_upperCondition:9:1);
     return '%SWITCH(' + l_mask + ')';
   endif;
 
