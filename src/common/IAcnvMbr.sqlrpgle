@@ -29,19 +29,19 @@ dcl-s g_srcLine int(10) inz(0);
 // Alias target text: unqualified for *LIBL / *CURLIB, else lib/file.
 dcl-proc AliasFor;
   dcl-pi *n varchar(128);
-    i_lib char(10) const;
+    i_library char(10) const;
     i_file char(10) const;
-    i_mbr char(10) const;
+    i_member char(10) const;
   end-pi;
 
-  dcl-s l_for varchar(128);
+  dcl-s l_forClause varchar(128);
 
-  if %trim(i_lib) = '*LIBL' or %trim(i_lib) = '*CURLIB';
-    l_for = '"' + %trim(i_file) + '"';
+  if %trim(i_library) = '*LIBL' or %trim(i_library) = '*CURLIB';
+    l_forClause = '"' + %trim(i_file) + '"';
   else;
-    l_for = '"' + %trim(i_lib) + '"/"' + %trim(i_file) + '"';
+    l_forClause = '"' + %trim(i_library) + '"/"' + %trim(i_file) + '"';
   endif;
-  return l_for + ' ("' + %trim(i_mbr) + '")';
+  return l_forClause + ' ("' + %trim(i_member) + '")';
 end-proc;
 
 // ------------------------------------------------------------------
@@ -67,16 +67,16 @@ dcl-proc MbrOpenSource export;
     o_msgData char(256);
   end-pi;
 
-  dcl-s l_sql varchar(512);
+  dcl-s l_sqlText varchar(512);
 
   if g_srcOpen;
     MbrCloseSource();
   endif;
 
   exec sql drop alias qtemp/iacnvsrc;      // fine if it does not exist
-  l_sql = 'create alias qtemp/iacnvsrc for '
+  l_sqlText = 'create alias qtemp/iacnvsrc for '
           + AliasFor(i_desc.lib:i_desc.file:i_desc.mbr);
-  exec sql prepare sAliasSrc from :l_sql;
+  exec sql prepare sAliasSrc from :l_sqlText;
   exec sql execute sAliasSrc;
   if sqlcode < 0;
     return SqlFail('IAC0101':'Create source alias':o_msgId:o_msgData);
@@ -141,9 +141,9 @@ dcl-proc MbrOpenTarget export;
     o_msgData char(256);
   end-pi;
 
-  dcl-s l_cmd char(512);
-  dcl-s l_sql varchar(512);
-  dcl-s l_lib varchar(10);
+  dcl-s l_command char(512);
+  dcl-s l_sqlText varchar(512);
+  dcl-s l_library varchar(10);
   dcl-s l_file varchar(10);
   dcl-s l_width int(10);
 
@@ -151,41 +151,41 @@ dcl-proc MbrOpenTarget export;
     MbrCloseTarget();
   endif;
 
-  l_cmd = 'ADDPFM FILE(' + %trim(i_desc.lib) + '/' + %trim(i_desc.file)
+  l_command = 'ADDPFM FILE(' + %trim(i_desc.lib) + '/' + %trim(i_desc.file)
         + ') MBR(' + %trim(i_desc.mbr) + ') SRCTYPE('
         + %trim(i_desc.type) + ')';
   if i_desc.exists;
-    l_cmd = 'CLRPFM FILE(' + %trim(i_desc.lib) + '/'
+    l_command = 'CLRPFM FILE(' + %trim(i_desc.lib) + '/'
           + %trim(i_desc.file) + ') MBR(' + %trim(i_desc.mbr) + ')';
   endif;
 
   monitor;
-    QCmdExc(l_cmd:%len(%trimr(l_cmd)));
+    QCmdExc(l_command:%len(%trimr(l_command)));
   on-error;
     o_msgId = 'IAC0102';
-    o_msgData = 'Could not prepare target member: ' + %trimr(l_cmd);
+    o_msgData = 'Could not prepare target member: ' + %trimr(l_command);
     return 1;
   endmon;
 
   // Record width of the target source file.
-  l_lib = %trim(i_desc.lib);
+  l_library = %trim(i_desc.lib);
   l_file = %trim(i_desc.file);
   exec sql select character_maximum_length into :l_width
     from qsys2/syscolumns
-    where system_table_schema = :l_lib
+    where system_table_schema = :l_library
       and system_table_name = :l_file
       and system_column_name = 'SRCDTA';
   if sqlcode <> 0 or l_width < 1;
     o_msgId = 'IAC0102';
     o_msgData = 'Target is not a source file (no SRCDTA column): '
-                + l_lib + '/' + l_file;
+                + l_library + '/' + l_file;
     return 1;
   endif;
 
   exec sql drop alias qtemp/iacnvtgt;      // fine if it does not exist
-  l_sql = 'create alias qtemp/iacnvtgt for '
+  l_sqlText = 'create alias qtemp/iacnvtgt for '
           + AliasFor(i_desc.lib:i_desc.file:i_desc.mbr);
-  exec sql prepare sAliasTgt from :l_sql;
+  exec sql prepare sAliasTgt from :l_sqlText;
   exec sql execute sAliasTgt;
   if sqlcode < 0;
     return SqlFail('IAC0102':'Create target alias':o_msgId:o_msgData);
@@ -250,15 +250,15 @@ dcl-proc MbrTargetWidth export;
     i_desc likeds(IAcnvDesc_t) const;
   end-pi;
 
-  dcl-s l_lib varchar(10);
+  dcl-s l_library varchar(10);
   dcl-s l_file varchar(10);
   dcl-s l_width int(10) inz(0);
 
-  l_lib = %trim(i_desc.lib);
+  l_library = %trim(i_desc.lib);
   l_file = %trim(i_desc.file);
   exec sql select character_maximum_length into :l_width
     from qsys2/syscolumns
-    where system_table_schema = :l_lib
+    where system_table_schema = :l_library
       and system_table_name = :l_file
       and system_column_name = 'SRCDTA';
   if sqlcode <> 0;

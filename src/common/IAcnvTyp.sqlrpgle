@@ -20,20 +20,20 @@ dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 // ------------------------------------------------------------------
-dcl-proc InList;
+dcl-proc IsInList;
   dcl-pi *n ind;
     i_list varchar(100) const;
     i_type char(10) const;
   end-pi;
 
-  dcl-s l_key varchar(12);
+  dcl-s l_searchKey varchar(12);
 
   if %len(%trim(i_type)) = 0;
     return *off;
   endif;
 
-  l_key = '|' + %trim(%xlate(C_LOWER:C_UPPER:i_type)) + '|';
-  return %scan(l_key:i_list) > 0;
+  l_searchKey = '|' + %trim(%xlate(C_LOWER:C_UPPER:i_type)) + '|';
+  return %scan(l_searchKey:i_list) > 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -45,11 +45,11 @@ dcl-proc IsValidSrcType export;
 
   select;
     when i_converter = C_CNV_OCL;
-      return InList(C_SRC_OCL:i_type);
+      return IsInList(C_SRC_OCL:i_type);
     when i_converter = C_CNV_DSPF;
-      return InList(C_SRC_DSPF:i_type);
+      return IsInList(C_SRC_DSPF:i_type);
     when i_converter = C_CNV_FREE;
-      return InList(C_SRC_FREE:i_type);
+      return IsInList(C_SRC_FREE:i_type);
   endsl;
   return *off;
 end-proc;
@@ -63,11 +63,11 @@ dcl-proc IsValidTgtType export;
 
   select;
     when i_converter = C_CNV_OCL;
-      return InList(C_TGT_OCL:i_type);
+      return IsInList(C_TGT_OCL:i_type);
     when i_converter = C_CNV_DSPF;
-      return InList(C_TGT_DSPF:i_type);
+      return IsInList(C_TGT_DSPF:i_type);
     when i_converter = C_CNV_FREE;
-      return InList(C_TGT_FREE:i_type);
+      return IsInList(C_TGT_FREE:i_type);
   endsl;
   return *off;
 end-proc;

@@ -32,7 +32,7 @@ dcl-s g_loadLine int(10);
 dcl-s g_loadText varchar(512);
 dcl-s g_afterRun ind;
 dcl-s g_width int(10);
-dcl-s g_ovr varchar(300);       // FILE names overridden since the last CALL
+dcl-s g_overriddenFiles varchar(300);       // FILE names overridden since the last CALL
 dcl-c C_MAXSORT 200;
 dcl-s g_sortMode ind;            // inside the data lines of a #GSORT step
 dcl-s g_sortCond ind;            // the block contains IF/IFF/ELSE/END
@@ -48,27 +48,27 @@ dcl-s g_sortSrcLib varchar(60);
 dcl-s g_conditions ind;
 dcl-c C_MAXTMP 600;
 dcl-c C_MAXLDA 20;
-dcl-s g_tmp varchar(512) dim(C_MAXTMP);
-dcl-s g_tmpCnt int(10);
-dcl-s g_blkP int(10) dim(C_MAXLDA);
-dcl-s g_blkN int(10) dim(C_MAXLDA);
+dcl-s g_tempLines varchar(512) dim(C_MAXTMP);
+dcl-s g_tempLineCount int(10);
+dcl-s g_blockPosition int(10) dim(C_MAXLDA);
+dcl-s g_blockLength int(10) dim(C_MAXLDA);
 dcl-s g_blkCnt int(10);
-dcl-s g_ldaP int(10) dim(C_MAXLDA);
-dcl-s g_ldaN int(10) dim(C_MAXLDA);
+dcl-s g_ldaPosition int(10) dim(C_MAXLDA);
+dcl-s g_ldaLength int(10) dim(C_MAXLDA);
 dcl-s g_ldaCnt int(10);
 dcl-s g_sortOutLib varchar(60);
 dcl-s g_sortExtra varchar(200);
 dcl-s g_useSql ind;
-dcl-s g_parKind char(1) dim(40);   // ' ' unused, 'P' passed, 'L' local (set by EVALUATE)
-dcl-s g_parLen int(10) dim(40);
+dcl-s g_parameterKind char(1) dim(40);   // ' ' unused, 'P' passed, 'L' local (set by EVALUATE)
+dcl-s g_parameterLength int(10) dim(40);
 dcl-s g_useDate ind;
 dcl-s g_ifLast varchar(500);     // condition of the IF line before (for ELSE)
 dcl-s g_ifCtx varchar(500);      // condition context when that line was an ELSE IF
-dcl-s g_tmpVar int(10);
+dcl-s g_tempVariableCount int(10);
 dcl-s g_isSort ind;              // the pending LOAD is #GSORT
 
 // ------------------------------------------------------------------
-dcl-proc Up;
+dcl-proc ToUpper;
   dcl-pi *n varchar(512);
     i_text varchar(512) const;
   end-pi;
@@ -79,26 +79,26 @@ end-proc;
 // ------------------------------------------------------------------
 // Safe substring helpers: never fail on an empty string, a zero length or
 // a start past the end (RPG %SUBST raises an error in those cases).
-dcl-proc SubStr;
+dcl-proc SafeSubstr;
   dcl-pi *n varchar(512);
     i_text varchar(512) const;
     i_from int(10) const;
-    i_len int(10) const;
+    i_length int(10) const;
   end-pi;
 
   dcl-s l_from int(10);
-  dcl-s l_len int(10);
+  dcl-s l_length int(10);
 
   l_from = %max(i_from:1);
-  l_len = i_len;
-  if l_len <= 0 or l_from > %len(i_text);
+  l_length = i_length;
+  if l_length <= 0 or l_from > %len(i_text);
     return '';
   endif;
-  l_len = %min(l_len:%len(i_text) - l_from + 1);
-  return %subst(i_text:l_from:l_len);
+  l_length = %min(l_length:%len(i_text) - l_from + 1);
+  return %SubstituteExpressions(i_text:l_from:l_length);
 end-proc;
 
-dcl-proc SubEnd;
+dcl-proc SafeSubstrToEnd;
   dcl-pi *n varchar(512);
     i_text varchar(512) const;
     i_from int(10) const;
@@ -110,7 +110,7 @@ dcl-proc SubEnd;
   if l_from > %len(i_text);
     return '';
   endif;
-  return %subst(i_text:l_from);
+  return %SubstituteExpressions(i_text:l_from);
 end-proc;
 
 // ------------------------------------------------------------------
@@ -131,33 +131,33 @@ end-proc;
 // Adds text as CL comment lines. The text is kept as it is (only "*/" is
 // altered so it cannot end the comment). A line is split only when it would
 // not fit the target width, preferably at a blank.
-dcl-proc AddCommentRaw;
+dcl-proc AddCommentKeepingText;
   dcl-pi *n;
     i_text varchar(512) const;
   end-pi;
 
   dcl-s l_rest varchar(512);
   dcl-s l_piece varchar(512);
-  dcl-s l_max int(10);
-  dcl-s l_cut int(10);
-  dcl-s l_i int(10);
+  dcl-s l_maxTextWidth int(10);
+  dcl-s l_cutPos int(10);
+  dcl-s l_scanPos int(10);
 
   l_rest = %trimr(%scanrpl('*/':'* /':i_text));
-  l_max = g_width - 6;             // room for the /* and */ delimiters
-  if l_max < 10;
-    l_max = 10;
+  l_maxTextWidth = g_width - 6;             // room for the /* and */ delimiters
+  if l_maxTextWidth < 10;
+    l_maxTextWidth = 10;
   endif;
   dow %len(l_rest) > 0;
-    if %len(l_rest) > l_max;
-      l_cut = l_max;
-      for l_i = l_max downto 2;
-        if SubStr(l_rest:l_i:1) = ' ';
-          l_cut = l_i - 1;         // break before the blank
+    if %len(l_rest) > l_maxTextWidth;
+      l_cutPos = l_maxTextWidth;
+      for l_scanPos = l_maxTextWidth downto 2;
+        if SafeSubstr(l_rest:l_scanPos:1) = ' ';
+          l_cutPos = l_scanPos - 1;         // break before the blank
           leave;
         endif;
       endfor;
-      l_piece = SubStr(l_rest:1:l_cut);
-      l_rest = SubEnd(l_rest:l_cut + 1);
+      l_piece = SafeSubstr(l_rest:1:l_cutPos);
+      l_rest = SafeSubstrToEnd(l_rest:l_cutPos + 1);
     else;
       l_piece = l_rest;
       l_rest = '';
@@ -176,138 +176,138 @@ dcl-proc AddComment;
   if %len(%trim(i_text)) = 0;
     return;
   endif;
-  AddCommentRaw(' ' + %trim(i_text));
+  AddCommentKeepingText(' ' + %trim(i_text));
 end-proc;
 
 // ------------------------------------------------------------------
 // A procedure parameter ?n? (1 to 40 here; CL allows 40 parameters) is read.
 // A parameter whose first use is a read is taken as passed by the caller.
-dcl-proc UseParm;
+dcl-proc MarkParameterUsed;
   dcl-pi *n;
-    i_n int(10) const;
+    i_parameterNo int(10) const;
   end-pi;
 
-  if g_parKind(i_n) = ' ';
-    g_parKind(i_n) = 'P';
+  if g_parameterKind(i_parameterNo) = ' ';
+    g_parameterKind(i_parameterNo) = 'P';
   endif;
-  if g_parKind(i_n) = 'P';
-    g_maxParm = %max(g_maxParm:i_n);
+  if g_parameterKind(i_parameterNo) = 'P';
+    g_maxParm = %max(g_maxParm:i_parameterNo);
   endif;
 end-proc;
 
 // ------------------------------------------------------------------
 // Local data area text: returns the CL variable and, when i_emit is *ON,
 // writes the RTVDTAARA that fills it (right before the statement using it).
-dcl-proc LdaName;
+dcl-proc LdaVariableName;
   dcl-pi *n varchar(20);
-    i_p int(10) const;
-    i_n int(10) const;
+    i_position int(10) const;
+    i_length int(10) const;
     i_emit ind const;
   end-pi;
 
-  dcl-s l_i int(10);
+  dcl-s l_index int(10);
   dcl-s l_found ind inz(*off);
   dcl-s l_name varchar(20);
 
-  l_name = '&L' + %trim(%char(i_p)) + '_' + %trim(%char(i_n));
-  for l_i = 1 to g_ldaCnt;
-    if g_ldaP(l_i) = i_p and g_ldaN(l_i) = i_n;
+  l_name = '&L' + %trim(%char(i_position)) + '_' + %trim(%char(i_length));
+  for l_index = 1 to g_ldaCnt;
+    if g_ldaPosition(l_index) = i_position and g_ldaLength(l_index) = i_length;
       l_found = *on;
     endif;
   endfor;
   if not l_found and g_ldaCnt < C_MAXLDA;
     g_ldaCnt += 1;
-    g_ldaP(g_ldaCnt) = i_p;
-    g_ldaN(g_ldaCnt) = i_n;
+    g_ldaPosition(g_ldaCnt) = i_position;
+    g_ldaLength(g_ldaCnt) = i_length;
   endif;
   if i_emit;
-    AddBody('RTVDTAARA DTAARA(*LDA (' + %trim(%char(i_p)) + ' '
-            + %trim(%char(i_n)) + ')) RTNVAR(' + l_name + ')');
+    AddBody('RTVDTAARA DTAARA(*LDA (' + %trim(%char(i_position)) + ' '
+            + %trim(%char(i_length)) + ')) RTNVAR(' + l_name + ')');
   endif;
   return l_name;
 end-proc;
 
 // ------------------------------------------------------------------
 // Parses L'p,n' (text of a ?L'p,n'? expression). *ON when valid.
-dcl-proc ParseLda;
+dcl-proc ParseLdaExpression;
   dcl-pi *n ind;
-    i_tok varchar(60) const;
-    o_p int(10);
-    o_n int(10);
+    i_token varchar(60) const;
+    o_position int(10);
+    o_length int(10);
   end-pi;
 
-  dcl-s l_t varchar(60);
-  dcl-s l_cp int(10);
-  dcl-s l_ps varchar(60);
-  dcl-s l_ns varchar(60);
+  dcl-s l_upperToken varchar(60);
+  dcl-s l_commaPos int(10);
+  dcl-s l_positionText varchar(60);
+  dcl-s l_lengthText varchar(60);
 
-  l_t = Up(%trim(i_tok));
-  if %len(l_t) < 6 or SubStr(l_t:1:2) <> 'L''' 
-     or SubStr(l_t:%len(l_t):1) <> '''';
+  l_upperToken = ToUpper(%trim(i_token));
+  if %len(l_upperToken) < 6 or SafeSubstr(l_upperToken:1:2) <> 'L''' 
+     or SafeSubstr(l_upperToken:%len(l_upperToken):1) <> '''';
     return *off;
   endif;
-  l_cp = %scan(',':l_t);
-  if l_cp < 4;
+  l_commaPos = %scan(',':l_upperToken);
+  if l_commaPos < 4;
     return *off;
   endif;
-  l_ps = SubStr(l_t:3:l_cp - 3);
-  l_ns = SubStr(l_t:l_cp + 1:%len(l_t) - l_cp - 1);
-  if %len(l_ps) = 0 or %len(l_ps) > 4 or %len(l_ns) = 0 or %len(l_ns) > 3
-     or %check('0123456789':l_ps) > 0 or %check('0123456789':l_ns) > 0;
+  l_positionText = SafeSubstr(l_upperToken:3:l_commaPos - 3);
+  l_lengthText = SafeSubstr(l_upperToken:l_commaPos + 1:%len(l_upperToken) - l_commaPos - 1);
+  if %len(l_positionText) = 0 or %len(l_positionText) > 4 or %len(l_lengthText) = 0 or %len(l_lengthText) > 3
+     or %check('0123456789':l_positionText) > 0 or %check('0123456789':l_lengthText) > 0;
     return *off;
   endif;
-  o_p = %int(l_ps);
-  o_n = %int(l_ns);
-  return o_p >= 1 and o_n >= 1 and o_p + o_n <= 1025;
+  o_position = %int(l_positionText);
+  o_length = %int(l_lengthText);
+  return o_position >= 1 and o_length >= 1 and o_position + o_length <= 1025;
 end-proc;
 
 // ------------------------------------------------------------------
 // Maps the text inside ?...? to a CL variable and its length. Returns ''
 // when the expression is not supported. Supported: ?n? (1-40), ?USER?,
 // ?WS?, ?DATE?, ?L'p,n'?.
-dcl-proc ExprVar;
+dcl-proc ExpressionVariable;
   dcl-pi *n varchar(20);
-    i_tok varchar(60) const;
-    o_len int(10);
+    i_token varchar(60) const;
+    o_length int(10);
   end-pi;
 
-  dcl-s l_t varchar(60);
-  dcl-s l_n int(10);
-  dcl-s l_p int(10);
+  dcl-s l_upperToken varchar(60);
+  dcl-s l_number int(10);
+  dcl-s l_position int(10);
 
-  l_t = Up(%trim(i_tok));
-  o_len = 0;
-  if %len(l_t) > 0 and %len(l_t) <= 2 and %check('0123456789':l_t) = 0;
-    l_n = %int(l_t);
-    if l_n < 1 or l_n > 40;
+  l_upperToken = ToUpper(%trim(i_token));
+  o_length = 0;
+  if %len(l_upperToken) > 0 and %len(l_upperToken) <= 2 and %check('0123456789':l_upperToken) = 0;
+    l_number = %int(l_upperToken);
+    if l_number < 1 or l_number > 40;
       return '';
     endif;
-    UseParm(l_n);
-    if g_parKind(l_n) = 'L';
-      o_len = %max(g_parLen(l_n):1);
+    MarkParameterUsed(l_number);
+    if g_parameterKind(l_number) = 'L';
+      o_length = %max(g_parameterLength(l_number):1);
     else;
-      o_len = 10;
+      o_length = 10;
     endif;
-    return '&P' + %trim(%char(l_n));
+    return '&P' + %trim(%char(l_number));
   endif;
-  if l_t = 'USER';
+  if l_upperToken = 'USER';
     g_useUser = *on;
-    o_len = 10;
+    o_length = 10;
     return '&USER';
   endif;
-  if l_t = 'WS';
+  if l_upperToken = 'WS';
     g_useWs = *on;
-    o_len = 10;
+    o_length = 10;
     return '&WS';
   endif;
-  if l_t = 'DATE';
+  if l_upperToken = 'DATE';
     g_useDate = *on;
-    o_len = 6;
+    o_length = 6;
     return '&DATE';
   endif;
-  if ParseLda(l_t:l_p:l_n);
-    o_len = l_n;
-    return LdaName(l_p:l_n:*on);
+  if ParseLdaExpression(l_upperToken:l_position:l_number);
+    o_length = l_number;
+    return LdaVariableName(l_position:l_number:*on);
   endif;
   return '';
 end-proc;
@@ -316,150 +316,150 @@ end-proc;
 // A name or value that may contain ?...? expressions. A single expression
 // becomes its CL variable; a mixture of text and expressions is built into
 // a temporary variable by CHGVAR (written before the statement).
-dcl-proc OperandExpr;
+dcl-proc ConvertOperand;
   dcl-pi *n varchar(60);
-    i_val varchar(200) const;
-    o_ok ind;
+    i_value varchar(200) const;
+    o_isValid ind;
   end-pi;
 
   dcl-s l_rest varchar(200);
-  dcl-s l_p1 int(10);
-  dcl-s l_p2 int(10);
-  dcl-s l_lit varchar(200);
-  dcl-s l_var varchar(20);
-  dcl-s l_len int(10);
+  dcl-s l_openMark int(10);
+  dcl-s l_closeMark int(10);
+  dcl-s l_literalText varchar(200);
+  dcl-s l_variable varchar(20);
+  dcl-s l_variableLength int(10);
   dcl-s l_expr varchar(400) inz('');
-  dcl-s l_cnt int(10) inz(0);
-  dcl-s l_tmp varchar(20);
+  dcl-s l_expressionCount int(10) inz(0);
+  dcl-s l_tempVariable varchar(20);
 
-  o_ok = *on;
-  if %scan('?':i_val) = 0;
-    return Up(i_val);
+  o_isValid = *on;
+  if %scan('?':i_value) = 0;
+    return ToUpper(i_value);
   endif;
 
-  l_rest = i_val;
+  l_rest = i_value;
   dow %len(l_rest) > 0;
-    l_p1 = %scan('?':l_rest);
-    l_var = '';
-    if l_p1 = 0;
-      l_lit = l_rest;
+    l_openMark = %scan('?':l_rest);
+    l_variable = '';
+    if l_openMark = 0;
+      l_literalText = l_rest;
       l_rest = '';
     else;
-      l_p2 = %scan('?':l_rest:l_p1 + 1);
-      if l_p2 = 0;
-        o_ok = *off;
+      l_closeMark = %scan('?':l_rest:l_openMark + 1);
+      if l_closeMark = 0;
+        o_isValid = *off;
         return '';
       endif;
-      l_var = ExprVar(SubStr(l_rest:l_p1 + 1:l_p2 - l_p1 - 1):l_len);
-      if l_var = '';
-        o_ok = *off;
+      l_variable = ExpressionVariable(SafeSubstr(l_rest:l_openMark + 1:l_closeMark - l_openMark - 1):l_variableLength);
+      if l_variable = '';
+        o_isValid = *off;
         return '';
       endif;
-      if l_p1 > 1;
-        l_lit = SubStr(l_rest:1:l_p1 - 1);
+      if l_openMark > 1;
+        l_literalText = SafeSubstr(l_rest:1:l_openMark - 1);
       else;
-        l_lit = '';
+        l_literalText = '';
       endif;
-      if l_p2 >= %len(l_rest);
+      if l_closeMark >= %len(l_rest);
         l_rest = '';
       else;
-        l_rest = SubEnd(l_rest:l_p2 + 1);
+        l_rest = SafeSubstrToEnd(l_rest:l_closeMark + 1);
       endif;
     endif;
 
-    if %len(l_lit) > 0;
-      if l_cnt > 0;
+    if %len(l_literalText) > 0;
+      if l_expressionCount > 0;
         l_expr += ' *TCAT ';
       endif;
-      l_expr += C_QUOTE + Up(l_lit) + C_QUOTE;
-      l_cnt += 1;
+      l_expr += C_QUOTE + ToUpper(l_literalText) + C_QUOTE;
+      l_expressionCount += 1;
     endif;
-    if l_var <> '';
-      if l_cnt > 0;
+    if l_variable <> '';
+      if l_expressionCount > 0;
         l_expr += ' *TCAT ';
       endif;
-      l_expr += l_var;
-      l_cnt += 1;
+      l_expr += l_variable;
+      l_expressionCount += 1;
     endif;
   enddo;
 
-  if l_cnt = 1;
-    return l_var;                  // the value is one expression
+  if l_expressionCount = 1;
+    return l_variable;                  // the value is one expression
   endif;
-  g_tmpVar += 1;
-  l_tmp = '&T' + %trim(%char(g_tmpVar));
-  AddBody('CHGVAR VAR(' + l_tmp + ') VALUE(' + l_expr + ')');
-  return l_tmp;
+  g_tempVariableCount += 1;
+  l_tempVariable = '&T' + %trim(%char(g_tempVariableCount));
+  AddBody('CHGVAR VAR(' + l_tempVariable + ') VALUE(' + l_expr + ')');
+  return l_tempVariable;
 end-proc;
 
 // ------------------------------------------------------------------
 // Replaces ?n?, ?USER?, ?WS?, ?DATE? and ?L'p,n'?. o_open is *ON when some other ?...?
 // expression is left (it cannot be converted).
-dcl-proc Subst;
+dcl-proc SubstituteExpressions;
   dcl-pi *n varchar(512);
     i_text varchar(512) const;
     o_open ind;
   end-pi;
 
-  dcl-s l_in varchar(512);
-  dcl-s l_out varchar(512) inz('');
-  dcl-s l_p1 int(10);
-  dcl-s l_p2 int(10);
-  dcl-s l_tok varchar(60);
-  dcl-s l_var varchar(20);
-  dcl-s l_len int(10);
+  dcl-s l_remaining varchar(512);
+  dcl-s l_result varchar(512) inz('');
+  dcl-s l_openMark int(10);
+  dcl-s l_closeMark int(10);
+  dcl-s l_token varchar(60);
+  dcl-s l_variable varchar(20);
+  dcl-s l_variableLength int(10);
 
   o_open = *off;
-  l_in = i_text;
+  l_remaining = i_text;
 
   dow *on;
-    l_p1 = %scan('?':l_in);
-    if l_p1 = 0;
-      l_out += l_in;
+    l_openMark = %scan('?':l_remaining);
+    if l_openMark = 0;
+      l_result += l_remaining;
       leave;
     endif;
-    l_p2 = %scan('?':l_in:l_p1 + 1);
-    if l_p2 = 0;
+    l_closeMark = %scan('?':l_remaining:l_openMark + 1);
+    if l_closeMark = 0;
       o_open = *on;
-      l_out += l_in;
+      l_result += l_remaining;
       leave;
     endif;
 
-    if l_p1 > 1;
-      l_out += SubStr(l_in:1:l_p1 - 1);
+    if l_openMark > 1;
+      l_result += SafeSubstr(l_remaining:1:l_openMark - 1);
     endif;
-    if l_p2 = l_p1 + 1;          // "??" is not an expression
+    if l_closeMark = l_openMark + 1;          // "??" is not an expression
       o_open = *on;
-      l_out += '??';
-      if l_p2 >= %len(l_in);
+      l_result += '??';
+      if l_closeMark >= %len(l_remaining);
         leave;
       endif;
-      l_in = SubEnd(l_in:l_p2 + 1);
+      l_remaining = SafeSubstrToEnd(l_remaining:l_closeMark + 1);
       iter;
     endif;
-    l_tok = Up(SubStr(l_in:l_p1 + 1:l_p2 - l_p1 - 1));
+    l_token = ToUpper(SafeSubstr(l_remaining:l_openMark + 1:l_closeMark - l_openMark - 1));
 
-    l_var = ExprVar(l_tok:l_len);
-    if l_var = '' or l_len < 0;
+    l_variable = ExpressionVariable(l_token:l_variableLength);
+    if l_variable = '' or l_variableLength < 0;
       o_open = *on;
-      l_out += SubStr(l_in:l_p1:l_p2 - l_p1 + 1);
+      l_result += SafeSubstr(l_remaining:l_openMark:l_closeMark - l_openMark + 1);
     else;
       // CL cannot put a variable inside a word or a quoted text.
-      if (%len(l_out) > 0 and %scan(SubStr(l_out:%len(l_out):1):' ,()') = 0)
-         or (l_p2 < %len(l_in)
-         and %scan(SubStr(l_in:l_p2 + 1:1):' ,()') = 0);
+      if (%len(l_result) > 0 and %scan(SafeSubstr(l_result:%len(l_result):1):' ,()') = 0)
+         or (l_closeMark < %len(l_remaining)
+         and %scan(SafeSubstr(l_remaining:l_closeMark + 1:1):' ,()') = 0);
         o_open = *on;
       endif;
-      l_out += l_var;
+      l_result += l_variable;
     endif;
 
-    if l_p2 >= %len(l_in);
+    if l_closeMark >= %len(l_remaining);
       leave;
     endif;
-    l_in = SubEnd(l_in:l_p2 + 1);
+    l_remaining = SafeSubstrToEnd(l_remaining:l_closeMark + 1);
   enddo;
 
-  return l_out;
+  return l_result;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -470,62 +470,62 @@ dcl-proc SplitItems;
     o_items varchar(200) dim(C_MAXITEMS);
   end-pi;
 
-  dcl-s l_i int(10);
-  dcl-s l_cnt int(10) inz(0);
-  dcl-s l_cur varchar(200) inz('');
+  dcl-s l_index int(10);
+  dcl-s l_itemCount int(10) inz(0);
+  dcl-s l_currentItem varchar(200) inz('');
   dcl-s l_inQuote ind inz(*off);
-  dcl-s l_ch char(1);
+  dcl-s l_char char(1);
 
-  for l_i = 1 to %len(i_text);
-    l_ch = SubStr(i_text:l_i:1);
-    if l_ch = C_QUOTE;
+  for l_index = 1 to %len(i_text);
+    l_char = SafeSubstr(i_text:l_index:1);
+    if l_char = C_QUOTE;
       l_inQuote = not l_inQuote;
     endif;
-    if l_ch = ',' and not l_inQuote;
-      if l_cnt < C_MAXITEMS;
-        l_cnt += 1;
-        o_items(l_cnt) = %trim(l_cur);
+    if l_char = ',' and not l_inQuote;
+      if l_itemCount < C_MAXITEMS;
+        l_itemCount += 1;
+        o_items(l_itemCount) = %trim(l_currentItem);
       endif;
-      l_cur = '';
+      l_currentItem = '';
     else;
-      l_cur += l_ch;
+      l_currentItem += l_char;
     endif;
   endfor;
 
-  if %len(%trim(l_cur)) > 0 and l_cnt < C_MAXITEMS;
-    l_cnt += 1;
-    o_items(l_cnt) = %trim(l_cur);
+  if %len(%trim(l_currentItem)) > 0 and l_itemCount < C_MAXITEMS;
+    l_itemCount += 1;
+    o_items(l_itemCount) = %trim(l_currentItem);
   endif;
-  return l_cnt;
+  return l_itemCount;
 end-proc;
 
 // ------------------------------------------------------------------
 // Splits KEY-value. A plain value (no key) comes back with an empty key.
-dcl-proc SplitKey;
+dcl-proc SplitKeyword;
   dcl-pi *n;
     i_item varchar(200) const;
-    o_key varchar(60);
+    o_keyword varchar(60);
     o_value varchar(200);
   end-pi;
 
-  dcl-s l_p int(10);
-  dcl-s l_key varchar(60);
+  dcl-s l_dashPos int(10);
+  dcl-s l_keyword varchar(60);
 
-  l_p = %scan('-':i_item);
-  if l_p > 1;
-    l_key = Up(%trim(SubStr(i_item:1:l_p - 1)));
-    if %scan(' ':l_key) = 0 and %scan(C_QUOTE:l_key) = 0;
-      o_key = l_key;
-      o_value = %trim(SubEnd(i_item:l_p + 1));
+  l_dashPos = %scan('-':i_item);
+  if l_dashPos > 1;
+    l_keyword = ToUpper(%trim(SafeSubstr(i_item:1:l_dashPos - 1)));
+    if %scan(' ':l_keyword) = 0 and %scan(C_QUOTE:l_keyword) = 0;
+      o_keyword = l_keyword;
+      o_value = %trim(SafeSubstrToEnd(i_item:l_dashPos + 1));
       return;
     endif;
   endif;
-  o_key = '';
+  o_keyword = '';
   o_value = %trim(i_item);
 end-proc;
 
 // ------------------------------------------------------------------
-dcl-proc IsName;
+dcl-proc IsValidName;
   dcl-pi *n ind;
     i_name varchar(60) const;
     i_maxLen int(10) const;
@@ -534,10 +534,10 @@ dcl-proc IsName;
   if %len(i_name) = 0 or %len(i_name) > i_maxLen;
     return *off;
   endif;
-  if SubStr(i_name:1:1) = '&';
+  if SafeSubstr(i_name:1:1) = '&';
     return *on;                  // a variable made by Subst
   endif;
-  return %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_#@$':Up(i_name)) = 0;
+  return %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_#@$':ToUpper(i_name)) = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -554,7 +554,7 @@ end-proc;
 
 // ------------------------------------------------------------------
 // // LOAD program[,library]   (the CALL is written when RUN arrives)
-dcl-proc DoLoad;
+dcl-proc ConvertLoad;
   dcl-pi *n;
     i_lineNo int(10) const;
     i_text varchar(512) const;
@@ -562,10 +562,10 @@ dcl-proc DoLoad;
   end-pi;
 
   dcl-s l_items varchar(200) dim(C_MAXITEMS);
-  dcl-s l_cnt int(10);
-  dcl-s l_ok ind;
+  dcl-s l_itemCount int(10);
+  dcl-s l_isValid ind;
   dcl-s l_name varchar(60);
-  dcl-s l_lib varchar(60);
+  dcl-s l_library varchar(60);
 
   if g_pendLoad;
     ReviewLine(g_loadLine:g_loadText
@@ -573,23 +573,23 @@ dcl-proc DoLoad;
     g_pendLoad = *off;
   endif;
 
-  l_cnt = SplitItems(i_operands:l_items);
-  if l_cnt < 1 or l_cnt > 2;
+  l_itemCount = SplitItems(i_operands:l_items);
+  if l_itemCount < 1 or l_itemCount > 2;
     ReviewLine(i_lineNo:i_text
                :'LOAD operands not understood (expected program[,library])');
     return;
   endif;
 
-  l_name = OperandExpr(l_items(1):l_ok);
-  l_lib = '';
-  if l_ok and l_cnt = 2;
-    l_lib = OperandExpr(l_items(2):l_ok);
+  l_name = ConvertOperand(l_items(1):l_isValid);
+  l_library = '';
+  if l_isValid and l_itemCount = 2;
+    l_library = ConvertOperand(l_items(2):l_isValid);
   endif;
-  if not l_ok;
+  if not l_isValid;
     ReviewLine(i_lineNo:i_text:'LOAD uses an expression that is not converted');
     return;
   endif;
-  if not IsName(l_name:10) or (l_lib <> '' and not IsName(l_lib:10));
+  if not IsValidName(l_name:10) or (l_library <> '' and not IsValidName(l_library:10));
     ReviewLine(i_lineNo:i_text:'Program or library name is not a valid name');
     return;
   endif;
@@ -597,13 +597,13 @@ dcl-proc DoLoad;
   g_pendLoad = *on;
   g_isSort = (l_name = '#GSORT');
   g_loadName = l_name;
-  g_loadLib = l_lib;
+  g_loadLib = l_library;
   g_loadLine = i_lineNo;
   g_loadText = i_text;
 end-proc;
 
 // ------------------------------------------------------------------
-dcl-proc DoRun;
+dcl-proc ConvertRun;
   dcl-pi *n;
     i_lineNo int(10) const;
     i_text varchar(512) const;
@@ -638,9 +638,9 @@ dcl-proc DoRun;
   AddBody(l_call);
   g_pendLoad = *off;
   // A FILE statement lasts for one step: remove its overrides after the call.
-  if %len(g_ovr) > 0;
-    AddBody('DLTOVR FILE(' + %trim(g_ovr) + ')');
-    g_ovr = '';
+  if %len(g_overriddenFiles) > 0;
+    AddBody('DLTOVR FILE(' + %trim(g_overriddenFiles) + ')');
+    g_overriddenFiles = '';
   endif;
 
   select;
@@ -654,7 +654,7 @@ end-proc;
 
 // ------------------------------------------------------------------
 // // FILE NAME-x[,LABEL-y][,LIBRARY-z][,DISP-...]  ->  OVRDBF
-dcl-proc DoFile;
+dcl-proc ConvertFile;
   dcl-pi *n;
     i_lineNo int(10) const;
     i_text varchar(512) const;
@@ -662,57 +662,57 @@ dcl-proc DoFile;
   end-pi;
 
   dcl-s l_items varchar(200) dim(C_MAXITEMS);
-  dcl-s l_cnt int(10);
-  dcl-s l_i int(10);
-  dcl-s l_ok ind;
-  dcl-s l_bad ind inz(*off);
-  dcl-s l_key varchar(60);
-  dcl-s l_val varchar(200);
+  dcl-s l_itemCount int(10);
+  dcl-s l_itemIndex int(10);
+  dcl-s l_isValid ind;
+  dcl-s l_hasProblem ind inz(*off);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
   dcl-s l_name varchar(60) inz('');
   dcl-s l_label varchar(60) inz('');
-  dcl-s l_lib varchar(60) inz('');
+  dcl-s l_library varchar(60) inz('');
   dcl-s l_disp varchar(60) inz('');
   dcl-s l_other varchar(200) inz('');
-  dcl-s l_cmd varchar(200);
-  dcl-s l_job ind inz(*off);
-  dcl-s l_idx int(10);
+  dcl-s l_command varchar(200);
+  dcl-s l_isJobOverride ind inz(*off);
+  dcl-s l_inputIndex int(10);
 
-  l_cnt = SplitItems(i_operands:l_items);
-  if l_cnt < 1;
+  l_itemCount = SplitItems(i_operands:l_items);
+  if l_itemCount < 1;
     ReviewLine(i_lineNo:i_text:'FILE operands not understood');
     return;
   endif;
 
-  for l_i = 1 to l_cnt;
-    SplitKey(l_items(l_i):l_key:l_val);
-    l_ok = *on;
+  for l_itemIndex = 1 to l_itemCount;
+    SplitKeyword(l_items(l_itemIndex):l_keyword:l_value);
+    l_isValid = *on;
     select;
-      when l_key = 'NAME';
-        l_name = OperandExpr(l_val:l_ok);
-      when l_key = 'LABEL';
-        l_label = OperandExpr(l_val:l_ok);
-      when l_key = 'LIBRARY';
-        l_lib = OperandExpr(l_val:l_ok);
-      when l_key = 'DISP';
-        l_disp = Up(l_val);
+      when l_keyword = 'NAME';
+        l_name = ConvertOperand(l_value:l_isValid);
+      when l_keyword = 'LABEL';
+        l_label = ConvertOperand(l_value:l_isValid);
+      when l_keyword = 'LIBRARY';
+        l_library = ConvertOperand(l_value:l_isValid);
+      when l_keyword = 'DISP';
+        l_disp = ToUpper(l_value);
       other;
-        if l_key = 'JOB' and Up(l_val) = 'YES';
-          l_job = *on;               // override for the whole job: not converted
+        if l_keyword = 'JOB' and ToUpper(l_value) = 'YES';
+          l_isJobOverride = *on;               // override for the whole job: not converted
         endif;
         if %len(l_other) > 0;
           l_other += ' ';
         endif;
-        if l_key = '';
-          l_other += l_val;
+        if l_keyword = '';
+          l_other += l_value;
         else;
-          l_other += l_key;
+          l_other += l_keyword;
         endif;
     endsl;
-    if not l_ok;
-      l_bad = *on;
+    if not l_isValid;
+      l_hasProblem = *on;
     endif;
   endfor;
-  if l_bad;
+  if l_hasProblem;
     ReviewLine(i_lineNo:i_text
                :'NAME, LABEL or LIBRARY uses an expression that is not converted');
     return;
@@ -721,8 +721,8 @@ dcl-proc DoFile;
   if l_label = '';
     l_label = l_name;
   endif;
-  if not IsName(l_name:10) or not IsName(l_label:10)
-     or (l_lib <> '' and not IsName(l_lib:10));
+  if not IsValidName(l_name:10) or not IsValidName(l_label:10)
+     or (l_library <> '' and not IsValidName(l_library:10));
     ReviewLine(i_lineNo:i_text:'NAME, LABEL or LIBRARY is missing or not a valid name');
     return;
   endif;
@@ -734,19 +734,19 @@ dcl-proc DoFile;
     return;
   endif;
   if g_isSort and g_pendLoad and (l_name = 'OUTPUT'
-     or l_name = 'INPUT' or (%len(l_name) = 6 and SubStr(l_name:1:5) = 'INPUT'
-     and %check('12345678':SubStr(l_name:6:1)) = 0));
+     or l_name = 'INPUT' or (%len(l_name) = 6 and SafeSubstr(l_name:1:5) = 'INPUT'
+     and %check('12345678':SafeSubstr(l_name:6:1)) = 0));
     if l_name <> 'OUTPUT';
       if l_name = 'INPUT';
-        l_idx = 1;
+        l_inputIndex = 1;
       else;
-        l_idx = %int(SubStr(l_name:6:1));
+        l_inputIndex = %int(SafeSubstr(l_name:6:1));
       endif;
-      g_sortIn(l_idx) = l_label;
-      g_sortInLib(l_idx) = l_lib;
+      g_sortIn(l_inputIndex) = l_label;
+      g_sortInLib(l_inputIndex) = l_library;
     else;
       g_sortOut = l_label;
-      g_sortOutLib = l_lib;
+      g_sortOutLib = l_library;
       g_sortExtra = l_other;
     endif;
     RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
@@ -758,17 +758,17 @@ dcl-proc DoFile;
     return;
   endif;
 
-  l_cmd = 'OVRDBF FILE(' + l_name + ') TOFILE(';
-  if l_lib <> '';
-    l_cmd += l_lib + '/';
+  l_command = 'OVRDBF FILE(' + l_name + ') TOFILE(';
+  if l_library <> '';
+    l_command += l_library + '/';
   endif;
-  l_cmd += l_label + ')';
-  AddBody(l_cmd);
-  if not l_job and %scan(' ' + l_name + ' ':' ' + g_ovr + ' ') = 0;
-    if %len(g_ovr) > 0;
-      g_ovr += ' ';
+  l_command += l_label + ')';
+  AddBody(l_command);
+  if not l_isJobOverride and %scan(' ' + l_name + ' ':' ' + g_overriddenFiles + ' ') = 0;
+    if %len(g_overriddenFiles) > 0;
+      g_overriddenFiles += ' ';
     endif;
-    g_ovr += l_name;
+    g_overriddenFiles += l_name;
   endif;
 
   select;
@@ -788,7 +788,7 @@ end-proc;
 // // LOCAL OFFSET-n,DATA-'text'[,AREA-USER]  ->  CHGDTAARA on *LDA
 // IBM's guide shows OFFSET as a 1-based position (for example OFFSET-1).
 // The local data area is the S/36 local data area, so *LDA is assumed.
-dcl-proc DoLocal;
+dcl-proc ConvertLocal;
   dcl-pi *n;
     i_lineNo int(10) const;
     i_text varchar(512) const;
@@ -796,81 +796,81 @@ dcl-proc DoLocal;
   end-pi;
 
   dcl-s l_items varchar(200) dim(C_MAXITEMS);
-  dcl-s l_cnt int(10);
-  dcl-s l_i int(10);
-  dcl-s l_key varchar(60);
-  dcl-s l_val varchar(200);
+  dcl-s l_itemCount int(10);
+  dcl-s l_itemIndex int(10);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
   dcl-s l_offset varchar(60) inz('');
   dcl-s l_data varchar(200) inz('');
   dcl-s l_hasData ind inz(*off);
   dcl-s l_other ind inz(*off);
   dcl-s l_open ind;
-  dcl-s l_chk varchar(512);
-  dcl-s l_len int(10);
-  dcl-s l_pos int(10);
-  dcl-s l_var varchar(20);
+  dcl-s l_checkedText varchar(512);
+  dcl-s l_dataLength int(10);
+  dcl-s l_offsetNumber int(10);
+  dcl-s l_variable varchar(20);
 
-  l_cnt = SplitItems(i_operands:l_items);
-  for l_i = 1 to l_cnt;
-    SplitKey(l_items(l_i):l_key:l_val);
+  l_itemCount = SplitItems(i_operands:l_items);
+  for l_itemIndex = 1 to l_itemCount;
+    SplitKeyword(l_items(l_itemIndex):l_keyword:l_value);
     select;
-      when l_key = 'OFFSET';
-        l_offset = l_val;
-      when l_key = 'DATA';
-        l_data = l_val;
+      when l_keyword = 'OFFSET';
+        l_offset = l_value;
+      when l_keyword = 'DATA';
+        l_data = l_value;
         l_hasData = *on;
-      when l_key = 'AREA' and Up(l_val) = 'USER';
+      when l_keyword = 'AREA' and ToUpper(l_value) = 'USER';
         // accepted, no effect on the output
       other;
         l_other = *on;
     endsl;
   endfor;
 
-  if l_cnt < 1 or l_other or not l_hasData
+  if l_itemCount < 1 or l_other or not l_hasData
      or %len(l_offset) = 0 or %len(l_offset) > 5
      or %check('0123456789':l_offset) > 0;
     ReviewLine(i_lineNo:i_text
                :'LOCAL needs OFFSET-n and DATA-value (AREA-USER allowed) only');
     return;
   endif;
-  l_pos = %int(l_offset);
-  if l_pos < 1;
+  l_offsetNumber = %int(l_offset);
+  if l_offsetNumber < 1;
     ReviewLine(i_lineNo:i_text:'OFFSET 0 is not a valid 1-based position');
     return;
   endif;
 
   // Strip the quotes round the data.
-  if %len(l_data) >= 2 and SubStr(l_data:1:1) = C_QUOTE
-     and SubStr(l_data:%len(l_data):1) = C_QUOTE;
-    l_data = SubStr(l_data:2:%len(l_data) - 2);
+  if %len(l_data) >= 2 and SafeSubstr(l_data:1:1) = C_QUOTE
+     and SafeSubstr(l_data:%len(l_data):1) = C_QUOTE;
+    l_data = SafeSubstr(l_data:2:%len(l_data) - 2);
   endif;
 
   // DATA that is one expression (?DATE?, ?USER?, ?L'p,n'?) uses its variable.
-  if %len(l_data) >= 3 and SubStr(l_data:1:1) = '?'
-     and SubStr(l_data:%len(l_data):1) = '?'
+  if %len(l_data) >= 3 and SafeSubstr(l_data:1:1) = '?'
+     and SafeSubstr(l_data:%len(l_data):1) = '?'
      and %scan('?':l_data:2) = %len(l_data);
-    l_var = ExprVar(SubStr(l_data:2:%len(l_data) - 2):l_len);
-    if l_var <> '' and SubStr(l_var:1:2) <> '&P';
-      AddBody('CHGDTAARA DTAARA(*LDA (' + %trim(%char(l_pos)) + ' '
-              + %trim(%char(l_len)) + ')) VALUE(' + l_var + ')');
+    l_variable = ExpressionVariable(SafeSubstr(l_data:2:%len(l_data) - 2):l_dataLength);
+    if l_variable <> '' and SafeSubstr(l_variable:1:2) <> '&P';
+      AddBody('CHGDTAARA DTAARA(*LDA (' + %trim(%char(l_offsetNumber)) + ' '
+              + %trim(%char(l_dataLength)) + ')) VALUE(' + l_variable + ')');
       RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
               :'OFFSET taken as a 1-based position in the local data area (*LDA)'
-              + '; value comes from ' + SubStr(l_data:1:%len(l_data)));
+              + '; value comes from ' + SafeSubstr(l_data:1:%len(l_data)));
       return;
     endif;
   endif;
 
   // Other substitution inside the data cannot be expressed by CHGDTAARA VALUE.
-  l_chk = Subst(l_data:l_open);
-  if l_open or l_chk <> l_data or %len(l_data) = 0;
+  l_checkedText = SubstituteExpressions(l_data:l_open);
+  if l_open or l_checkedText <> l_data or %len(l_data) = 0;
     ReviewLine(i_lineNo:i_text
                :'DATA is empty or uses a substitution expression');
     return;
   endif;
 
-  l_len = %len(%scanrpl('''''':' ':l_data));
-  AddBody('CHGDTAARA DTAARA(*LDA (' + %trim(%char(l_pos)) + ' '
-          + %trim(%char(l_len)) + ')) VALUE(' + C_QUOTE + l_data
+  l_dataLength = %len(%scanrpl('''''':' ':l_data));
+  AddBody('CHGDTAARA DTAARA(*LDA (' + %trim(%char(l_offsetNumber)) + ' '
+          + %trim(%char(l_dataLength)) + ')) VALUE(' + C_QUOTE + l_data
           + C_QUOTE + ')');
   RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
           :'OFFSET taken as a 1-based position in the local data area (*LDA)');
@@ -882,124 +882,124 @@ end-proc;
 // ?n? read) is a local variable; one read first is a passed parameter.
 // Converted: a text or number constant, ?USER?, ?WS?, ?DATE?, ?L'p,n'?,
 // ?n?. Arithmetic and other expressions are reported for review.
-dcl-proc DoEvaluate;
+dcl-proc ConvertEvaluate;
   dcl-pi *n;
     i_lineNo int(10) const;
     i_text varchar(512) const;
     i_operands varchar(512) const;
   end-pi;
 
-  dcl-s l_i int(10);
-  dcl-s l_ch char(1);
-  dcl-s l_inQ ind inz(*off);
+  dcl-s l_charIndex int(10);
+  dcl-s l_char char(1);
+  dcl-s l_inQuote ind inz(*off);
   dcl-s l_item varchar(300) inz('');
   dcl-s l_items varchar(300) dim(C_MAXITEMS);
-  dcl-s l_cnt int(10) inz(0);
-  dcl-s l_k int(10);
-  dcl-s l_eq int(10);
-  dcl-s l_lhs varchar(60);
+  dcl-s l_itemCount int(10) inz(0);
+  dcl-s l_itemIndex int(10);
+  dcl-s l_equalPos int(10);
+  dcl-s l_target varchar(60);
   dcl-s l_expr varchar(300);
-  dcl-s l_cm int(10);
+  dcl-s l_commaPos int(10);
   dcl-s l_nStr varchar(10);
   dcl-s l_lenStr varchar(10);
-  dcl-s l_n int(10);
-  dcl-s l_len int(10);
-  dcl-s l_val varchar(300);
-  dcl-s l_var varchar(20);
+  dcl-s l_parameterNo int(10);
+  dcl-s l_length int(10);
+  dcl-s l_value varchar(300);
+  dcl-s l_variable varchar(20);
   dcl-s l_vlen int(10);
   dcl-s l_numeric ind;
-  dcl-s l_cmt varchar(300) inz('');
-  dcl-s l_bad ind inz(*off);
+  dcl-s l_comment varchar(300) inz('');
+  dcl-s l_hasProblem ind inz(*off);
   dcl-s l_note ind inz(*off);
 
   // Split at blanks outside apostrophes and outside ?...? expressions.
-  dcl-s l_inE ind inz(*off);
-  for l_i = 1 to %len(i_operands);
-    l_ch = SubStr(i_operands:l_i:1);
-    if l_ch = C_QUOTE;
-      l_inQ = not l_inQ;
-    elseif l_ch = '?' and not l_inQ;
-      l_inE = not l_inE;
+  dcl-s l_inExpression ind inz(*off);
+  for l_charIndex = 1 to %len(i_operands);
+    l_char = SafeSubstr(i_operands:l_charIndex:1);
+    if l_char = C_QUOTE;
+      l_inQuote = not l_inQuote;
+    elseif l_char = '?' and not l_inQuote;
+      l_inExpression = not l_inExpression;
     endif;
-    if l_ch = ' ' and not l_inQ and not l_inE;
-      if %len(l_item) > 0 and l_cnt < C_MAXITEMS;
-        l_cnt += 1;
-        l_items(l_cnt) = l_item;
+    if l_char = ' ' and not l_inQuote and not l_inExpression;
+      if %len(l_item) > 0 and l_itemCount < C_MAXITEMS;
+        l_itemCount += 1;
+        l_items(l_itemCount) = l_item;
       endif;
       l_item = '';
     else;
-      l_item += l_ch;
+      l_item += l_char;
     endif;
   endfor;
-  if %len(l_item) > 0 and l_cnt < C_MAXITEMS;
-    l_cnt += 1;
-    l_items(l_cnt) = l_item;
+  if %len(l_item) > 0 and l_itemCount < C_MAXITEMS;
+    l_itemCount += 1;
+    l_items(l_itemCount) = l_item;
   endif;
 
-  for l_k = 1 to l_cnt;
-    l_eq = %scan('=':l_items(l_k));
-    if SubStr(Up(l_items(l_k)):1:1) <> 'P' or l_eq < 3;
+  for l_itemIndex = 1 to l_itemCount;
+    l_equalPos = %scan('=':l_items(l_itemIndex));
+    if SafeSubstr(ToUpper(l_items(l_itemIndex)):1:1) <> 'P' or l_equalPos < 3;
       // Not an assignment: anything not recognised is a comment.
-      if %len(l_cmt) > 0;
-        l_cmt += ' ';
+      if %len(l_comment) > 0;
+        l_comment += ' ';
       endif;
-      l_cmt += l_items(l_k);
+      l_comment += l_items(l_itemIndex);
       iter;
     endif;
 
-    l_lhs = SubStr(l_items(l_k):2:l_eq - 2);
-    l_expr = SubEnd(l_items(l_k):l_eq + 1);
-    l_cm = %scan(',':l_lhs);
-    if l_cm = 0;
-      l_nStr = l_lhs;
+    l_target = SafeSubstr(l_items(l_itemIndex):2:l_equalPos - 2);
+    l_expr = SafeSubstrToEnd(l_items(l_itemIndex):l_equalPos + 1);
+    l_commaPos = %scan(',':l_target);
+    if l_commaPos = 0;
+      l_nStr = l_target;
       l_lenStr = '';
     else;
-      l_nStr = SubStr(l_lhs:1:l_cm - 1);
-      l_lenStr = SubEnd(l_lhs:l_cm + 1);
+      l_nStr = SafeSubstr(l_target:1:l_commaPos - 1);
+      l_lenStr = SafeSubstrToEnd(l_target:l_commaPos + 1);
     endif;
     if %len(l_nStr) = 0 or %len(l_nStr) > 2
        or %check('0123456789':l_nStr) > 0
        or (%len(l_lenStr) > 0 and (%len(l_lenStr) > 2
        or %check('0123456789':l_lenStr) > 0));
       ReviewLine(i_lineNo:i_text
-                 :'EVALUATE item ' + l_items(l_k)
+                 :'EVALUATE item ' + l_items(l_itemIndex)
                  + ' is not converted (parameter number or length is an expression)');
-      l_bad = *on;
+      l_hasProblem = *on;
       iter;
     endif;
-    l_n = %int(l_nStr);
-    l_len = 0;
+    l_parameterNo = %int(l_nStr);
+    l_length = 0;
     if %len(l_lenStr) > 0;
-      l_len = %int(l_lenStr);
+      l_length = %int(l_lenStr);
     endif;
-    if l_n < 1 or l_n > 40;
+    if l_parameterNo < 1 or l_parameterNo > 40;
       ReviewLine(i_lineNo:i_text
                  :'EVALUATE parameter P' + l_nStr + ' is outside 1 to 40');
-      l_bad = *on;
+      l_hasProblem = *on;
       iter;
     endif;
 
     // The value
-    l_var = '';
-    l_val = '';
+    l_variable = '';
+    l_value = '';
     l_numeric = *off;
     l_vlen = 0;
     select;
       when l_expr = '''''';
-        l_val = ' ';
+        l_value = ' ';
         l_vlen = 1;
-      when %len(l_expr) >= 2 and SubStr(l_expr:1:1) = C_QUOTE
-           and SubStr(l_expr:%len(l_expr):1) = C_QUOTE;
-        l_val = SubStr(l_expr:2:%len(l_expr) - 2);
-        l_vlen = %len(%scanrpl('''''':' ':l_val));
-      when SubStr(l_expr:1:1) = '?';
+      when %len(l_expr) >= 2 and SafeSubstr(l_expr:1:1) = C_QUOTE
+           and SafeSubstr(l_expr:%len(l_expr):1) = C_QUOTE;
+        l_value = SafeSubstr(l_expr:2:%len(l_expr) - 2);
+        l_vlen = %len(%scanrpl('''''':' ':l_value));
+      when SafeSubstr(l_expr:1:1) = '?';
         if %len(l_expr) >= 3 and %scan('?':l_expr:2) = %len(l_expr);
-          l_var = ExprVar(SubStr(l_expr:2:%len(l_expr) - 2):l_vlen);
+          l_variable = ExpressionVariable(SafeSubstr(l_expr:2:%len(l_expr) - 2):l_vlen);
         endif;
-        if l_var = '';
+        if l_variable = '';
           ReviewLine(i_lineNo:i_text
                      :'EVALUATE value ' + l_expr + ' is not converted');
-          l_bad = *on;
+          l_hasProblem = *on;
           iter;
         endif;
       when %scan('?':l_expr) > 0 or %scan('+':l_expr) > 0
@@ -1009,48 +1009,48 @@ dcl-proc DoEvaluate;
         ReviewLine(i_lineNo:i_text
                    :'EVALUATE value ' + l_expr
                    + ' (arithmetic or mixed expression) is not converted');
-        l_bad = *on;
+        l_hasProblem = *on;
         iter;
       other;
-        l_val = l_expr;
+        l_value = l_expr;
         l_numeric = %check('0123456789':l_expr) = 0;
         if l_numeric;
           // digits only: leading zeros dropped, or padded/cut to the length
-          dow %len(l_val) > 1 and SubStr(l_val:1:1) = '0';
-            l_val = SubEnd(l_val:2);
+          dow %len(l_value) > 1 and SafeSubstr(l_value:1:1) = '0';
+            l_value = SafeSubstrToEnd(l_value:2);
           enddo;
-          if l_len > 0;
-            if %len(l_val) > l_len;
-              l_val = SubEnd(l_val:%len(l_val) - l_len + 1);
+          if l_length > 0;
+            if %len(l_value) > l_length;
+              l_value = SafeSubstrToEnd(l_value:%len(l_value) - l_length + 1);
             else;
-              l_val = SubStr('000000000000000':1:l_len - %len(l_val)) + l_val;
+              l_value = SafeSubstr('000000000000000':1:l_length - %len(l_value)) + l_value;
             endif;
           endif;
         endif;
-        l_vlen = %len(l_val);
+        l_vlen = %len(l_value);
     endsl;
 
-    if g_parKind(l_n) = ' ';
-      g_parKind(l_n) = 'L';
+    if g_parameterKind(l_parameterNo) = ' ';
+      g_parameterKind(l_parameterNo) = 'L';
     endif;
-    if g_parKind(l_n) = 'L';
-      g_parLen(l_n) = %max(g_parLen(l_n):%max(l_vlen:1));
+    if g_parameterKind(l_parameterNo) = 'L';
+      g_parameterLength(l_parameterNo) = %max(g_parameterLength(l_parameterNo):%max(l_vlen:1));
     else;
       l_note = *on;
     endif;
 
-    if l_var <> '';
-      AddBody('CHGVAR VAR(&P' + %trim(%char(l_n)) + ') VALUE(' + l_var + ')');
+    if l_variable <> '';
+      AddBody('CHGVAR VAR(&P' + %trim(%char(l_parameterNo)) + ') VALUE(' + l_variable + ')');
     else;
-      AddBody('CHGVAR VAR(&P' + %trim(%char(l_n)) + ') VALUE(' + C_QUOTE
-              + l_val + C_QUOTE + ')');
+      AddBody('CHGVAR VAR(&P' + %trim(%char(l_parameterNo)) + ') VALUE(' + C_QUOTE
+              + l_value + C_QUOTE + ')');
     endif;
   endfor;
 
-  if %len(l_cmt) > 0;
-    AddComment(l_cmt);
+  if %len(l_comment) > 0;
+    AddComment(l_comment);
   endif;
-  if not l_bad;
+  if not l_hasProblem;
     if l_note;
       RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
               :'Assigned parameter is also passed by the caller (CHAR(10))');
@@ -1062,7 +1062,7 @@ end-proc;
 
 // ------------------------------------------------------------------
 // // TAG name  and  // GOTO name
-dcl-proc DoTagGoto;
+dcl-proc ConvertTagGoto;
   dcl-pi *n;
     i_lineNo int(10) const;
     i_text varchar(512) const;
@@ -1072,16 +1072,16 @@ dcl-proc DoTagGoto;
 
   dcl-s l_label varchar(60);
   dcl-s l_extra varchar(512) inz('');
-  dcl-s l_p int(10);
+  dcl-s l_blankPos int(10);
 
-  l_label = Up(%trim(i_operands));
-  l_p = %scan(' ':l_label);
-  if l_p > 0;                      // text after the label is a comment
-    l_extra = %trim(SubEnd(%trim(i_operands):l_p + 1));
-    l_label = SubStr(l_label:1:l_p - 1);
+  l_label = ToUpper(%trim(i_operands));
+  l_blankPos = %scan(' ':l_label);
+  if l_blankPos > 0;                      // text after the label is a comment
+    l_extra = %trim(SafeSubstrToEnd(%trim(i_operands):l_blankPos + 1));
+    l_label = SafeSubstr(l_label:1:l_blankPos - 1);
   endif;
-  if not IsName(l_label:10) or %scan(' ':l_label) > 0
-     or SubStr(l_label:1:1) = '&';
+  if not IsValidName(l_label:10) or %scan(' ':l_label) > 0
+     or SafeSubstr(l_label:1:1) = '&';
     ReviewLine(i_lineNo:i_text:'Label is not a valid CL label (10 characters)');
     return;
   endif;
@@ -1109,85 +1109,85 @@ dcl-proc QuoteSpec;
 end-proc;
 
 // ------------------------------------------------------------------
-dcl-proc AddTmp;
+dcl-proc AddTempLine;
   dcl-pi *n;
     i_text varchar(512) const;
   end-pi;
 
-  if g_tmpCnt >= C_MAXTMP;
+  if g_tempLineCount >= C_MAXTMP;
     g_overflow = *on;
     return;
   endif;
-  g_tmpCnt += 1;
-  g_tmp(g_tmpCnt) = i_text;
+  g_tempLineCount += 1;
+  g_tempLines(g_tempLineCount) = i_text;
 end-proc;
 
 // ------------------------------------------------------------------
 // Maps the inside of a ?...? expression to a CL variable name.
 // ?1? to ?9? -> &P1..&P9, ?L'p,n'? -> &Lp_n (local data area text).
 // Returns '' when the expression is not supported.
-dcl-proc SortVar;
+dcl-proc SortSpecVariable;
   dcl-pi *n varchar(20);
-    i_tok varchar(60) const;
+    i_token varchar(60) const;
   end-pi;
 
-  dcl-s l_t varchar(60);
-  dcl-s l_cp int(10);
-  dcl-s l_ps varchar(60);
-  dcl-s l_ns varchar(60);
-  dcl-s l_p int(10);
-  dcl-s l_n int(10);
-  dcl-s l_i int(10);
+  dcl-s l_upperToken varchar(60);
+  dcl-s l_commaPos int(10);
+  dcl-s l_positionText varchar(60);
+  dcl-s l_lengthText varchar(60);
+  dcl-s l_position int(10);
+  dcl-s l_length int(10);
+  dcl-s l_index int(10);
   dcl-s l_found ind;
 
-  l_t = Up(%trim(i_tok));
-  if %len(l_t) = 1 and %check('123456789':l_t) = 0;
-    UseParm(%int(l_t));
-    return '&P' + l_t;
+  l_upperToken = ToUpper(%trim(i_token));
+  if %len(l_upperToken) = 1 and %check('123456789':l_upperToken) = 0;
+    MarkParameterUsed(%int(l_upperToken));
+    return '&P' + l_upperToken;
   endif;
 
-  if %len(l_t) >= 6 and SubStr(l_t:1:2) = 'L''' 
-     and SubStr(l_t:%len(l_t):1) = '''';
-    l_cp = %scan(',':l_t);
-    if l_cp < 4;
+  if %len(l_upperToken) >= 6 and SafeSubstr(l_upperToken:1:2) = 'L''' 
+     and SafeSubstr(l_upperToken:%len(l_upperToken):1) = '''';
+    l_commaPos = %scan(',':l_upperToken);
+    if l_commaPos < 4;
       return '';
     endif;
-    l_ps = SubStr(l_t:3:l_cp - 3);
-    l_ns = SubStr(l_t:l_cp + 1:%len(l_t) - l_cp - 1);
-    if %len(l_ps) = 0 or %len(l_ps) > 4 or %len(l_ns) = 0
-       or %len(l_ns) > 3 or %check('0123456789':l_ps) > 0
-       or %check('0123456789':l_ns) > 0;
+    l_positionText = SafeSubstr(l_upperToken:3:l_commaPos - 3);
+    l_lengthText = SafeSubstr(l_upperToken:l_commaPos + 1:%len(l_upperToken) - l_commaPos - 1);
+    if %len(l_positionText) = 0 or %len(l_positionText) > 4 or %len(l_lengthText) = 0
+       or %len(l_lengthText) > 3 or %check('0123456789':l_positionText) > 0
+       or %check('0123456789':l_lengthText) > 0;
       return '';
     endif;
-    l_p = %int(l_ps);
-    l_n = %int(l_ns);
-    if l_p < 1 or l_n < 1 or l_p + l_n > 1025;
+    l_position = %int(l_positionText);
+    l_length = %int(l_lengthText);
+    if l_position < 1 or l_length < 1 or l_position + l_length > 1025;
       return '';
     endif;
 
     l_found = *off;
-    for l_i = 1 to g_blkCnt;
-      if g_blkP(l_i) = l_p and g_blkN(l_i) = l_n;
+    for l_index = 1 to g_blkCnt;
+      if g_blockPosition(l_index) = l_position and g_blockLength(l_index) = l_length;
         l_found = *on;
       endif;
     endfor;
     if not l_found and g_blkCnt < C_MAXLDA;
       g_blkCnt += 1;
-      g_blkP(g_blkCnt) = l_p;
-      g_blkN(g_blkCnt) = l_n;
+      g_blockPosition(g_blkCnt) = l_position;
+      g_blockLength(g_blkCnt) = l_length;
     endif;
     l_found = *off;
-    for l_i = 1 to g_ldaCnt;
-      if g_ldaP(l_i) = l_p and g_ldaN(l_i) = l_n;
+    for l_index = 1 to g_ldaCnt;
+      if g_ldaPosition(l_index) = l_position and g_ldaLength(l_index) = l_length;
         l_found = *on;
       endif;
     endfor;
     if not l_found and g_ldaCnt < C_MAXLDA;
       g_ldaCnt += 1;
-      g_ldaP(g_ldaCnt) = l_p;
-      g_ldaN(g_ldaCnt) = l_n;
+      g_ldaPosition(g_ldaCnt) = l_position;
+      g_ldaLength(g_ldaCnt) = l_length;
     endif;
-    return '&L' + %trim(%char(l_p)) + '_' + %trim(%char(l_n));
+    return '&L' + %trim(%char(l_position)) + '_' + %trim(%char(l_length));
   endif;
   return '';
 end-proc;
@@ -1197,69 +1197,69 @@ end-proc;
 // QTEMP source member. ?...? expressions inside the line are replaced by
 // the value of a CL variable. Returns *OFF when an expression is not
 // supported (o_why says which).
-dcl-proc SortInsert;
+dcl-proc BuildSortInsert;
   dcl-pi *n ind;
     i_member varchar(10) const;
-    i_seq int(10) const;
+    i_sequence int(10) const;
     i_spec varchar(512) const;
-    o_why varchar(100);
+    o_reason varchar(100);
   end-pi;
 
   dcl-s l_stmt varchar(512);
   dcl-s l_rest varchar(512);
-  dcl-s l_p1 int(10);
-  dcl-s l_p2 int(10);
-  dcl-s l_lit varchar(512);
-  dcl-s l_var varchar(20);
-  dcl-s l_pos int(10);
-  dcl-s l_len int(10);
+  dcl-s l_openMark int(10);
+  dcl-s l_closeMark int(10);
+  dcl-s l_literalText varchar(512);
+  dcl-s l_variable varchar(20);
+  dcl-s l_piecePos int(10);
+  dcl-s l_literalLength int(10);
   dcl-s l_piece varchar(512);
 
   l_stmt = 'CHGVAR VAR(&SQL) VALUE(' + C_QUOTE + 'INSERT INTO QTEMP/'
-           + i_member + ' VALUES(' + %trim(%char(i_seq)) + ',0,'
+           + i_member + ' VALUES(' + %trim(%char(i_sequence)) + ',0,'
            + C_QUOTE + C_QUOTE + C_QUOTE;
   l_rest = i_spec;
   dow %len(l_rest) > 0;
-    l_p1 = %scan('?':l_rest);
-    if l_p1 = 0;
-      l_lit = l_rest;
+    l_openMark = %scan('?':l_rest);
+    if l_openMark = 0;
+      l_literalText = l_rest;
       l_rest = '';
     else;
-      l_p2 = %scan('?':l_rest:l_p1 + 1);
-      if l_p2 = 0;
-        o_why = 'Unmatched ? in a specification line';
+      l_closeMark = %scan('?':l_rest:l_openMark + 1);
+      if l_closeMark = 0;
+        o_reason = 'Unmatched ? in a specification line';
         return *off;
       endif;
-      l_var = SortVar(SubStr(l_rest:l_p1 + 1:l_p2 - l_p1 - 1));
-      if l_var = '';
-        o_why = 'Substitution expression ' + SubStr(l_rest:l_p1:l_p2 - l_p1 + 1)
+      l_variable = SortSpecVariable(SafeSubstr(l_rest:l_openMark + 1:l_closeMark - l_openMark - 1));
+      if l_variable = '';
+        o_reason = 'Substitution expression ' + SafeSubstr(l_rest:l_openMark:l_closeMark - l_openMark + 1)
                 + ' is not supported in sort specifications';
         return *off;
       endif;
-      if l_p1 > 1;
-        l_lit = SubStr(l_rest:1:l_p1 - 1);
+      if l_openMark > 1;
+        l_literalText = SafeSubstr(l_rest:1:l_openMark - 1);
       else;
-        l_lit = '';
+        l_literalText = '';
       endif;
-      l_rest = SubEnd(l_rest:l_p2 + 1);
+      l_rest = SafeSubstrToEnd(l_rest:l_closeMark + 1);
     endif;
 
     // The literal part is cut into short pieces joined by *CAT so the CL
     // line can wrap between them.
-    l_pos = 1;
-    l_len = %len(l_lit);
-    dow l_pos <= l_len;
-      l_piece = SubStr(l_lit:l_pos:%min(30:l_len - l_pos + 1));
+    l_piecePos = 1;
+    l_literalLength = %len(l_literalText);
+    dow l_piecePos <= l_literalLength;
+      l_piece = SafeSubstr(l_literalText:l_piecePos:%min(30:l_literalLength - l_piecePos + 1));
       l_stmt += ' *CAT ' + C_QUOTE + QuoteSpec(l_piece) + C_QUOTE;
-      l_pos += 30;
+      l_piecePos += 30;
     enddo;
-    if l_p1 > 0;
-      l_stmt += ' *CAT ' + l_var;
+    if l_openMark > 0;
+      l_stmt += ' *CAT ' + l_variable;
     endif;
   enddo;
   l_stmt += ' *CAT ' + C_QUOTE + C_QUOTE + C_QUOTE + ')' + C_QUOTE + ')';
-  AddTmp(l_stmt);
-  AddTmp('RUNSQL SQL(&SQL) COMMIT(*NONE) NAMING(*SYS)');
+  AddTempLine(l_stmt);
+  AddTempLine('RUNSQL SQL(&SQL) COMMIT(*NONE) NAMING(*SYS)');
   return *on;
 end-proc;
 
@@ -1268,132 +1268,132 @@ end-proc;
 // o_kind: 'I' (IF, IFT), 'F' (IFF) or 'E' (ELSE). For IF/IFF the condition
 // must be  ?expr?/value  or  ?expr?=value. o_spec is the text after the
 // condition (one blank separates them), empty when there is none.
-dcl-proc SortCond;
+dcl-proc ParseSortCondition;
   dcl-pi *n ind;
     i_line varchar(512) const;
     o_kind char(1);
-    o_var varchar(20);
-    o_lit varchar(128);
+    o_variable varchar(20);
+    o_literal varchar(128);
     o_spec varchar(512);
-    o_why varchar(100);
+    o_reason varchar(100);
   end-pi;
 
-  dcl-s l_t varchar(512);
-  dcl-s l_p int(10);
-  dcl-s l_q int(10);
-  dcl-s l_kw varchar(10);
+  dcl-s l_lineText varchar(512);
+  dcl-s l_textStart int(10);
+  dcl-s l_keywordEnd int(10);
+  dcl-s l_keyword varchar(10);
   dcl-s l_cond varchar(512);
   dcl-s l_left varchar(512);
   dcl-s l_right varchar(512);
-  dcl-s l_i int(10);
-  dcl-s l_inQ ind;
-  dcl-s l_inE ind;
-  dcl-s l_ch char(1);
+  dcl-s l_charIndex int(10);
+  dcl-s l_inQuote ind;
+  dcl-s l_inExpression ind;
+  dcl-s l_char char(1);
   dcl-s l_split int(10);
-  dcl-s l_w varchar(10);
+  dcl-s l_firstWords varchar(10);
 
-  o_var = '';
-  o_lit = '';
+  o_variable = '';
+  o_literal = '';
   o_spec = '';
-  l_t = %trimr(i_line);
-  l_p = 3;
-  dow l_p <= %len(l_t) and SubStr(l_t:l_p:1) = ' ';
-    l_p += 1;
+  l_lineText = %trimr(i_line);
+  l_textStart = 3;
+  dow l_textStart <= %len(l_lineText) and SafeSubstr(l_lineText:l_textStart:1) = ' ';
+    l_textStart += 1;
   enddo;
-  l_q = %scan(' ':l_t:l_p);
-  if l_q = 0;
-    l_kw = Up(SubEnd(l_t:l_p));
-    l_q = %len(l_t) + 1;
+  l_keywordEnd = %scan(' ':l_lineText:l_textStart);
+  if l_keywordEnd = 0;
+    l_keyword = ToUpper(SafeSubstrToEnd(l_lineText:l_textStart));
+    l_keywordEnd = %len(l_lineText) + 1;
   else;
-    l_kw = Up(SubStr(l_t:l_p:l_q - l_p));
+    l_keyword = ToUpper(SafeSubstr(l_lineText:l_textStart:l_keywordEnd - l_textStart));
   endif;
 
-  if l_kw = 'ELSE';
+  if l_keyword = 'ELSE';
     o_kind = 'E';
-    if l_q < %len(l_t);
-      o_spec = SubEnd(l_t:l_q + 1);
+    if l_keywordEnd < %len(l_lineText);
+      o_spec = SafeSubstrToEnd(l_lineText:l_keywordEnd + 1);
     endif;
   else;
-    if l_kw = 'IF' or l_kw = 'IFT';
+    if l_keyword = 'IF' or l_keyword = 'IFT';
       o_kind = 'I';
     else;
       o_kind = 'F';
     endif;
-    l_p = l_q;
-    dow l_p <= %len(l_t) and SubStr(l_t:l_p:1) = ' ';
-      l_p += 1;
+    l_textStart = l_keywordEnd;
+    dow l_textStart <= %len(l_lineText) and SafeSubstr(l_lineText:l_textStart:1) = ' ';
+      l_textStart += 1;
     enddo;
     // The condition ends at the first blank outside apostrophes.
-    l_inQ = *off;
-    l_i = l_p;
-    dow l_i <= %len(l_t);
-      if SubStr(l_t:l_i:1) = C_QUOTE;
-        l_inQ = not l_inQ;
+    l_inQuote = *off;
+    l_charIndex = l_textStart;
+    dow l_charIndex <= %len(l_lineText);
+      if SafeSubstr(l_lineText:l_charIndex:1) = C_QUOTE;
+        l_inQuote = not l_inQuote;
       endif;
-      if SubStr(l_t:l_i:1) = ' ' and not l_inQ;
+      if SafeSubstr(l_lineText:l_charIndex:1) = ' ' and not l_inQuote;
         leave;
       endif;
-      l_i += 1;
+      l_charIndex += 1;
     enddo;
-    l_cond = SubStr(l_t:l_p:l_i - l_p);
-    if l_i < %len(l_t);
-      o_spec = SubEnd(l_t:l_i + 1);
+    l_cond = SafeSubstr(l_lineText:l_textStart:l_charIndex - l_textStart);
+    if l_charIndex < %len(l_lineText);
+      o_spec = SafeSubstrToEnd(l_lineText:l_charIndex + 1);
     endif;
 
     // Split at the first / or = outside ?...? and apostrophes.
     l_split = 0;
-    l_inQ = *off;
-    l_inE = *off;
-    for l_i = 1 to %len(l_cond);
-      l_ch = SubStr(l_cond:l_i:1);
-      if l_ch = C_QUOTE;
-        l_inQ = not l_inQ;
-      elseif l_ch = '?' and not l_inQ;
-        l_inE = not l_inE;
-      elseif (l_ch = '/' or l_ch = '=') and not l_inQ and not l_inE;
-        l_split = l_i;
+    l_inQuote = *off;
+    l_inExpression = *off;
+    for l_charIndex = 1 to %len(l_cond);
+      l_char = SafeSubstr(l_cond:l_charIndex:1);
+      if l_char = C_QUOTE;
+        l_inQuote = not l_inQuote;
+      elseif l_char = '?' and not l_inQuote;
+        l_inExpression = not l_inExpression;
+      elseif (l_char = '/' or l_char = '=') and not l_inQuote and not l_inExpression;
+        l_split = l_charIndex;
         leave;
       endif;
     endfor;
     if l_split < 3;
-      o_why = 'Condition is not of the form ?expression?/value';
+      o_reason = 'Condition is not of the form ?expression?/value';
       return *off;
     endif;
-    l_left = SubStr(l_cond:1:l_split - 1);
+    l_left = SafeSubstr(l_cond:1:l_split - 1);
     if l_split < %len(l_cond);
-      l_right = SubEnd(l_cond:l_split + 1);
+      l_right = SafeSubstrToEnd(l_cond:l_split + 1);
     else;
       l_right = '';
     endif;
-    if %len(l_left) < 3 or SubStr(l_left:1:1) <> '?'
-       or SubStr(l_left:%len(l_left):1) <> '?';
-      o_why = 'Left side of the condition is not a substitution expression';
+    if %len(l_left) < 3 or SafeSubstr(l_left:1:1) <> '?'
+       or SafeSubstr(l_left:%len(l_left):1) <> '?';
+      o_reason = 'Left side of the condition is not a substitution expression';
       return *off;
     endif;
-    o_var = SortVar(SubStr(l_left:2:%len(l_left) - 2));
-    if o_var = '';
-      o_why = 'Condition expression ' + l_left + ' is not supported';
+    o_variable = SortSpecVariable(SafeSubstr(l_left:2:%len(l_left) - 2));
+    if o_variable = '';
+      o_reason = 'Condition expression ' + l_left + ' is not supported';
       return *off;
     endif;
     if %scan('?':l_right) > 0;
-      o_why = 'Right side of the condition uses an expression';
+      o_reason = 'Right side of the condition uses an expression';
       return *off;
     endif;
-    if %len(l_right) >= 2 and SubStr(l_right:1:1) = C_QUOTE
-       and SubStr(l_right:%len(l_right):1) = C_QUOTE;
-      l_right = %scanrpl('''''':'''':SubStr(l_right:2:%len(l_right) - 2));
+    if %len(l_right) >= 2 and SafeSubstr(l_right:1:1) = C_QUOTE
+       and SafeSubstr(l_right:%len(l_right):1) = C_QUOTE;
+      l_right = %scanrpl('''''':'''':SafeSubstr(l_right:2:%len(l_right) - 2));
     endif;
     if %len(l_right) = 0;
       l_right = ' ';
     endif;
-    o_lit = l_right;
+    o_literal = l_right;
   endif;
 
   // A nested IF in the statement part is not converted.
-  l_w = Up(SubStr(%trim(o_spec) + '    ':1:4));
-  if SubStr(l_w:1:3) = 'IF ' or SubStr(l_w:1:4) = 'IFF '
-     or SubStr(l_w:1:4) = 'IFT ' or SubStr(l_w:1:5) = 'ELSE ';
-    o_why = 'Nested IF/ELSE on one line is not converted';
+  l_firstWords = ToUpper(SafeSubstr(%trim(o_spec) + '    ':1:4));
+  if SafeSubstr(l_firstWords:1:3) = 'IF ' or SafeSubstr(l_firstWords:1:4) = 'IFF '
+     or SafeSubstr(l_firstWords:1:4) = 'IFT ' or SafeSubstr(l_firstWords:1:5) = 'ELSE ';
+    o_reason = 'Nested IF/ELSE on one line is not converted';
     return *off;
   endif;
   return *on;
@@ -1405,85 +1405,85 @@ end-proc;
 // time, so conditional lines (// IF, // IFF, // ELSE) can test the local
 // data area or a parameter when the program runs. Anything that cannot be
 // converted leaves the whole block as comments.
-dcl-proc FinishSort;
+dcl-proc WriteSortStep;
   dcl-pi *n;
   end-pi;
 
-  dcl-s l_i int(10);
-  dcl-s l_n varchar(10);
+  dcl-s l_index int(10);
+  dcl-s l_memberName varchar(10);
   dcl-s l_kind char(1);
-  dcl-s l_var varchar(20);
-  dcl-s l_lit varchar(128);
+  dcl-s l_variable varchar(20);
+  dcl-s l_literal varchar(128);
   dcl-s l_spec varchar(512);
-  dcl-s l_why varchar(100);
-  dcl-s l_ok ind inz(*on);
+  dcl-s l_reason varchar(100);
+  dcl-s l_isValid ind inz(*on);
   dcl-s l_lastKind char(1) inz(' ');
   dcl-s l_lastVar varchar(20) inz('');
   dcl-s l_lastLit varchar(128) inz('');
   dcl-s l_cond varchar(200);
-  dcl-s l_op varchar(5);
-  dcl-s l_seq int(10) inz(0);
-  dcl-s l_in varchar(300) inz('');
+  dcl-s l_operator varchar(5);
+  dcl-s l_sequence int(10) inz(0);
+  dcl-s l_inputList varchar(300) inz('');
   dcl-s l_inCnt int(10) inz(0);
-  dcl-s l_out varchar(130);
-  dcl-s l_cmd varchar(512);
+  dcl-s l_outputName varchar(130);
+  dcl-s l_command varchar(512);
   dcl-s l_hasCond ind inz(*off);
-  dcl-s l_ref varchar(130);
+  dcl-s l_fileReference varchar(130);
 
   g_sortMode = *off;
   g_sortNo += 1;
-  l_n = 'IASORT' + %trim(%char(g_sortNo));
+  l_memberName = 'IASORT' + %trim(%char(g_sortNo));
   g_blkCnt = 0;
-  g_tmpCnt = 0;
+  g_tempLineCount = 0;
 
   // Files
-  for l_i = 1 to 8;
-    if g_sortIn(l_i) <> '';
-      l_ref = g_sortIn(l_i);
-      if g_sortInLib(l_i) <> '';
-        l_ref = g_sortInLib(l_i) + '/' + g_sortIn(l_i);
+  for l_index = 1 to 8;
+    if g_sortIn(l_index) <> '';
+      l_fileReference = g_sortIn(l_index);
+      if g_sortInLib(l_index) <> '';
+        l_fileReference = g_sortInLib(l_index) + '/' + g_sortIn(l_index);
       endif;
       l_inCnt += 1;
       if l_inCnt = 1;
-        l_in = l_ref;
+        l_inputList = l_fileReference;
       else;
-        l_in += ' ' + l_ref;
+        l_inputList += ' ' + l_fileReference;
       endif;
     endif;
   endfor;
   if g_sortOut <> '' and g_sortOutLib <> '';
-    l_out = g_sortOutLib + '/' + g_sortOut;
+    l_outputName = g_sortOutLib + '/' + g_sortOut;
   else;
-    l_out = g_sortOut;
+    l_outputName = g_sortOut;
   endif;
   if l_inCnt = 0 or g_sortOut = '';
-    l_ok = *off;
-    l_why = 'FILE NAME-INPUT and NAME-OUTPUT are both needed';
+    l_isValid = *off;
+    l_reason = 'FILE NAME-INPUT and NAME-OUTPUT are both needed';
   endif;
-  if l_ok and g_sortSrcMbr = '' and g_sortCnt = 0;
-    l_ok = *off;
-    l_why = 'No sort specification lines found';
+  if l_isValid and g_sortSrcMbr = '' and g_sortCnt = 0;
+    l_isValid = *off;
+    l_reason = 'No sort specification lines found';
   endif;
 
   // Specification lines
-  if l_ok and g_sortSrcMbr = '';
-    for l_i = 1 to g_sortCnt;
+  if l_isValid and g_sortSrcMbr = '';
+    for l_index = 1 to g_sortCnt;
       l_hasCond = *off;
-      if %len(%trim(g_sortLines(l_i))) >= 2
-         and SubStr(%trim(g_sortLines(l_i)):1:2) = '//';
-        if not SortCond(g_sortLines(l_i):l_kind:l_var:l_lit:l_spec:l_why);
-          l_ok = *off;
+      if %len(%trim(g_sortLines(l_index))) >= 2
+         and SafeSubstr(%trim(g_sortLines(l_index)):1:2) = '//';
+        if not ParseSortCondition(g_sortLines(l_index):l_kind:l_variable:l_literal:l_spec:l_reason);
+          l_isValid = *off;
           leave;
         endif;
         l_hasCond = *on;
         if l_kind = 'E';
           if l_lastKind = ' ';
-            l_ok = *off;
-            l_why = 'ELSE without a preceding IF on the line before';
+            l_isValid = *off;
+            l_reason = 'ELSE without a preceding IF on the line before';
             leave;
           endif;
-          l_var = l_lastVar;
-          l_lit = l_lastLit;
+          l_variable = l_lastVar;
+          l_literal = l_lastLit;
           if l_lastKind = 'I';
             l_kind = 'F';
           else;
@@ -1492,95 +1492,95 @@ dcl-proc FinishSort;
           l_lastKind = ' ';
         else;
           l_lastKind = l_kind;
-          l_lastVar = l_var;
-          l_lastLit = l_lit;
+          l_lastVar = l_variable;
+          l_lastLit = l_literal;
         endif;
         if %len(%trim(l_spec)) = 0;
-          l_ok = *off;
-          l_why = 'IF/ELSE line has no specification text after the condition';
+          l_isValid = *off;
+          l_reason = 'IF/ELSE line has no specification text after the condition';
           leave;
         endif;
         // The statement part supplies columns 4 onward of the line.
         l_spec = %trimr('   ' + l_spec);
-        if %len(l_spec) < 6 or (SubStr(l_spec:6:1) <> 'H'
-           and SubStr(l_spec:6:1) <> 'I' and SubStr(l_spec:6:1) <> 'F');
-          l_ok = *off;
-          l_why = 'Text after the condition is not a sort specification';
+        if %len(l_spec) < 6 or (SafeSubstr(l_spec:6:1) <> 'H'
+           and SafeSubstr(l_spec:6:1) <> 'I' and SafeSubstr(l_spec:6:1) <> 'F');
+          l_isValid = *off;
+          l_reason = 'Text after the condition is not a sort specification';
           leave;
         endif;
       else;
-        l_spec = g_sortLines(l_i);
+        l_spec = g_sortLines(l_index);
         l_lastKind = ' ';
       endif;
 
-      l_seq += 1;
+      l_sequence += 1;
       if l_hasCond;
         if l_kind = 'I';
-          l_op = '*EQ';
+          l_operator = '*EQ';
         else;
-          l_op = '*NE';
+          l_operator = '*NE';
         endif;
-        l_cond = l_var + ' ' + l_op + ' ' + C_QUOTE
-                 + %scanrpl(C_QUOTE:C_QUOTE + C_QUOTE:l_lit) + C_QUOTE;
-        AddTmp('IF COND(' + l_cond + ') THEN(DO)');
+        l_cond = l_variable + ' ' + l_operator + ' ' + C_QUOTE
+                 + %scanrpl(C_QUOTE:C_QUOTE + C_QUOTE:l_literal) + C_QUOTE;
+        AddTempLine('IF COND(' + l_cond + ') THEN(DO)');
       endif;
-      if not SortInsert(l_n:l_seq:l_spec:l_why);
-        l_ok = *off;
+      if not BuildSortInsert(l_memberName:l_sequence:l_spec:l_reason);
+        l_isValid = *off;
         leave;
       endif;
       if l_hasCond;
-        AddTmp('ENDDO');
+        AddTempLine('ENDDO');
       endif;
     endfor;
   endif;
 
   if g_sortSrcMbr <> '' and g_sortSrcLib = '#LIBRARY';
-    l_ok = *off;
-    l_why = 'SOURCE with #LIBRARY is not converted';
+    l_isValid = *off;
+    l_reason = 'SOURCE with #LIBRARY is not converted';
   endif;
 
-  if not l_ok or g_overflow;
+  if not l_isValid or g_overflow;
     AddComment('OCL: sort step (#GSORT) not converted');
-    for l_i = 1 to g_sortCnt;
-      AddCommentRaw(' ' + g_sortLines(l_i));
+    for l_index = 1 to g_sortCnt;
+      AddCommentKeepingText(' ' + g_sortLines(l_index));
     endfor;
-    RptItem(C_STS_REVIEW:g_sortFirst:'#GSORT step':l_why);
+    RptItem(C_STS_REVIEW:g_sortFirst:'#GSORT step':l_reason);
     return;
   endif;
 
   g_useSql = *on;
   if g_sortSrcMbr <> '';
-    AddBody('FMTDTA INFILE(' + %trim(l_in) + ') OUTFILE(' + l_out
+    AddBody('FMTDTA INFILE(' + %trim(l_inputList) + ') OUTFILE(' + l_outputName
             + ') SRCFILE(' + g_sortSrcLib + '/QS36SRC) SRCMBR('
             + g_sortSrcMbr + ')');
     RptItem(C_STS_ASSUMPTION:g_sortFirst:'#GSORT step'
             :'// SOURCE member read from file QS36SRC in the named library');
   else;
-    for l_i = 1 to g_blkCnt;
-      AddBody('RTVDTAARA DTAARA(*LDA (' + %trim(%char(g_blkP(l_i))) + ' '
-              + %trim(%char(g_blkN(l_i))) + ')) RTNVAR(&L'
-              + %trim(%char(g_blkP(l_i))) + '_'
-              + %trim(%char(g_blkN(l_i))) + ')');
+    for l_index = 1 to g_blkCnt;
+      AddBody('RTVDTAARA DTAARA(*LDA (' + %trim(%char(g_blockPosition(l_index))) + ' '
+              + %trim(%char(g_blockLength(l_index))) + ')) RTNVAR(&L'
+              + %trim(%char(g_blockPosition(l_index))) + '_'
+              + %trim(%char(g_blockLength(l_index))) + ')');
     endfor;
-    AddBody('DLTF FILE(QTEMP/' + l_n + ')');
+    AddBody('DLTF FILE(QTEMP/' + l_memberName + ')');
     AddBody('MONMSG MSGID(CPF2105)');
-    AddBody('CRTSRCPF FILE(QTEMP/' + l_n + ') RCDLEN(112) MBR(' + l_n
+    AddBody('CRTSRCPF FILE(QTEMP/' + l_memberName + ') RCDLEN(112) MBR(' + l_memberName
             + ') CCSID(65535)');
-    for l_i = 1 to g_tmpCnt;
-      AddBody(g_tmp(l_i));
+    for l_index = 1 to g_tempLineCount;
+      AddBody(g_tempLines(l_index));
     endfor;
-    l_cmd = 'FMTDTA INFILE(';
+    l_command = 'FMTDTA INFILE(';
     if l_inCnt > 1;
-      l_cmd += '(' + %scanrpl(' ':') (':%trim(l_in)) + ')';
+      l_command += '(' + %scanrpl(' ':') (':%trim(l_inputList)) + ')';
     else;
-      l_cmd += %trim(l_in);
+      l_command += %trim(l_inputList);
     endif;
-    l_cmd += ') OUTFILE(' + l_out + ') SRCFILE(QTEMP/' + l_n + ') SRCMBR('
-             + l_n + ')';
-    AddBody(l_cmd);
+    l_command += ') OUTFILE(' + l_outputName + ') SRCFILE(QTEMP/' + l_memberName + ') SRCMBR('
+             + l_memberName + ')';
+    AddBody(l_command);
     RptItem(C_STS_ASSUMPTION:g_sortFirst:'#GSORT step'
             :'Mapped to FMTDTA; specification lines are copied unchanged into '
-            + 'QTEMP/' + l_n + ' (CCSID 65535) by RUNSQL');
+            + 'QTEMP/' + l_memberName + ' (CCSID 65535) by RUNSQL');
   endif;
 
   if g_conditions;
@@ -1599,57 +1599,57 @@ end-proc;
 // The data lines of a #GSORT step are collected until // END, /*, // SOURCE
 // or the next statement. Returns *ON when the line was taken as part of
 // the block.
-dcl-proc SortLine;
+dcl-proc CollectSortLine;
   dcl-pi *n ind;
     i_lineNo int(10) const;
     i_text varchar(512) const;
   end-pi;
 
-  dcl-s l_t varchar(512);
-  dcl-s l_kw varchar(60);
-  dcl-s l_p int(10);
-  dcl-s l_q int(10);
+  dcl-s l_lineText varchar(512);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_textStart int(10);
+  dcl-s l_keywordEnd int(10);
   dcl-s l_items varchar(200) dim(C_MAXITEMS);
-  dcl-s l_cnt int(10);
+  dcl-s l_itemCount int(10);
 
-  l_t = %trim(i_text);
-  if %len(l_t) = 0;
+  l_lineText = %trim(i_text);
+  if %len(l_lineText) = 0;
     return *on;
   endif;
 
-  if %len(l_t) >= 2 and SubStr(l_t:1:2) = '//';
+  if %len(l_lineText) >= 2 and SafeSubstr(l_lineText:1:2) = '//';
     // The keyword follows the slashes after optional blanks (// IF ...).
-    l_p = 3;
-    dow l_p <= %len(l_t) and SubStr(l_t:l_p:1) = ' ';
-      l_p += 1;
+    l_textStart = 3;
+    dow l_textStart <= %len(l_lineText) and SafeSubstr(l_lineText:l_textStart:1) = ' ';
+      l_textStart += 1;
     enddo;
-    l_q = %scan(' ':l_t:l_p);
-    if l_q = 0;
-      l_kw = Up(SubEnd(l_t:l_p));
-      l_p = 0;
+    l_keywordEnd = %scan(' ':l_lineText:l_textStart);
+    if l_keywordEnd = 0;
+      l_keyword = ToUpper(SafeSubstrToEnd(l_lineText:l_textStart));
+      l_textStart = 0;
     else;
-      l_kw = Up(SubStr(l_t:l_p:l_q - l_p));
-      l_p = l_q;
+      l_keyword = ToUpper(SafeSubstr(l_lineText:l_textStart:l_keywordEnd - l_textStart));
+      l_textStart = l_keywordEnd;
     endif;
     select;
-      when l_kw = 'END';             // ends the inline data of the step
-        FinishSort();
+      when l_keyword = 'END';             // ends the inline data of the step
+        WriteSortStep();
         RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
         return *on;
-      when l_kw = 'SOURCE';          // specifications come from a member
-        if l_p > 0;
-          l_cnt = SplitItems(%trim(SubEnd(l_t:l_p + 1)):l_items);
+      when l_keyword = 'SOURCE';          // specifications come from a member
+        if l_textStart > 0;
+          l_itemCount = SplitItems(%trim(SafeSubstrToEnd(l_lineText:l_textStart + 1)):l_items);
         else;
-          l_cnt = 0;
+          l_itemCount = 0;
         endif;
-        if l_cnt = 2;
-          g_sortSrcMbr = Up(l_items(1));
-          g_sortSrcLib = Up(l_items(2));
+        if l_itemCount = 2;
+          g_sortSrcMbr = ToUpper(l_items(1));
+          g_sortSrcLib = ToUpper(l_items(2));
         endif;
-        FinishSort();
+        WriteSortStep();
         RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
         return *on;
-      when l_kw = 'IF' or l_kw = 'IFT' or l_kw = 'IFF' or l_kw = 'ELSE';
+      when l_keyword = 'IF' or l_keyword = 'IFT' or l_keyword = 'IFF' or l_keyword = 'ELSE';
         g_conditions = *on;
         if g_sortCnt < C_MAXSORT;
           g_sortCnt += 1;
@@ -1659,14 +1659,14 @@ dcl-proc SortLine;
         endif;
         return *on;
       other;
-        FinishSort();
+        WriteSortStep();
         return *off;
     endsl;
   endif;
 
-  if SubStr(l_t:1:1) = '/' and %len(l_t) >= 2
-     and (SubStr(l_t:2:1) = '*' or SubStr(l_t:2:1) = '&');
-    FinishSort();
+  if SafeSubstr(l_lineText:1:1) = '/' and %len(l_lineText) >= 2
+     and (SafeSubstr(l_lineText:2:1) = '*' or SafeSubstr(l_lineText:2:1) = '&');
+    WriteSortStep();
     RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
     return *on;
   endif;
@@ -1683,26 +1683,26 @@ end-proc;
 // ------------------------------------------------------------------
 // Removes a trailing comment  /\ text \/  (outside quotes) from the
 // statement text and returns its text (empty when there is none).
-dcl-proc StripTrailing;
+dcl-proc StripTrailingComment;
   dcl-pi *n varchar(512);
-    io_s varchar(512);
+    io_statement varchar(512);
   end-pi;
 
-  dcl-s l_i int(10);
+  dcl-s l_index int(10);
   dcl-s l_inQuote ind inz(*off);
-  dcl-s l_cmt varchar(512) inz('');
+  dcl-s l_comment varchar(512) inz('');
 
-  for l_i = 1 to %len(io_s) - 1;
-    if SubStr(io_s:l_i:1) = C_QUOTE;
+  for l_index = 1 to %len(io_statement) - 1;
+    if SafeSubstr(io_statement:l_index:1) = C_QUOTE;
       l_inQuote = not l_inQuote;
     endif;
-    if not l_inQuote and SubStr(io_s:l_i:2) = '/\';
-      l_cmt = %trim(SubEnd(io_s:l_i + 2));
-      io_s = %trim(SubStr(io_s:1:l_i - 1));
-      if %len(l_cmt) >= 2 and SubStr(l_cmt:%len(l_cmt) - 1:2) = '\/';
-        l_cmt = %trim(SubStr(l_cmt:1:%len(l_cmt) - 2));
+    if not l_inQuote and SafeSubstr(io_statement:l_index:2) = '/\';
+      l_comment = %trim(SafeSubstrToEnd(io_statement:l_index + 2));
+      io_statement = %trim(SafeSubstr(io_statement:1:l_index - 1));
+      if %len(l_comment) >= 2 and SafeSubstr(l_comment:%len(l_comment) - 1:2) = '\/';
+        l_comment = %trim(SafeSubstr(l_comment:1:%len(l_comment) - 2));
       endif;
-      return l_cmt;
+      return l_comment;
     endif;
   endfor;
   return '';
@@ -1711,78 +1711,78 @@ end-proc;
 // ------------------------------------------------------------------
 // One operand of a condition as a CL operand: a variable for a single
 // ?...? expression, otherwise a quoted constant. '' when not supported.
-dcl-proc CondOperand;
+dcl-proc ConditionOperand;
   dcl-pi *n varchar(60);
-    i_t varchar(200) const;
+    i_text varchar(200) const;
   end-pi;
 
-  dcl-s l_len int(10);
-  dcl-s l_v varchar(200);
+  dcl-s l_variableLength int(10);
+  dcl-s l_value varchar(200);
 
-  if %len(i_t) = 0;
+  if %len(i_text) = 0;
     return C_QUOTE + ' ' + C_QUOTE;
   endif;
-  if SubStr(i_t:1:1) = '?';
-    if %len(i_t) >= 3 and SubStr(i_t:%len(i_t):1) = '?'
-       and %scan('?':i_t:2) = %len(i_t);
-      return ExprVar(SubStr(i_t:2:%len(i_t) - 2):l_len);
+  if SafeSubstr(i_text:1:1) = '?';
+    if %len(i_text) >= 3 and SafeSubstr(i_text:%len(i_text):1) = '?'
+       and %scan('?':i_text:2) = %len(i_text);
+      return ExpressionVariable(SafeSubstr(i_text:2:%len(i_text) - 2):l_variableLength);
     endif;
     return '';
   endif;
-  if %scan('?':i_t) > 0;
+  if %scan('?':i_text) > 0;
     return '';
   endif;
-  l_v = i_t;
-  if %len(l_v) >= 2 and SubStr(l_v:1:1) = C_QUOTE
-     and SubStr(l_v:%len(l_v):1) = C_QUOTE;
-    l_v = SubStr(l_v:2:%len(l_v) - 2);   // inner text, doubled quotes kept
+  l_value = i_text;
+  if %len(l_value) >= 2 and SafeSubstr(l_value:1:1) = C_QUOTE
+     and SafeSubstr(l_value:%len(l_value):1) = C_QUOTE;
+    l_value = SafeSubstr(l_value:2:%len(l_value) - 2);   // inner text, doubled quotes kept
   else;
-    l_v = %scanrpl(C_QUOTE:C_QUOTE + C_QUOTE:l_v);
+    l_value = %scanrpl(C_QUOTE:C_QUOTE + C_QUOTE:l_value);
   endif;
-  if %len(l_v) = 0;
-    l_v = ' ';
+  if %len(l_value) = 0;
+    l_value = ' ';
   endif;
-  return C_QUOTE + l_v + C_QUOTE;
+  return C_QUOTE + l_value + C_QUOTE;
 end-proc;
 
 // ------------------------------------------------------------------
 // A condition string as a CL expression: value1/value2 and value1=value2
 // (equal, compared as text) and SWITCHn-0 / SWITCHn-1. '' when the
 // condition is not supported.
-dcl-proc CondExpr;
+dcl-proc ConditionExpression;
   dcl-pi *n varchar(200);
     i_cond varchar(300) const;
   end-pi;
 
-  dcl-s l_i int(10);
-  dcl-s l_ch char(1);
-  dcl-s l_inQ ind inz(*off);
-  dcl-s l_inE ind inz(*off);
+  dcl-s l_index int(10);
+  dcl-s l_char char(1);
+  dcl-s l_inQuote ind inz(*off);
+  dcl-s l_inExpression ind inz(*off);
   dcl-s l_split int(10) inz(0);
   dcl-s l_left varchar(200);
   dcl-s l_right varchar(200);
-  dcl-s l_a varchar(60);
-  dcl-s l_b varchar(60);
+  dcl-s l_leftOperand varchar(60);
+  dcl-s l_rightOperand varchar(60);
   dcl-s l_mask varchar(8);
-  dcl-s l_u varchar(300);
+  dcl-s l_upperCondition varchar(300);
 
-  l_u = Up(i_cond);
-  if %len(l_u) = 9 and SubStr(l_u:1:6) = 'SWITCH'
-     and %check('12345678':SubStr(l_u:7:1)) = 0
-     and SubStr(l_u:8:1) = '-' and %check('01':SubStr(l_u:9:1)) = 0;
+  l_upperCondition = ToUpper(i_cond);
+  if %len(l_upperCondition) = 9 and SafeSubstr(l_upperCondition:1:6) = 'SWITCH'
+     and %check('12345678':SafeSubstr(l_upperCondition:7:1)) = 0
+     and SafeSubstr(l_upperCondition:8:1) = '-' and %check('01':SafeSubstr(l_upperCondition:9:1)) = 0;
     l_mask = 'XXXXXXXX';
-    %subst(l_mask:%int(%subst(l_u:7:1)):1) = SubStr(l_u:9:1);
+    %SubstituteExpressions(l_mask:%int(%SubstituteExpressions(l_upperCondition:7:1)):1) = SafeSubstr(l_upperCondition:9:1);
     return '%SWITCH(' + l_mask + ')';
   endif;
 
-  for l_i = 1 to %len(i_cond);
-    l_ch = SubStr(i_cond:l_i:1);
-    if l_ch = C_QUOTE;
-      l_inQ = not l_inQ;
-    elseif l_ch = '?' and not l_inQ;
-      l_inE = not l_inE;
-    elseif (l_ch = '/' or l_ch = '=') and not l_inQ and not l_inE;
-      l_split = l_i;
+  for l_index = 1 to %len(i_cond);
+    l_char = SafeSubstr(i_cond:l_index:1);
+    if l_char = C_QUOTE;
+      l_inQuote = not l_inQuote;
+    elseif l_char = '?' and not l_inQuote;
+      l_inExpression = not l_inExpression;
+    elseif (l_char = '/' or l_char = '=') and not l_inQuote and not l_inExpression;
+      l_split = l_index;
       leave;
     endif;
   endfor;
@@ -1790,21 +1790,21 @@ dcl-proc CondExpr;
     return '';
   endif;
   if l_split > 1;
-    l_left = SubStr(i_cond:1:l_split - 1);
+    l_left = SafeSubstr(i_cond:1:l_split - 1);
   else;
     l_left = '';
   endif;
   if l_split < %len(i_cond);
-    l_right = SubEnd(i_cond:l_split + 1);
+    l_right = SafeSubstrToEnd(i_cond:l_split + 1);
   else;
     l_right = '';
   endif;
-  l_a = CondOperand(l_left);
-  l_b = CondOperand(l_right);
-  if l_a = '' or l_b = '';
+  l_leftOperand = ConditionOperand(l_left);
+  l_rightOperand = ConditionOperand(l_right);
+  if l_leftOperand = '' or l_rightOperand = '';
     return '';
   endif;
-  return l_a + ' *EQ ' + l_b;
+  return l_leftOperand + ' *EQ ' + l_rightOperand;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1812,19 +1812,19 @@ end-proc;
 // returns the CL condition they make (empty when there are none). An ELSE
 // must be the first word and refers to the IF on the line before it.
 // Returns *OFF (with o_why) when a condition cannot be converted.
-dcl-proc IfChain;
+dcl-proc ParseIfPrefix;
   dcl-pi *n ind;
-    io_s varchar(512);
+    io_statement varchar(512);
     o_cond varchar(500);
-    o_why varchar(100);
+    o_reason varchar(100);
   end-pi;
 
-  dcl-s l_kw varchar(10);
-  dcl-s l_p int(10);
-  dcl-s l_i int(10);
-  dcl-s l_inQ ind;
-  dcl-s l_tok varchar(300);
-  dcl-s l_e varchar(200);
+  dcl-s l_keyword varchar(10);
+  dcl-s l_blankPos int(10);
+  dcl-s l_index int(10);
+  dcl-s l_inQuote ind;
+  dcl-s l_conditionToken varchar(300);
+  dcl-s l_converted varchar(200);
   dcl-s l_lineLast varchar(500) inz('');
   dcl-s l_elseCond varchar(500) inz('');
   dcl-s l_sawIf ind inz(*off);
@@ -1832,16 +1832,16 @@ dcl-proc IfChain;
 
   o_cond = '';
   dow *on;
-    l_p = %scan(' ':io_s);
-    if l_p = 0;
-      l_kw = Up(io_s);
+    l_blankPos = %scan(' ':io_statement);
+    if l_blankPos = 0;
+      l_keyword = ToUpper(io_statement);
     else;
-      l_kw = Up(SubStr(io_s:1:%min(l_p - 1:10)));
+      l_keyword = ToUpper(SafeSubstr(io_statement:1:%min(l_blankPos - 1:10)));
     endif;
 
-    if l_kw = 'ELSE';
+    if l_keyword = 'ELSE';
       if l_sawIf or l_sawElse or g_ifLast = '';
-        o_why = 'ELSE does not directly follow an IF line';
+        o_reason = 'ELSE does not directly follow an IF line';
         g_ifLast = '';
         g_ifCtx = '';
         return *off;
@@ -1853,56 +1853,56 @@ dcl-proc IfChain;
       endif;
       o_cond = l_elseCond;
       l_sawElse = *on;
-      if l_p = 0;
-        io_s = '';
+      if l_blankPos = 0;
+        io_statement = '';
       else;
-        io_s = %trim(SubEnd(io_s:l_p + 1));
+        io_statement = %trim(SafeSubstrToEnd(io_statement:l_blankPos + 1));
       endif;
 
-    elseif l_kw = 'IF' or l_kw = 'IFT' or l_kw = 'IFF';
-      if l_p = 0;
-        o_why = 'IF without a condition';
+    elseif l_keyword = 'IF' or l_keyword = 'IFT' or l_keyword = 'IFF';
+      if l_blankPos = 0;
+        o_reason = 'IF without a condition';
         g_ifLast = '';
         g_ifCtx = '';
         return *off;
       endif;
-      io_s = %trim(SubEnd(io_s:l_p + 1));
-      l_inQ = *off;
-      l_i = 1;
-      dow l_i <= %len(io_s);
-        if SubStr(io_s:l_i:1) = C_QUOTE;
-          l_inQ = not l_inQ;
+      io_statement = %trim(SafeSubstrToEnd(io_statement:l_blankPos + 1));
+      l_inQuote = *off;
+      l_index = 1;
+      dow l_index <= %len(io_statement);
+        if SafeSubstr(io_statement:l_index:1) = C_QUOTE;
+          l_inQuote = not l_inQuote;
         endif;
-        if SubStr(io_s:l_i:1) = ' ' and not l_inQ;
+        if SafeSubstr(io_statement:l_index:1) = ' ' and not l_inQuote;
           leave;
         endif;
-        l_i += 1;
+        l_index += 1;
       enddo;
-      l_tok = SubStr(io_s:1:l_i - 1);
-      if l_i > %len(io_s);
-        io_s = '';
+      l_conditionToken = SafeSubstr(io_statement:1:l_index - 1);
+      if l_index > %len(io_statement);
+        io_statement = '';
       else;
-        io_s = %trim(SubEnd(io_s:l_i + 1));
+        io_statement = %trim(SafeSubstrToEnd(io_statement:l_index + 1));
       endif;
-      l_e = CondExpr(l_tok);
-      if l_e = '';
-        o_why = 'Condition ' + l_tok + ' is not converted';
+      l_converted = ConditionExpression(l_conditionToken);
+      if l_converted = '';
+        o_reason = 'Condition ' + l_conditionToken + ' is not converted';
         g_ifLast = '';
         g_ifCtx = '';
         return *off;
       endif;
-      if l_kw = 'IFF';
-        l_e = '*NOT (' + l_e + ')';
+      if l_keyword = 'IFF';
+        l_converted = '*NOT (' + l_converted + ')';
       endif;
       if l_lineLast = '';
-        l_lineLast = l_e;
+        l_lineLast = l_converted;
       else;
-        l_lineLast = '(' + l_lineLast + ') *AND (' + l_e + ')';
+        l_lineLast = '(' + l_lineLast + ') *AND (' + l_converted + ')';
       endif;
       if o_cond = '';
-        o_cond = l_e;
+        o_cond = l_converted;
       else;
-        o_cond = '(' + o_cond + ') *AND (' + l_e + ')';
+        o_cond = '(' + o_cond + ') *AND (' + l_converted + ')';
       endif;
       l_sawIf = *on;
 
@@ -1928,22 +1928,22 @@ end-proc;
 // ------------------------------------------------------------------
 // Cuts operands at the first blank outside apostrophes: what follows is a
 // comment. Returns the comment text.
-dcl-proc SplitTail;
+dcl-proc SplitStatementTail;
   dcl-pi *n varchar(512);
-    io_ops varchar(512);
+    io_operands varchar(512);
   end-pi;
 
-  dcl-s l_i int(10);
-  dcl-s l_inQ ind inz(*off);
+  dcl-s l_index int(10);
+  dcl-s l_inQuote ind inz(*off);
   dcl-s l_tail varchar(512);
 
-  for l_i = 1 to %len(io_ops);
-    if SubStr(io_ops:l_i:1) = C_QUOTE;
-      l_inQ = not l_inQ;
+  for l_index = 1 to %len(io_operands);
+    if SafeSubstr(io_operands:l_index:1) = C_QUOTE;
+      l_inQuote = not l_inQuote;
     endif;
-    if SubStr(io_ops:l_i:1) = ' ' and not l_inQ;
-      l_tail = %trim(SubEnd(io_ops:l_i + 1));
-      io_ops = SubStr(io_ops:1:l_i - 1);
+    if SafeSubstr(io_operands:l_index:1) = ' ' and not l_inQuote;
+      l_tail = %trim(SafeSubstrToEnd(io_operands:l_index + 1));
+      io_operands = SafeSubstr(io_operands:1:l_index - 1);
       return l_tail;
     endif;
   endfor;
@@ -1952,21 +1952,21 @@ end-proc;
 
 // ------------------------------------------------------------------
 // // SWITCH nnnnnnnn   (0 off, 1 on, X unchanged)
-dcl-proc DoSwitch;
+dcl-proc ConvertSwitch;
   dcl-pi *n;
     i_lineNo int(10) const;
     i_text varchar(512) const;
     i_operands varchar(512) const;
   end-pi;
 
-  dcl-s l_s varchar(512);
+  dcl-s l_switches varchar(512);
 
-  l_s = Up(%trim(i_operands));
-  if %len(l_s) <> 8 or %check('01X':l_s) > 0;
+  l_switches = ToUpper(%trim(i_operands));
+  if %len(l_switches) <> 8 or %check('01X':l_switches) > 0;
     ReviewLine(i_lineNo:i_text:'SWITCH needs 8 characters of 0, 1 or X');
     return;
   endif;
-  AddBody('CHGJOB SWS(' + l_s + ')');
+  AddBody('CHGJOB SWS(' + l_switches + ')');
   RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
           :'S/36 UPSI switches taken as the job switches (CHGJOB SWS)');
 end-proc;
@@ -1978,147 +1978,147 @@ dcl-proc ProcessStatement;
     i_text varchar(512) const;
   end-pi;
 
-  dcl-s l_s varchar(512);
-  dcl-s l_kw varchar(60);
-  dcl-s l_ops varchar(512);
-  dcl-s l_p int(10);
-  dcl-s l_cmt varchar(512);
+  dcl-s l_statement varchar(512);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_operands varchar(512);
+  dcl-s l_blankPos int(10);
+  dcl-s l_comment varchar(512);
   dcl-s l_tail varchar(512);
   dcl-s l_cond varchar(500);
-  dcl-s l_why varchar(100);
+  dcl-s l_reason varchar(100);
   dcl-s l_start int(10);
-  dcl-s l_i int(10);
-  dcl-s l_has ind;
+  dcl-s l_index int(10);
+  dcl-s l_hasClLines ind;
 
   g_afterRun = *off;
-  l_s = %trim(SubEnd(%trim(i_text):3));
-  l_cmt = StripTrailing(l_s);
-  if %len(l_s) = 0;
+  l_statement = %trim(SafeSubstrToEnd(%trim(i_text):3));
+  l_comment = StripTrailingComment(l_statement);
+  if %len(l_statement) = 0;
     ReviewLine(i_lineNo:i_text:'Empty OCL statement');
     return;
   endif;
 
-  if not IfChain(l_s:l_cond:l_why);
-    ReviewLine(i_lineNo:i_text:l_why);
+  if not ParseIfPrefix(l_statement:l_cond:l_reason);
+    ReviewLine(i_lineNo:i_text:l_reason);
     return;
   endif;
-  if %len(l_s) = 0;
+  if %len(l_statement) = 0;
     ReviewLine(i_lineNo:i_text:'IF or ELSE without a statement');
     return;
   endif;
   l_start = g_bodyCnt;
 
-  l_p = %scan(' ':l_s);
-  if l_p = 0;
-    l_kw = Up(l_s);
-    l_ops = '';
+  l_blankPos = %scan(' ':l_statement);
+  if l_blankPos = 0;
+    l_keyword = ToUpper(l_statement);
+    l_operands = '';
   else;
-    l_kw = Up(SubStr(l_s:1:l_p - 1));
-    l_ops = %trim(SubEnd(l_s:l_p + 1));
+    l_keyword = ToUpper(SafeSubstr(l_statement:1:l_blankPos - 1));
+    l_operands = %trim(SafeSubstrToEnd(l_statement:l_blankPos + 1));
   endif;
-  if l_kw <> 'EVALUATE' and %len(l_ops) > 0;
-    l_tail = SplitTail(l_ops);      // text after the operands is a comment
+  if l_keyword <> 'EVALUATE' and %len(l_operands) > 0;
+    l_tail = SplitStatementTail(l_operands);      // text after the operands is a comment
     if %len(l_tail) > 0;
-      if %len(l_cmt) > 0;
-        l_cmt = l_tail + ' ' + l_cmt;
+      if %len(l_comment) > 0;
+        l_comment = l_tail + ' ' + l_comment;
       else;
-        l_cmt = l_tail;
+        l_comment = l_tail;
       endif;
     endif;
   endif;
 
   select;
-    when l_cond <> '' and (l_kw = 'LOAD' or l_kw = 'RUN' or l_kw = 'FILE'
-         or l_kw = 'TAG');
+    when l_cond <> '' and (l_keyword = 'LOAD' or l_keyword = 'RUN' or l_keyword = 'FILE'
+         or l_keyword = 'TAG');
       ReviewLine(i_lineNo:i_text
-                 :'A conditional ' + l_kw + ' statement is not converted');
-    when l_kw = 'LOAD';
-      DoLoad(i_lineNo:i_text:l_ops);
-    when l_kw = 'RUN';
-      DoRun(i_lineNo:i_text:l_ops);
-    when l_kw = 'FILE';
-      DoFile(i_lineNo:i_text:l_ops);
-    when l_kw = 'LOCAL';
-      DoLocal(i_lineNo:i_text:l_ops);
-    when l_kw = 'EVALUATE';
-      DoEvaluate(i_lineNo:i_text:l_ops);
-    when l_kw = 'TAG';
-      DoTagGoto(i_lineNo:i_text:*on:l_ops);
-    when l_kw = 'GOTO';
-      DoTagGoto(i_lineNo:i_text:*off:l_ops);
-    when l_kw = 'SWITCH';
-      DoSwitch(i_lineNo:i_text:l_ops);
-    when l_kw = 'RETURN' and %len(l_ops) = 0;
+                 :'A conditional ' + l_keyword + ' statement is not converted');
+    when l_keyword = 'LOAD';
+      ConvertLoad(i_lineNo:i_text:l_operands);
+    when l_keyword = 'RUN';
+      ConvertRun(i_lineNo:i_text:l_operands);
+    when l_keyword = 'FILE';
+      ConvertFile(i_lineNo:i_text:l_operands);
+    when l_keyword = 'LOCAL';
+      ConvertLocal(i_lineNo:i_text:l_operands);
+    when l_keyword = 'EVALUATE';
+      ConvertEvaluate(i_lineNo:i_text:l_operands);
+    when l_keyword = 'TAG';
+      ConvertTagGoto(i_lineNo:i_text:*on:l_operands);
+    when l_keyword = 'GOTO';
+      ConvertTagGoto(i_lineNo:i_text:*off:l_operands);
+    when l_keyword = 'SWITCH';
+      ConvertSwitch(i_lineNo:i_text:l_operands);
+    when l_keyword = 'RETURN' and %len(l_operands) = 0;
       AddBody('RETURN');
       RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
     other;
       ReviewLine(i_lineNo:i_text
-                 :'OCL statement ' + l_kw + ' is not converted in this version');
+                 :'OCL statement ' + l_keyword + ' is not converted in this version');
   endsl;
 
   // A condition wraps what the statement wrote into IF ... THEN(DO).
   if l_cond <> '' and g_bodyCnt > l_start;
-    l_has = *off;
-    for l_i = l_start + 1 to g_bodyCnt;
-      if %len(g_body(l_i)) < 2 or SubStr(g_body(l_i):1:2) <> '/*';
-        l_has = *on;
+    l_hasClLines = *off;
+    for l_index = l_start + 1 to g_bodyCnt;
+      if %len(g_body(l_index)) < 2 or SafeSubstr(g_body(l_index):1:2) <> '/*';
+        l_hasClLines = *on;
       endif;
     endfor;
-    if l_has and g_bodyCnt + 2 <= C_MAXBODY;
-      for l_i = g_bodyCnt downto l_start + 1;
-        g_body(l_i + 1) = g_body(l_i);
+    if l_hasClLines and g_bodyCnt + 2 <= C_MAXBODY;
+      for l_index = g_bodyCnt downto l_start + 1;
+        g_body(l_index + 1) = g_body(l_index);
       endfor;
       g_body(l_start + 1) = 'IF COND(' + l_cond + ') THEN(DO)';
       g_bodyCnt += 1;
       AddBody('ENDDO');
       RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
               :'IF/IFF/ELSE condition compared as text');
-    elseif l_has;
+    elseif l_hasClLines;
       g_overflow = *on;
     endif;
   endif;
 
-  if %len(l_cmt) > 0;
-    AddComment(l_cmt);
+  if %len(l_comment) > 0;
+    AddComment(l_comment);
   endif;
 end-proc;
 
 // ------------------------------------------------------------------
 // A line without // that starts like a command name is taken as a CL (or
 // S/36 environment) command and copied with substitution applied.
-dcl-proc PassThrough;
+dcl-proc PassThroughClLine;
   dcl-pi *n;
     i_lineNo int(10) const;
     i_text varchar(512) const;
   end-pi;
 
-  dcl-s l_p int(10);
-  dcl-s l_cmd varchar(60);
-  dcl-s l_out varchar(512);
+  dcl-s l_blankPos int(10);
+  dcl-s l_command varchar(60);
+  dcl-s l_clLine varchar(512);
   dcl-s l_open ind;
 
-  l_p = %scan(' ':i_text);
-  if l_p = 0;
-    l_cmd = Up(i_text);
+  l_blankPos = %scan(' ':i_text);
+  if l_blankPos = 0;
+    l_command = ToUpper(i_text);
   else;
-    l_cmd = Up(SubStr(i_text:1:l_p - 1));
+    l_command = ToUpper(SafeSubstr(i_text:1:l_blankPos - 1));
   endif;
-  if %len(l_cmd) > 10 or %len(l_cmd) = 0
-     or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ':SubStr(l_cmd:1:1)) > 0
-     or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$':l_cmd) > 0;
+  if %len(l_command) > 10 or %len(l_command) = 0
+     or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ':SafeSubstr(l_command:1:1)) > 0
+     or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$':l_command) > 0;
     ReviewLine(i_lineNo:i_text:'Line is not an OCL statement or a command');
     return;
   endif;
 
-  l_out = Subst(i_text:l_open);
+  l_clLine = SubstituteExpressions(i_text:l_open);
   if l_open;
     ReviewLine(i_lineNo:i_text
                :'Command uses a substitution expression that is not converted');
     return;
   endif;
-  AddBody(l_out);
+  AddBody(l_clLine);
   RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
-          :'Copied as a command; check that command ' + l_cmd + ' exists');
+          :'Copied as a command; check that command ' + l_command + ' exists');
 end-proc;
 
 // ------------------------------------------------------------------
@@ -2128,44 +2128,44 @@ dcl-proc ProcessLine;
     i_text varchar(512) const;
   end-pi;
 
-  dcl-s l_t varchar(512);
-  dcl-s l_c varchar(512);
+  dcl-s l_trimmedLine varchar(512);
+  dcl-s l_commentText varchar(512);
   dcl-s l_first2 varchar(2);
   dcl-s l_last2 varchar(2);
 
-  l_t = %trim(i_text);
+  l_trimmedLine = %trim(i_text);
 
   if g_sortMode;
-    if SortLine(i_lineNo:i_text);
+    if CollectSortLine(i_lineNo:i_text);
       return;
     endif;
   endif;
 
   l_first2 = '';
   l_last2 = '';
-  if %len(l_t) >= 2;
-    l_first2 = SubStr(l_t:1:2);
-    l_last2 = SubStr(l_t:%len(l_t) - 1:2);
+  if %len(l_trimmedLine) >= 2;
+    l_first2 = SafeSubstr(l_trimmedLine:1:2);
+    l_last2 = SafeSubstr(l_trimmedLine:%len(l_trimmedLine) - 1:2);
   endif;
 
   select;
-    when %len(l_t) = 0;
+    when %len(l_trimmedLine) = 0;
       AddBody('');
-    when %len(l_t) >= 4 and l_first2 = '/*' and l_last2 = '*/';
+    when %len(l_trimmedLine) >= 4 and l_first2 = '/*' and l_last2 = '*/';
       // Already a CL comment: keep the text.
-      AddCommentRaw(%trimr(SubStr(l_t:3:%len(l_t) - 4)));
+      AddCommentKeepingText(%trimr(SafeSubstr(l_trimmedLine:3:%len(l_trimmedLine) - 4)));
       RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
-    when SubStr(l_t:1:1) = '*';
+    when SafeSubstr(l_trimmedLine:1:1) = '*';
       // Keep the comment text exactly as written (after the asterisk).
-      if %len(l_t) > 1;
-        l_c = %trimr(SubEnd(l_t:2));
+      if %len(l_trimmedLine) > 1;
+        l_commentText = %trimr(SafeSubstrToEnd(l_trimmedLine:2));
       else;
-        l_c = '';
+        l_commentText = '';
       endif;
-      if %len(%trim(l_c)) = 0;
+      if %len(%trim(l_commentText)) = 0;
         AddBody('');
       else;
-        AddCommentRaw(l_c);
+        AddCommentKeepingText(l_commentText);
       endif;
       RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
     when l_first2 = '/*' or l_first2 = '/&';
@@ -2175,7 +2175,7 @@ dcl-proc ProcessLine;
     when l_first2 = '//';
       ProcessStatement(i_lineNo:i_text);
     other;
-      PassThrough(i_lineNo:l_t);
+      PassThroughClLine(i_lineNo:l_trimmedLine);
   endsl;
 end-proc;
 
@@ -2206,18 +2206,18 @@ dcl-proc WriteProgram;
     o_msgData char(256);
   end-pi;
 
-  dcl-s l_i int(10);
+  dcl-s l_index int(10);
   dcl-s l_line varchar(512);
   dcl-s l_parms varchar(512);
 
   l_line = 'PGM';
   if g_maxParm > 0;
     l_parms = '';
-    for l_i = 1 to g_maxParm;
-      if l_i > 1;
+    for l_index = 1 to g_maxParm;
+      if l_index > 1;
         l_parms += ' ';
       endif;
-      l_parms += '&P' + %trim(%char(l_i));
+      l_parms += '&P' + %trim(%char(l_index));
     endfor;
     l_line += ' PARM(' + l_parms + ')';
   endif;
@@ -2225,24 +2225,24 @@ dcl-proc WriteProgram;
     return 1;
   endif;
 
-  for l_i = 1 to g_maxParm;
-    if WriteCl('DCL VAR(&P' + %trim(%char(l_i)) + ') TYPE(*CHAR) LEN(10)'
+  for l_index = 1 to g_maxParm;
+    if WriteCl('DCL VAR(&P' + %trim(%char(l_index)) + ') TYPE(*CHAR) LEN(10)'
                :o_msgId:o_msgData) <> 0;
       return 1;
     endif;
   endfor;
   // Parameters set by EVALUATE and not passed by the caller are local.
-  for l_i = g_maxParm + 1 to 40;
-    if g_parKind(l_i) = 'L';
-      if WriteCl('DCL VAR(&P' + %trim(%char(l_i)) + ') TYPE(*CHAR) LEN('
-                 + %trim(%char(%max(g_parLen(l_i):1))) + ')'
+  for l_index = g_maxParm + 1 to 40;
+    if g_parameterKind(l_index) = 'L';
+      if WriteCl('DCL VAR(&P' + %trim(%char(l_index)) + ') TYPE(*CHAR) LEN('
+                 + %trim(%char(%max(g_parameterLength(l_index):1))) + ')'
                  :o_msgId:o_msgData) <> 0;
         return 1;
       endif;
     endif;
   endfor;
-  for l_i = 1 to g_tmpVar;
-    if WriteCl('DCL VAR(&T' + %trim(%char(l_i)) + ') TYPE(*CHAR) LEN(50)'
+  for l_index = 1 to g_tempVariableCount;
+    if WriteCl('DCL VAR(&T' + %trim(%char(l_index)) + ') TYPE(*CHAR) LEN(50)'
                :o_msgId:o_msgData) <> 0;
       return 1;
     endif;
@@ -2262,10 +2262,10 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endif;
-  for l_i = 1 to g_ldaCnt;
-    if WriteCl('DCL VAR(&L' + %trim(%char(g_ldaP(l_i))) + '_'
-               + %trim(%char(g_ldaN(l_i))) + ') TYPE(*CHAR) LEN('
-               + %trim(%char(g_ldaN(l_i))) + ')':o_msgId:o_msgData) <> 0;
+  for l_index = 1 to g_ldaCnt;
+    if WriteCl('DCL VAR(&L' + %trim(%char(g_ldaPosition(l_index))) + '_'
+               + %trim(%char(g_ldaLength(l_index))) + ') TYPE(*CHAR) LEN('
+               + %trim(%char(g_ldaLength(l_index))) + ')':o_msgId:o_msgData) <> 0;
       return 1;
     endif;
   endfor;
@@ -2290,8 +2290,8 @@ dcl-proc WriteProgram;
     endif;
   endif;
 
-  for l_i = 1 to g_bodyCnt;
-    if WriteCl(g_body(l_i):o_msgId:o_msgData) <> 0;
+  for l_index = 1 to g_bodyCnt;
+    if WriteCl(g_body(l_index):o_msgId:o_msgData) <> 0;
       return 1;
     endif;
   endfor;
@@ -2305,27 +2305,27 @@ end-proc;
 // ------------------------------------------------------------------
 dcl-proc OclConvert export;
   dcl-pi *n int(10);
-    i_src likeds(IAcnvDesc_t) const;
-    i_tgt likeds(IAcnvDesc_t) const;
+    i_source likeds(IAcnvDesc_t) const;
+    i_target likeds(IAcnvDesc_t) const;
     o_msgId char(7);
     o_msgData char(256);
   end-pi;
 
   dcl-s l_text varchar(512);
   dcl-s l_next varchar(512);
-  dcl-s l_t varchar(512);
-  dcl-s l_nt varchar(512);
-  dcl-s l_no int(10);
+  dcl-s l_trimmedLine varchar(512);
+  dcl-s l_nextTrimmed varchar(512);
+  dcl-s l_lineNo int(10);
   dcl-s l_first int(10);
-  dcl-s l_rc int(10);
+  dcl-s l_returnCode int(10);
 
   g_bodyCnt = 0;
   g_overflow = *off;
   g_maxParm = 0;
-  g_parKind(*) = ' ';
-  g_parLen(*) = 0;
+  g_parameterKind(*) = ' ';
+  g_parameterLength(*) = 0;
   g_useDate = *off;
-  g_tmpVar = 0;
+  g_tempVariableCount = 0;
   g_ldaCnt = 0;
   g_ifLast = '';
   g_ifCtx = '';
@@ -2333,7 +2333,7 @@ dcl-proc OclConvert export;
   g_useWs = *off;
   g_pendLoad = *off;
   g_afterRun = *off;
-  g_ovr = '';
+  g_overriddenFiles = '';
   g_sortMode = *off;
   g_sortNo = 0;
   g_sortCnt = 0;
@@ -2349,35 +2349,35 @@ dcl-proc OclConvert export;
   g_sortExtra = '';
   g_useSql = *off;
   g_isSort = *off;
-  g_width = TargetWidthFor(i_tgt);
+  g_width = TargetWidthFor(i_target);
   if g_width <= 0;
     g_width = C_DFTWIDTH;
   endif;
 
-  if OpenSource(i_src:o_msgId:o_msgData) <> 0;
+  if OpenSource(i_source:o_msgId:o_msgData) <> 0;
     return 1;
   endif;
 
-  dow ReadLine(l_text:l_no);
-    l_first = l_no;
-    l_t = %trim(l_text);
+  dow ReadLine(l_text:l_lineNo);
+    l_first = l_lineNo;
+    l_trimmedLine = %trim(l_text);
 
     // A statement continues when it ends with a comma.
-    if %len(l_t) >= 2 and SubStr(l_t:1:2) = '//';
-      dow %len(l_t) > 0 and SubStr(l_t:%len(l_t):1) = ',';
-        if not ReadLine(l_next:l_no);
+    if %len(l_trimmedLine) >= 2 and SafeSubstr(l_trimmedLine:1:2) = '//';
+      dow %len(l_trimmedLine) > 0 and SafeSubstr(l_trimmedLine:%len(l_trimmedLine):1) = ',';
+        if not ReadLine(l_next:l_lineNo);
           leave;
         endif;
-        l_nt = %trim(l_next);
-        if %len(l_nt) >= 2 and SubStr(l_nt:1:2) = '//';
-          l_nt = %trim(SubEnd(l_nt:3));
+        l_nextTrimmed = %trim(l_next);
+        if %len(l_nextTrimmed) >= 2 and SafeSubstr(l_nextTrimmed:1:2) = '//';
+          l_nextTrimmed = %trim(SafeSubstrToEnd(l_nextTrimmed:3));
         endif;
-        l_t += l_nt;
+        l_trimmedLine += l_nextTrimmed;
       enddo;
     endif;
 
-    if %len(l_t) >= 2 and SubStr(l_t:1:2) = '//';
-      ProcessLine(l_first:l_t);
+    if %len(l_trimmedLine) >= 2 and SafeSubstr(l_trimmedLine:1:2) = '//';
+      ProcessLine(l_first:l_trimmedLine);
     else;
       ProcessLine(l_first:l_text);   // comments keep their exact text
     endif;
@@ -2400,7 +2400,7 @@ dcl-proc OclConvert export;
   endif;
 
   if g_sortMode;
-    FinishSort();
+    WriteSortStep();
   endif;
   if g_pendLoad;
     ReviewLine(g_loadLine:g_loadText:'LOAD was never followed by RUN');
@@ -2411,10 +2411,10 @@ dcl-proc OclConvert export;
             :'Declared as CHAR(10); check the lengths the callers pass');
   endif;
 
-  if OpenTarget(i_tgt:o_msgId:o_msgData) <> 0;
+  if OpenTarget(i_target:o_msgId:o_msgData) <> 0;
     return 1;
   endif;
-  l_rc = WriteProgram(o_msgId:o_msgData);
+  l_returnCode = WriteProgram(o_msgId:o_msgData);
   CloseTarget();
-  return l_rc;
+  return l_returnCode;
 end-proc;

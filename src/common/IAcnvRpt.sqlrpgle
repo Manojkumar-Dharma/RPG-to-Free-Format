@@ -64,8 +64,8 @@ end-proc;
 dcl-proc RptOpen export;
   dcl-pi *n int(10);
     i_converter int(10) const;
-    i_src likeds(IAcnvDesc_t) const;
-    i_tgt likeds(IAcnvDesc_t) const;
+    i_source likeds(IAcnvDesc_t) const;
+    i_target likeds(IAcnvDesc_t) const;
   end-pi;
 
   if g_open;
@@ -86,8 +86,8 @@ dcl-proc RptOpen export;
   PutLine('Legacy source conversion report   ' + ConverterName(i_converter)
           + '   ' + %char(%date()) + ' ' + %char(%time()):*on);
   PutLine(' ':*off);
-  PutLine('Source: ' + Describe(i_src):*off);
-  PutLine('Target: ' + Describe(i_tgt):*off);
+  PutLine('Source: ' + Describe(i_source):*off);
+  PutLine('Target: ' + Describe(i_target):*off);
   PutLine(' ':*off);
   PutLine('Status     Line   Source text                                         '
           + 'Reason':*off);
@@ -107,7 +107,7 @@ dcl-proc RptItem export;
 
   dcl-s l_status char(10);
   dcl-s l_line varchar(132);
-  dcl-s l_num char(6);
+  dcl-s l_lineText char(6);
   dcl-s l_text char(50);
   dcl-s l_reason char(62);
 
@@ -133,10 +133,10 @@ dcl-proc RptItem export;
     return;
   endif;
 
-  evalr l_num = %char(i_lineNo);
+  evalr l_lineText = %char(i_lineNo);
   l_text = i_text;
   l_reason = i_reason;
-  l_line = l_status + ' ' + l_num + ' ' + l_text + ' ' + l_reason;
+  l_line = l_status + ' ' + l_lineText + ' ' + l_text + ' ' + l_reason;
   PutLine(l_line:*off);
 end-proc;
 
