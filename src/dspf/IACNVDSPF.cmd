@@ -6,7 +6,7 @@
 /* library. For an IFS source or target give *NONE as the file and    */
 /* use SRCIFS or TGTIFS (a directory; TGTIFS(*SRC) = the source's);   */
 /* the IFS name is member.type.                                        */
-CMD        PROMPT('DSP36 or DSP38 to DSPF converter')
+CMD        PROMPT('DSP36/38 to DSPF converter')
 
 PARM       KWD(SRC) TYPE(SRC_T) MIN(1) PROMPT('Source file and member')
 SRC_T:     ELEM       TYPE(SRCFILE_Q) MIN(1) PROMPT('Source file')
