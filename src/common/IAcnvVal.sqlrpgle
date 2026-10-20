@@ -228,6 +228,25 @@ dcl-proc ValidateIO export;
     endif;
   endif;
 
+  // ---- 3b source and target must not be the same -------------------------------
+  // Checked before anything else is looked at, so REPLACE(*YES) and
+  // REPLACE(*NO) both give this message instead of touching the source.
+  if l_src.mode = C_MODE_MBR and l_tgt.mode = C_MODE_MBR;
+    if ResolveLib(l_src.lib:l_src.file) = l_tgt.lib
+       and l_src.file = l_tgt.file and l_src.mbr = l_tgt.mbr;
+      return Fail('IAC0012':%trim(l_tgt.lib) + '/' + %trim(l_tgt.file)
+                  + '(' + %trim(l_tgt.mbr) + ')':o_msgId:o_msgData);
+    endif;
+  elseif l_src.mode = C_MODE_IFS and l_tgt.mode = C_MODE_IFS;
+    if %xlate(C_LOWER:C_UPPER:NormDir(i_parm.srcIfs)
+              + %trim(l_src.mbr) + '.' + %trim(l_src.type))
+       = %xlate(C_LOWER:C_UPPER:NormDir(i_parm.tgtIfs)
+                + %trim(l_tgt.mbr) + '.' + %trim(l_tgt.type));
+      return Fail('IAC0012':NormDir(i_parm.srcIfs) + %trim(l_src.mbr)
+                  + '.' + %trim(l_src.type):o_msgId:o_msgData);
+    endif;
+  endif;
+
   // ---- 4 existence -----------------------------------------------------------
   l_replaceYes = Up(i_parm.replace) = '*YES';
   l_tgt.replaceOk = l_replaceYes;

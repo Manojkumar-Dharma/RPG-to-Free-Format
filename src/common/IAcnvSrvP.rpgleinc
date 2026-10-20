@@ -114,6 +114,11 @@ dcl-pr IfsAccess ind;
   i_mode int(10) const;
 end-pr;
 
+dcl-pr ResolveLib char(10);
+  i_lib char(10) const;
+  i_file char(10) const;
+end-pr;
+
 dcl-pr FindIfsName int(10);
   i_dir varchar(1024) const;
   i_name varchar(256) const;

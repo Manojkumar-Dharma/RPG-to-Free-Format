@@ -59,6 +59,16 @@ dcl-pr QMHSNDPM extpgm('QMHSNDPM');
   error char(16) options(*varsize);
 end-pr;
 
+// Object description API (used by ResolveLib below).
+dcl-pr QUSROBJD extpgm('QUSROBJD');
+  rcvVar char(100) options(*varsize);
+  rcvLen int(10) const;
+  format char(8) const;
+  qualObj char(20) const;
+  objType char(10) const;
+  error char(16) options(*varsize);
+end-pr;
+
 dcl-ds g_apiError qualified;
   bytesProvided int(10) inz(16);
   bytesAvailable int(10);
@@ -251,4 +261,34 @@ dcl-proc SendCompletion export;
   end-pi;
 
   SendMessage(i_msgId:i_msgData:'*COMP');
+end-proc;
+
+// ------------------------------------------------------------------
+// The library a file is really found in. For *LIBL and *CURLIB the object
+// description API tells; a named library, or a file that is not found, comes
+// back unchanged (the existence checks report a missing file).
+dcl-proc ResolveLib export;
+  dcl-pi *n char(10);
+    i_lib char(10) const;
+    i_file char(10) const;
+  end-pi;
+
+  dcl-s l_rcv char(100);
+  dcl-s l_qual char(20);
+  dcl-ds l_err qualified;
+    bytesProvided int(10) inz(16);
+    bytesAvailable int(10);
+    exceptionId char(7);
+    reserved char(1);
+  end-ds;
+
+  if %trim(i_lib) <> '*LIBL' and %trim(i_lib) <> '*CURLIB';
+    return i_lib;
+  endif;
+  l_qual = i_file + i_lib;
+  QUSROBJD(l_rcv:%size(l_rcv):'OBJD0100':l_qual:'*FILE':l_err);
+  if l_err.bytesAvailable > 0;
+    return i_lib;
+  endif;
+  return %subst(l_rcv:19:10);        // object library, offset 18
 end-proc;
