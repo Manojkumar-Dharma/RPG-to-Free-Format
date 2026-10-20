@@ -752,7 +752,7 @@ dcl-proc ConvertD;
               :'Field has no constant text and no data; skipped');
       return;
     endif;
-    l_front = Rec('':*off:' ':'':0:' ':-1:' ':0:l_line:l_pos:'');
+    l_front = Rec('':*off:' ':'':0:' ':-1:' ':l_line:l_pos:'');
     AddLiteral(l_front:'':l_data:'');
     l_attrInd = CollectAttrs(l_rec:*off);
     if g_override and l_attrInd;
@@ -831,7 +831,7 @@ dcl-proc ConvertD;
   endif;
 
   if l_use = 'O' and %len(l_data) > 0 and l_outS = 'Y';
-    AddLiteral(Rec('':*off:' ':'':0:' ':-1:' ':0:0:0:''):'DFT(':l_data:')');
+    AddLiteral(Rec('':*off:' ':'':0:' ':-1:' ':0:0:''):'DFT(':l_data:')');
   endif;
 
   l_attrInd = CollectAttrs(l_rec:l_inp);
@@ -850,7 +850,7 @@ dcl-proc ConvertD;
 
   // constant shown while the output indicator is off
   if l_use = 'O' and %subst(l_outS:1:1) = 'I' and %len(l_data) > 0;
-    l_front = Rec(l_ind:*on:' ':'':0:' ':-1:' ':0:l_line:l_pos:'');
+    l_front = Rec(l_ind:*on:' ':'':0:' ':-1:' ':l_line:l_pos:'');
     AddLiteral(l_front:'':l_data:'');
     l_attrInd = CollectAttrs(l_rec:*off);
     KwFlush();
