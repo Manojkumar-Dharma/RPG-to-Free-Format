@@ -7,7 +7,7 @@ the same commit. Status values: Planned, In progress, Done.
 
 | ID | Converter | Item | Status |
 |----|-----------|------|--------|
-| OCL-01 | IAOCLTOCLE | PRINTER, BLDFILE | Planned |
+| OCL-01 | IAOCLTOCLE | PRINTER, BLDFILE | In progress (written, needs a compile and test) |
 | OCL-02 | IAOCLTOCLE | Procedure calls other than LOAD and RUN | Planned |
 | OCL-03 | IAOCLTOCLE | `?F'...'?` file sizes; DATAF1- and ACTIVE- conditions | Planned |
 | OCL-04 | IAOCLTOCLE | WAIT, PAUSE, NOHALT, CANCEL | Planned |

@@ -20,6 +20,8 @@ Statuses: C converted, A converted with an assumption, R needs review.
 | `// FILE ...` with other keywords | `OVRDBF` plus the original as a comment | R | The keywords not converted are listed. |
 | `// FILE ...,JOB-YES` | `OVRDBF` plus comment | R | Not given the end-of-step removal; the override is meant to last for the job. |
 | `// FILE ...,DISP-NEW` | comment only | R | Creating the file is not converted. |
+| `// PRINTER [NAME-x][,keywords]` | `OVRPRTF FILE(x) parms`; without NAME `FILE(*PRTF)` | C | Keywords per the table "// PRINTER Override Printer File" (SC41-4730, chapter 17); see below. Removed after the next CALL with `DLTOVR FILE(x)`. Keywords not in the table are listed and the statement is R. |
+| `BLDFILE name,S\|D,R\|B,size,reclen[,keylen[,retention]]` (statement or procedure line) | `CRTPF FILE(QS36F/name) RCDLEN(n) SIZE(records extend 32767)`; type D adds `INZPFM FILE(QS36F/name) RCDNBR(records)` | A | See below. Indexed (I) and other types are R. |
 | `// LOCAL OFFSET-n,DATA-'text'[,AREA-USER]` | `CHGDTAARA DTAARA(*LDA (n len)) VALUE('text')` | A | OFFSET taken as a 1-based position; 0 is rejected (R). Other keywords are R. DATA that is one expression (`?DATE?`, `?USER?`, `?L'p,n'?`) uses its variable: `VALUE(&DATE)`. |
 | `// TAG name` | `NAME:` | C | Text after the label becomes a comment. |
 | `// GOTO name` | `GOTO CMDLBL(NAME)` | C | Text after the label becomes a comment. |
@@ -65,6 +67,47 @@ Conditions, from the reference: the condition is one string with no blanks (blan
 
 The text after a condition is taken to supply columns 4 onward of the specification line (the line is built as three blanks plus that text). This is an assumption from the sample lines, where it puts the spec letter (`I`, `F`) in column 6 (reported as an assumption). `?L'p,n'?` inside a spec line (for example `EQC?L'56,1'?`) is replaced by the value at run time.
 
+## PRINTER and BLDFILE
+
+PRINTER keyword mapping (from the guide's table; the guide lists them as
+OCL statement keyword and the OVRPRTF parameter it sets):
+
+| PRINTER | OVRPRTF | PRINTER | OVRPRTF |
+|---|---|---|---|
+| `NAME-x` | `FILE(x)` | `COPIES-n` | `COPIES(n)` |
+| `DEVICE-d` | `DEV(d)` | `FORMS-f` | `FORMTYPE(f)` |
+| `LINES-n` | `PAGESIZE(n *N)` | `LPI-n`, `CPI-n` | `LPI(n)`, `CPI(n)` |
+| `ALIGN-YES/NO` | `ALIGN(*YES/*NO)` | `SPOOL-YES/NO` | `SPOOL(*YES/*NO)` |
+| `HOLD-YES/NO` | `SAVE(*YES/*NO)` | `DEFER-YES` | `SCHEDULE(*FILEEND)` |
+| `PRIORITY-0` | `OUTPTY(7) HOLD(*YES)` | `PRIORITY-1` to `5` | `OUTPTY(7)` to `OUTPTY(3)` |
+| `TEXT-YES/NO` | `PRTQLTY(*NLQ/*DRAFT)` | `EOFMSG-YES/NO` | `FORMFEED(*CONT/*CUT)` |
+| `DRAWER-1/2` | `DRAWER(n)` | `DRAWER-3` | `DRAWER(*E1)` |
+| `ROTATE-n` | `PAGRTT(n)` | `JUSTIFY-n` | `JUSTIFY(n)` |
+| `CONTINUE-YES/NO` | `SHARE(*YES/*NO)` | | |
+
+Assumptions (reported A): `DEFER-NO` is written as `SCHEDULE(*IMMED)` (the
+guide lists only DEFER-YES); `CONTINUE-YES` keeps the override until a
+`CONTINUE-NO` (it is not removed after the next CALL; the guide describes the
+function as like SHARE(*YES) with page size changes between steps, which is
+not reproduced); `DLTOVR FILE(*PRTF)` is accepted for the session printer
+override. Not converted (statement R): `FONT`, the communications keywords
+(`LOCATION`, `SYMID`, `LWSID`, `GROUP`, `APPLID`, `BATCH`, `HOSTNAME`,
+`FMHI`, `MSGPROT`, `PARTNER`, `SWTYP`), record keywords (`RECSEP`, `BLKL`,
+`RECL`, `TRANSP`, `BLANK`) and the IGC keywords (`IGCCPI`, `SOSI`, `TYPE`,
+`EXTN`). A condition (`// IFF ?10?/92 PRINTER ...`) wraps the OVRPRTF as for
+other statements.
+
+BLDFILE: the guide's example `BLDFILE NEWFILE,S,R,100,256,,T` gives the
+positions: file name, type, size type, size, record length, key length,
+retention. `R` or `RECORDS` is a size in records, `B` or `BLOCKS` in blocks of
+2560 bytes (records = blocks x 2560 / record length). The extend value is the
+guide's default, 32767 divided by the record length; the number of extends is
+taken as 32767. The file goes to QS36F, the S/36 environment files library
+(assumed), and stays until deleted, also for retention `T` or `J`. Direct
+files are filled with blank records by INZPFM (the guide says a new direct file
+must be initialised). A key length, other retention values or more operands
+are listed and the statement is R.
+
 ## Lines without `//`
 
 - A `/* ... */` line is already a CL comment and is copied (text kept).
@@ -99,4 +142,4 @@ CL cannot put a variable inside a word or a quoted text. Where OCL has an expres
 
 ## Not converted yet
 
-Statements seen in the IBM guides but not converted: `PRINTER` (the page size and printing rules need care), `BLDFILE` and other procedure calls, `?F'...'?` file-size expressions, `DATAF1-`/`ACTIVE-` conditions, `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R.
+Statements seen in the IBM guides but not converted: other procedure calls (`BLDFILE` is converted), `?F'...'?` file-size expressions, `DATAF1-`/`ACTIVE-` conditions, `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R.

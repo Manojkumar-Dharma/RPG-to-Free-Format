@@ -15,6 +15,7 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 dcl-c C_MAXBODY 5000;
 dcl-c C_MAXITEMS 20;
 dcl-c C_QUOTE '''';
+dcl-c C_FILES_LIB 'QS36F';        // S/36 environment files library
 dcl-c C_DFTWIDTH 80;             // line width assumed when the target width is unknown
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -771,11 +772,8 @@ dcl-proc ConvertFile;
   endif;
   l_command += l_label + ')';
   AddBody(l_command);
-  if not l_isJobOverride and %scan(' ' + l_name + ' ':' ' + g_overriddenFiles + ' ') = 0;
-    if %len(g_overriddenFiles) > 0;
-      g_overriddenFiles += ' ';
-    endif;
-    g_overriddenFiles += l_name;
+  if not l_isJobOverride;
+    TrackOverride(l_name);
   endif;
 
   select;
@@ -788,6 +786,303 @@ dcl-proc ConvertFile;
               :'DISP-' + l_disp + ' not converted; OVRDBF default sharing applies');
     other;
       RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+// Remembers a file name so DLTOVR is written after the next CALL.
+dcl-proc TrackOverride;
+  dcl-pi *n;
+    i_name varchar(60) const;
+  end-pi;
+
+  if %scan(' ' + i_name + ' ':' ' + g_overriddenFiles + ' ') = 0;
+    if %len(g_overriddenFiles) > 0;
+      g_overriddenFiles += ' ';
+    endif;
+    g_overriddenFiles += i_name;
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc IsPlainNumber;
+  dcl-pi *n ind;
+    i_value varchar(200) const;
+    i_allowPoint ind const;
+  end-pi;
+
+  if %len(i_value) = 0 or %len(i_value) > 9;
+    return *off;
+  endif;
+  if i_allowPoint;
+    return %check('0123456789.':i_value) = 0;
+  endif;
+  return %check('0123456789':i_value) = 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// // PRINTER [NAME-x][,DEVICE-d][,LINES-n][,CPI-n]...  ->  OVRPRTF
+// Without NAME the session printer override FILE(*PRTF) is used.
+// The keywords are mapped as in the table of the System/36 Environment
+// Programming guide (chapter 17, "// PRINTER Override Printer File").
+dcl-proc ConvertPrinter;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_itemCount int(10);
+  dcl-s l_itemIndex int(10);
+  dcl-s l_isValid ind;
+  dcl-s l_hasProblem ind inz(*off);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
+  dcl-s l_converted varchar(60);
+  dcl-s l_file varchar(60) inz('*PRTF');
+  dcl-s l_parms varchar(400) inz('');
+  dcl-s l_parm varchar(100);
+  dcl-s l_other varchar(200) inz('');
+  dcl-s l_note varchar(200) inz('');
+  dcl-s l_isShared ind inz(*off);
+  dcl-s l_isYes ind;
+  dcl-s l_isNo ind;
+  dcl-s l_yesNo varchar(4);
+
+  l_itemCount = SplitItems(i_operands:l_items);
+  if l_itemCount < 1;
+    ReviewLine(i_lineNo:i_text:'PRINTER operands not understood');
+    return;
+  endif;
+
+  for l_itemIndex = 1 to l_itemCount;
+    SplitKeyword(l_items(l_itemIndex):l_keyword:l_value);
+    l_isValid = *on;
+    l_parm = '';
+    l_isYes = (ToUpper(l_value) = 'YES');
+    l_isNo = (ToUpper(l_value) = 'NO');
+    if l_isYes;
+      l_yesNo = '*YES';
+    else;
+      l_yesNo = '*NO';
+    endif;
+    select;
+      when l_keyword = 'NAME';
+        l_file = ConvertOperand(l_value:l_isValid);
+        if not l_isValid or not IsValidName(l_file:10);
+          l_hasProblem = *on;
+        endif;
+      when l_keyword = 'DEVICE' or l_keyword = 'FORMS';
+        l_converted = ConvertOperand(l_value:l_isValid);
+        if not l_isValid or not IsValidName(l_converted:10);
+          l_hasProblem = *on;
+        elseif l_keyword = 'DEVICE';
+          l_parm = 'DEV(' + l_converted + ')';
+        else;
+          l_parm = 'FORMTYPE(' + l_converted + ')';
+        endif;
+      when l_keyword = 'LINES' and IsPlainNumber(l_value:*off);
+        l_parm = 'PAGESIZE(' + l_value + ' *N)';
+      when l_keyword = 'LPI' and IsPlainNumber(l_value:*on);
+        l_parm = 'LPI(' + l_value + ')';
+      when l_keyword = 'CPI' and IsPlainNumber(l_value:*on);
+        l_parm = 'CPI(' + l_value + ')';
+      when l_keyword = 'COPIES' and IsPlainNumber(l_value:*off);
+        l_parm = 'COPIES(' + l_value + ')';
+      when l_keyword = 'ROTATE' and IsPlainNumber(l_value:*off);
+        l_parm = 'PAGRTT(' + l_value + ')';
+      when l_keyword = 'JUSTIFY' and IsPlainNumber(l_value:*off);
+        l_parm = 'JUSTIFY(' + l_value + ')';
+      when l_keyword = 'DRAWER' and (l_value = '1' or l_value = '2');
+        l_parm = 'DRAWER(' + l_value + ')';
+      when l_keyword = 'DRAWER' and l_value = '3';
+        l_parm = 'DRAWER(*E1)';
+      when l_keyword = 'PRIORITY' and l_value = '0';
+        l_parm = 'OUTPTY(7) HOLD(*YES)';
+      when l_keyword = 'PRIORITY' and %len(l_value) = 1
+           and %check('12345':l_value) = 0;
+        // S/36 priority 1 to 5 is AS/400 output priority 7 to 3
+        l_parm = 'OUTPTY(' + %char(8 - %int(l_value)) + ')';
+      when l_keyword = 'ALIGN' and (l_isYes or l_isNo);
+        l_parm = 'ALIGN(' + l_yesNo + ')';
+      when l_keyword = 'SPOOL' and (l_isYes or l_isNo);
+        l_parm = 'SPOOL(' + l_yesNo + ')';
+      when l_keyword = 'HOLD' and (l_isYes or l_isNo);
+        l_parm = 'SAVE(' + l_yesNo + ')';
+      when l_keyword = 'TEXT' and l_isYes;
+        l_parm = 'PRTQLTY(*NLQ)';
+      when l_keyword = 'TEXT' and l_isNo;
+        l_parm = 'PRTQLTY(*DRAFT)';
+      when l_keyword = 'EOFMSG' and l_isYes;
+        l_parm = 'FORMFEED(*CONT)';
+      when l_keyword = 'EOFMSG' and l_isNo;
+        l_parm = 'FORMFEED(*CUT)';
+      when l_keyword = 'DEFER' and l_isYes;
+        l_parm = 'SCHEDULE(*FILEEND)';
+      when l_keyword = 'DEFER' and l_isNo;
+        l_parm = 'SCHEDULE(*IMMED)';
+        l_note = 'DEFER-NO written as SCHEDULE(*IMMED)';
+      when l_keyword = 'CONTINUE' and l_isYes;
+        l_parm = 'SHARE(*YES)';
+        l_isShared = *on;
+        l_note = 'CONTINUE-YES: the override is kept until CONTINUE-NO';
+      when l_keyword = 'CONTINUE' and l_isNo;
+        l_parm = 'SHARE(*NO)';
+      other;
+        if %len(l_other) > 0;
+          l_other += ' ';
+        endif;
+        l_other += %trim(l_items(l_itemIndex));
+    endsl;
+    if l_parm <> '';
+      if %len(l_parms) > 0;
+        l_parms += ' ';
+      endif;
+      l_parms += l_parm;
+    endif;
+  endfor;
+
+  if l_hasProblem;
+    ReviewLine(i_lineNo:i_text
+               :'NAME, DEVICE or FORMS is not a valid name or uses an expression');
+    return;
+  endif;
+  if %len(l_parms) = 0;
+    if %len(l_other) > 0;
+      ReviewLine(i_lineNo:i_text:'Keywords not converted: ' + l_other);
+    else;
+      RptItem(C_STS_CONVERTED:i_lineNo:i_text
+              :'No printer attribute to override');
+    endif;
+    return;
+  endif;
+
+  AddBody('OVRPRTF FILE(' + l_file + ') ' + l_parms);
+  // The override lasts for one job step (CONTINUE-YES: until CONTINUE-NO).
+  if not l_isShared;
+    TrackOverride(l_file);
+  endif;
+
+  select;
+    when l_other <> '';
+      AddComment('OCL: ' + i_text);
+      RptItem(C_STS_REVIEW:i_lineNo:i_text
+              :'Keywords not converted: ' + l_other);
+    when l_note <> '';
+      RptItem(C_STS_ASSUMPTION:i_lineNo:i_text:l_note);
+    other;
+      RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+// BLDFILE name,type,R|B,size,record-length[,key-length[,retention]]
+// S (sequential) and D (direct) files become CRTPF in the files library
+// (QS36F); a direct file is also initialised with INZPFM. Indexed files
+// need a key and are not converted. The size is given in records (R or
+// RECORDS) or blocks (B or BLOCKS, 2560 bytes each).
+dcl-proc ConvertBldFile;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_itemCount int(10);
+  dcl-s l_itemIndex int(10);
+  dcl-s l_isValid ind;
+  dcl-s l_name varchar(60);
+  dcl-s l_fileType varchar(10);
+  dcl-s l_sizeType varchar(10);
+  dcl-s l_recordLength int(10);
+  dcl-s l_records int(20);
+  dcl-s l_extend int(10);
+  dcl-s l_retention varchar(10);
+  dcl-s l_other varchar(200) inz('');
+  dcl-s l_note varchar(200) inz('');
+
+  l_itemCount = SplitItems(i_operands:l_items);
+  if l_itemCount < 5;
+    ReviewLine(i_lineNo:i_text
+               :'BLDFILE needs file name, type, size type, size and record length');
+    return;
+  endif;
+
+  l_name = ConvertOperand(l_items(1):l_isValid);
+  if not l_isValid or not IsValidName(l_name:10);
+    ReviewLine(i_lineNo:i_text:'BLDFILE file name is not valid or uses an expression');
+    return;
+  endif;
+  l_fileType = ToUpper(l_items(2));
+  l_sizeType = ToUpper(l_items(3));
+  if not IsPlainNumber(l_items(4):*off) or not IsPlainNumber(l_items(5):*off)
+     or (l_sizeType <> 'R' and l_sizeType <> 'RECORDS'
+         and l_sizeType <> 'B' and l_sizeType <> 'BLOCKS');
+    ReviewLine(i_lineNo:i_text
+               :'BLDFILE size type, size or record length is not understood');
+    return;
+  endif;
+  l_recordLength = %int(l_items(5));
+  if l_recordLength < 1 or l_recordLength > 32766;
+    ReviewLine(i_lineNo:i_text:'BLDFILE record length is out of range');
+    return;
+  endif;
+  if l_sizeType = 'R' or l_sizeType = 'RECORDS';
+    l_records = %int(l_items(4));
+  else;
+    l_records = %int(l_items(4)) * 2560 / l_recordLength;
+  endif;
+  if l_records < 1 or l_records > 99999999;
+    ReviewLine(i_lineNo:i_text:'BLDFILE size is out of range');
+    return;
+  endif;
+  if l_fileType <> 'S' and l_fileType <> 'D';
+    ReviewLine(i_lineNo:i_text
+               :'Only sequential (S) and direct (D) files are converted');
+    return;
+  endif;
+
+  // Optional items after the record length: key length, retention, others.
+  if l_itemCount >= 6 and %len(l_items(6)) > 0;
+    l_other = 'key length ' + l_items(6);
+  endif;
+  if l_itemCount >= 7;
+    l_retention = ToUpper(l_items(7));
+    if l_retention = 'T' or l_retention = 'J';
+      l_note = 'Temporary file kept until deleted (retention ' + l_retention + ')';
+    elseif %len(l_retention) > 0 and l_retention <> 'P';
+      l_other += ' retention ' + l_retention;
+    endif;
+  endif;
+  for l_itemIndex = 8 to l_itemCount;
+    if %len(l_items(l_itemIndex)) > 0;
+      l_other += ' ' + l_items(l_itemIndex);
+    endif;
+  endfor;
+  l_other = %trim(l_other);
+
+  l_extend = %max(32767 / l_recordLength:1);
+  AddBody('CRTPF FILE(' + C_FILES_LIB + '/' + l_name + ') RCDLEN('
+          + %trim(%char(l_recordLength)) + ') SIZE('
+          + %trim(%char(l_records)) + ' ' + %trim(%char(l_extend)) + ' 32767)');
+  if l_fileType = 'D';
+    AddBody('INZPFM FILE(' + C_FILES_LIB + '/' + l_name + ') RCDNBR('
+            + %trim(%char(l_records)) + ')');
+  endif;
+
+  select;
+    when l_other <> '';
+      AddComment('OCL: ' + i_text);
+      RptItem(C_STS_REVIEW:i_lineNo:i_text
+              :'Not converted: ' + l_other);
+    other;
+      if l_note = '';
+        l_note = 'File created in ' + C_FILES_LIB + '; extend ' + %trim(%char(l_extend))
+                 + ' records as the guide default';
+      endif;
+      RptItem(C_STS_ASSUMPTION:i_lineNo:i_text:l_note);
   endsl;
 end-proc;
 
@@ -2061,6 +2356,10 @@ dcl-proc ProcessStatement;
       ConvertRun(i_lineNo:i_text:l_operands);
     when l_keyword = 'FILE';
       ConvertFile(i_lineNo:i_text:l_operands);
+    when l_keyword = 'PRINTER';
+      ConvertPrinter(i_lineNo:i_text:l_operands);
+    when l_keyword = 'BLDFILE';
+      ConvertBldFile(i_lineNo:i_text:l_operands);
     when l_keyword = 'LOCAL';
       ConvertLocal(i_lineNo:i_text:l_operands);
     when l_keyword = 'EVALUATE';
@@ -2119,6 +2418,8 @@ dcl-proc PassThroughClLine;
   dcl-s l_command varchar(60);
   dcl-s l_clLine varchar(512);
   dcl-s l_open ind;
+  dcl-s l_operands varchar(512);
+  dcl-s l_tail varchar(512);
 
   l_blankPos = %scan(' ':i_text);
   if l_blankPos = 0;
@@ -2130,6 +2431,14 @@ dcl-proc PassThroughClLine;
      or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ':SafeSubstr(l_command:1:1)) > 0
      or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$':l_command) > 0;
     ReviewLine(i_lineNo:i_text:'Line is not an OCL statement or a command');
+    return;
+  endif;
+
+  if l_command = 'BLDFILE' and l_blankPos > 0;
+    l_operands = %trim(SafeSubstrToEnd(i_text:l_blankPos + 1));
+    l_tail = SplitStatementTail(l_operands);
+    ConvertBldFile(i_lineNo:i_text:l_operands);
+    AddComment(l_tail);
     return;
   endif;
 
