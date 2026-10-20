@@ -15,7 +15,6 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 dcl-c C_MAXBODY 5000;
 dcl-c C_MAXITEMS 20;
 dcl-c C_QUOTE '''';
-dcl-c C_FILES_LIB 'QS36F';        // S/36 environment files library
 dcl-c C_DFTWIDTH 80;             // line width assumed when the target width is unknown
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -978,8 +977,9 @@ end-proc;
 
 // ------------------------------------------------------------------
 // BLDFILE name,type,R|B,size,record-length[,key-length[,retention]]
-// S (sequential) and D (direct) files become CRTPF in the files library
-// (QS36F); a direct file is also initialised with INZPFM. Indexed files
+// S (sequential) and D (direct) files become CRTPF in QTEMP, or in the
+// library given as LIBRARY-x; a direct file is also initialised with
+// INZPFM. Indexed files
 // need a key and are not converted. The size is given in records (R or
 // RECORDS) or blocks (B or BLOCKS, 2560 bytes each).
 dcl-proc ConvertBldFile;
@@ -1000,6 +1000,9 @@ dcl-proc ConvertBldFile;
   dcl-s l_records int(20);
   dcl-s l_extend int(10);
   dcl-s l_retention varchar(10);
+  dcl-s l_library varchar(60) inz('QTEMP');
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
   dcl-s l_other varchar(200) inz('');
   dcl-s l_note varchar(200) inz('');
 
@@ -1045,30 +1048,37 @@ dcl-proc ConvertBldFile;
   endif;
 
   // Optional items after the record length: key length, retention, others.
-  if l_itemCount >= 6 and %len(l_items(6)) > 0;
+  if l_itemCount >= 6 and %len(l_items(6)) > 0
+     and %scan('LIBRARY-':ToUpper(l_items(6))) <> 1;
     l_other = 'key length ' + l_items(6);
   endif;
-  if l_itemCount >= 7;
+  if l_itemCount >= 7 and %scan('LIBRARY-':ToUpper(l_items(7))) <> 1;
     l_retention = ToUpper(l_items(7));
-    if l_retention = 'T' or l_retention = 'J';
-      l_note = 'Temporary file kept until deleted (retention ' + l_retention + ')';
-    elseif %len(l_retention) > 0 and l_retention <> 'P';
+    if %len(l_retention) > 0 and l_retention <> 'P' and l_retention <> 'T'
+       and l_retention <> 'J';
       l_other += ' retention ' + l_retention;
     endif;
   endif;
-  for l_itemIndex = 8 to l_itemCount;
-    if %len(l_items(l_itemIndex)) > 0;
+  for l_itemIndex = 6 to l_itemCount;
+    SplitKeyword(l_items(l_itemIndex):l_keyword:l_value);
+    if l_keyword = 'LIBRARY';
+      l_library = ConvertOperand(l_value:l_isValid);
+      if not l_isValid or not IsValidName(l_library:10);
+        ReviewLine(i_lineNo:i_text:'BLDFILE LIBRARY is not valid or uses an expression');
+        return;
+      endif;
+    elseif l_itemIndex >= 8 and %len(l_items(l_itemIndex)) > 0;
       l_other += ' ' + l_items(l_itemIndex);
     endif;
   endfor;
   l_other = %trim(l_other);
 
   l_extend = %max(32767 / l_recordLength:1);
-  AddBody('CRTPF FILE(' + C_FILES_LIB + '/' + l_name + ') RCDLEN('
+  AddBody('CRTPF FILE(' + l_library + '/' + l_name + ') RCDLEN('
           + %trim(%char(l_recordLength)) + ') SIZE('
           + %trim(%char(l_records)) + ' ' + %trim(%char(l_extend)) + ' 32767)');
   if l_fileType = 'D';
-    AddBody('INZPFM FILE(' + C_FILES_LIB + '/' + l_name + ') RCDNBR('
+    AddBody('INZPFM FILE(' + l_library + '/' + l_name + ') RCDNBR('
             + %trim(%char(l_records)) + ')');
   endif;
 
@@ -1079,8 +1089,8 @@ dcl-proc ConvertBldFile;
               :'Not converted: ' + l_other);
     other;
       if l_note = '';
-        l_note = 'File created in ' + C_FILES_LIB + '; extend ' + %trim(%char(l_extend))
-                 + ' records as the guide default';
+        l_note = 'File created in ' + l_library + '; extend '
+                 + %trim(%char(l_extend)) + ' records as the guide default';
       endif;
       RptItem(C_STS_ASSUMPTION:i_lineNo:i_text:l_note);
   endsl;

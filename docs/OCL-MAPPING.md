@@ -21,7 +21,7 @@ Statuses: C converted, A converted with an assumption, R needs review.
 | `// FILE ...,JOB-YES` | `OVRDBF` plus comment | R | Not given the end-of-step removal; the override is meant to last for the job. |
 | `// FILE ...,DISP-NEW` | comment only | R | Creating the file is not converted. |
 | `// PRINTER [NAME-x][,keywords]` | `OVRPRTF FILE(x) parms`; without NAME `FILE(*PRTF)` | C | Keywords per the table "// PRINTER Override Printer File" (SC41-4730, chapter 17); see below. Removed after the next CALL with `DLTOVR FILE(x)`. Keywords not in the table are listed and the statement is R. |
-| `BLDFILE name,S\|D,R\|B,size,reclen[,keylen[,retention]]` (statement or procedure line) | `CRTPF FILE(QS36F/name) RCDLEN(n) SIZE(records extend 32767)`; type D adds `INZPFM FILE(QS36F/name) RCDNBR(records)` | A | See below. Indexed (I) and other types are R. |
+| `BLDFILE name,S\|D,R\|B,size,reclen[,keylen[,retention]][,LIBRARY-x]` (statement or procedure line) | `CRTPF FILE([x|QTEMP]/name) RCDLEN(n) SIZE(records extend 32767)`; type D adds `INZPFM FILE(QTEMP/name) RCDNBR(records)` | A | See below. Indexed (I) and other types are R. |
 | `// LOCAL OFFSET-n,DATA-'text'[,AREA-USER]` | `CHGDTAARA DTAARA(*LDA (n len)) VALUE('text')` | A | OFFSET taken as a 1-based position; 0 is rejected (R). Other keywords are R. DATA that is one expression (`?DATE?`, `?USER?`, `?L'p,n'?`) uses its variable: `VALUE(&DATE)`. |
 | `// TAG name` | `NAME:` | C | Text after the label becomes a comment. |
 | `// GOTO name` | `GOTO CMDLBL(NAME)` | C | Text after the label becomes a comment. |
@@ -102,8 +102,10 @@ positions: file name, type, size type, size, record length, key length,
 retention. `R` or `RECORDS` is a size in records, `B` or `BLOCKS` in blocks of
 2560 bytes (records = blocks x 2560 / record length). The extend value is the
 guide's default, 32767 divided by the record length; the number of extends is
-taken as 32767. The file goes to QS36F, the S/36 environment files library
-(assumed), and stays until deleted, also for retention `T` or `J`. Direct
+taken as 32767. The file goes to QTEMP unless a library is given with an added
+`LIBRARY-x` operand (for example `BLDFILE NEWFILE,S,R,100,256,LIBRARY-QS36F`);
+QTEMP is removed when the job ends, so retention `T` and `J` need no extra step,
+but a file meant to last must be given a library. Direct
 files are filled with blank records by INZPFM (the guide says a new direct file
 must be initialised). A key length, other retention values or more operands
 are listed and the statement is R.
