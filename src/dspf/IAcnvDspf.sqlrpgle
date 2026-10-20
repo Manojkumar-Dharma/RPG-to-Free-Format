@@ -54,7 +54,10 @@ dcl-proc Main;
   l_parm.srcCcsid = i_srcCcsid;
   l_parm.tgtFile = i_tgt.file;
   l_parm.tgtLib = i_tgt.lib;
-  if i_tgt.file = *blanks or i_tgt.file = '*NONE';
+  // No target file (or the default *SRCFILE together with TGTIFS) means an
+  // IFS target.
+  if i_tgt.file = *blanks or i_tgt.file = '*NONE'
+     or (i_tgt.file = '*SRCFILE' and %len(%trim(i_tgtIfs)) > 0);
     l_parm.tgtFile = *blanks;
     l_parm.tgtLib = *blanks;
   endif;

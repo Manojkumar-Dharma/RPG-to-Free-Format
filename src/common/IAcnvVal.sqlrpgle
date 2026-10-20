@@ -97,6 +97,7 @@ dcl-proc ValidateIO export;
   dcl-s l_tgtMbr char(10);
   dcl-s l_tgtType char(10);
   dcl-s l_tgtLib char(10);
+  dcl-s l_tgtFile char(10);
   dcl-s l_srcIfsGiven ind;
   dcl-s l_tgtIfsGiven ind;
   dcl-s l_dir varchar(1024);
@@ -161,13 +162,21 @@ dcl-proc ValidateIO export;
     if l_src.mode <> C_MODE_MBR;
       return Fail('IAC0015':'*SRCLIB':o_msgId:o_msgData);
     endif;
-    l_tgtLib = i_parm.srcLib;
+    // The library the source file is really in (resolves *LIBL / *CURLIB).
+    l_tgtLib = ResolveLib(Up(i_parm.srcLib):Up(i_parm.srcFile));
+  endif;
+  l_tgtFile = i_parm.tgtFile;
+  if Up(l_tgtFile) = '*SRCFILE';
+    if l_src.mode <> C_MODE_MBR;
+      return Fail('IAC0015':'*SRCFILE':o_msgId:o_msgData);
+    endif;
+    l_tgtFile = i_parm.srcFile;
   endif;
 
-  if not IsBlank(l_tgtLib) and not IsBlank(i_parm.tgtFile)
+  if not IsBlank(l_tgtLib) and not IsBlank(l_tgtFile)
      and not l_tgtIfsGiven;
     l_tgt.mode = C_MODE_MBR;
-  elseif IsBlank(l_tgtLib) and IsBlank(i_parm.tgtFile)
+  elseif IsBlank(l_tgtLib) and IsBlank(l_tgtFile)
      and l_tgtIfsGiven;
     l_tgt.mode = C_MODE_IFS;
   else;
@@ -210,7 +219,7 @@ dcl-proc ValidateIO export;
 
   if l_tgt.mode = C_MODE_MBR;
     l_tgt.lib = Up(l_tgtLib);
-    l_tgt.file = Up(i_parm.tgtFile);
+    l_tgt.file = Up(l_tgtFile);
     l_tgt.mbr = Up(l_tgtMbr);
     if not IsSafeName(l_tgt.lib);
       return Fail('IAC0016':%trim(l_tgt.lib):o_msgId:o_msgData);

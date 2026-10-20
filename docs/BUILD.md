@@ -84,4 +84,4 @@ IAOCLTOCLE SRC(MYLIB/QS36PRC MYPROC) SRCTYPE(OCL36) TGT(OTHERLIB/QCLLESRC NEWNAM
 IAOCLTOCLE SRC(*NONE MYPROC) SRCTYPE(OCL36) SRCIFS('/home/me/ocl') TGT(*NONE *SRCMBR) TGTIFS('/home/me/out')
 ```
 
-`TGT(file)` alone uses the source library and the source member name. `*NONE` as the file means an IFS location (then use SRCIFS or TGTIFS). When the target is omitted, the target is an IFS directory only if TGTIFS is given; otherwise the validation fails with the usual message.
+The target file defaults to `*SRCFILE` (the source file) and the target library to `*SRCLIB` (the library the source file is found in, even when the source library is `*LIBL`), so `TGT(*SRCFILE *SRCMBR)` is the default; it is rejected because source and target are the same, so give a different file, library or member. `TGT(QCLLESRC)` alone uses the source library and the source member name. `*NONE` as the file means an IFS location (then use SRCIFS or TGTIFS). When the target is omitted, the target is an IFS directory only if TGTIFS is given; otherwise the validation fails with the usual message.

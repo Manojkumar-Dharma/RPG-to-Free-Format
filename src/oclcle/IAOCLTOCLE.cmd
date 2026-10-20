@@ -2,8 +2,9 @@
 /* CPP: IAOCLTOCLE. Parameter order here must match the program's.         */
 /* SRC(lib/file member) and TGT(lib/file member) are grouped values:   */
 /*   IAOCLTOCLE SRC(MYLIB/QS36PRC MYPROC) SRCTYPE(OCL36) TGT(QCLLESRC)    */
-/* For an IFS source or target give *NONE as the file and use SRCIFS   */
-/* or TGTIFS (a directory); the IFS file name is member.type.          */
+/* Target file *SRCFILE and library *SRCLIB mean the source file and   */
+/* library. For an IFS source or target give *NONE as the file and    */
+/* use SRCIFS or TGTIFS (a directory); the IFS name is member.type.    */
 CMD        PROMPT('OCL36 to CLLE converter')
 
 PARM       KWD(SRC) TYPE(SRC_T) MIN(1) PROMPT('Source file and member')
@@ -22,8 +23,8 @@ PARM       KWD(TGT) TYPE(TGT_T) PROMPT('Target file and member')
 TGT_T:     ELEM       TYPE(TGTFILE_Q) PROMPT('Target file')
            ELEM       TYPE(*NAME) LEN(10) DFT(*SRCMBR) +
                         SPCVAL((*SRCMBR)) PROMPT('Target member')
-TGTFILE_Q: QUAL       TYPE(*NAME) LEN(10) DFT(*NONE) +
-                        SPCVAL((*NONE ' '))
+TGTFILE_Q: QUAL       TYPE(*NAME) LEN(10) DFT(*SRCFILE) +
+                        SPCVAL((*SRCFILE) (*NONE ' '))
            QUAL       TYPE(*NAME) LEN(10) DFT(*SRCLIB) +
                         SPCVAL((*SRCLIB)) PROMPT('Library')
 PARM       KWD(TGTTYPE) TYPE(*CHAR) LEN(10) DFT(CLLE) +
