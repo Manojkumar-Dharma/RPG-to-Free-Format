@@ -85,6 +85,10 @@ CHGVAR     VAR(&ID) VALUE('IAC0018')
 CHGVAR     VAR(&TXT) VALUE('Target library must be a named library, not &1.')
 CALLSUBR   SUBR(ADDMSG)
 
+CHGVAR     VAR(&ID) VALUE('IAC0019')
+CHGVAR     VAR(&TXT) VALUE('&1 can only be used when the source is an IFS directory.')
+CALLSUBR   SUBR(ADDMSG)
+
 CHGVAR     VAR(&ID) VALUE('IAC0101')
 CHGVAR     VAR(&TXT) VALUE('Source read error: &1.')
 CALLSUBR   SUBR(ADDMSG)

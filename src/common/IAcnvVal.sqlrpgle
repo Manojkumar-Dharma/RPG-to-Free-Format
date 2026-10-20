@@ -100,6 +100,7 @@ dcl-proc ValidateIO export;
   dcl-s l_tgtFile char(10);
   dcl-s l_srcIfsGiven ind;
   dcl-s l_tgtIfsGiven ind;
+  dcl-s l_tgtIfs varchar(1024);
   dcl-s l_dir varchar(1024);
   dcl-s l_name varchar(256);
   dcl-s l_first varchar(256);
@@ -143,7 +144,15 @@ dcl-proc ValidateIO export;
 
   // ---- 3 location rules ---------------------------------------------------
   l_srcIfsGiven = %len(%trim(i_parm.srcIfs)) > 0;
-  l_tgtIfsGiven = %len(%trim(i_parm.tgtIfs)) > 0;
+  l_tgtIfs = %trim(i_parm.tgtIfs);
+  if %xlate(C_LOWER:C_UPPER:l_tgtIfs) = '*SRC';
+    // *SRC: the target goes into the source directory
+    if not l_srcIfsGiven;
+      return Fail('IAC0019':'TGTIFS(*SRC)':o_msgId:o_msgData);
+    endif;
+    l_tgtIfs = %trim(i_parm.srcIfs);
+  endif;
+  l_tgtIfsGiven = %len(l_tgtIfs) > 0;
 
   // Source side
   if not IsBlank(i_parm.srcLib) and not IsBlank(i_parm.srcFile)
@@ -249,7 +258,7 @@ dcl-proc ValidateIO export;
   elseif l_src.mode = C_MODE_IFS and l_tgt.mode = C_MODE_IFS;
     if %xlate(C_LOWER:C_UPPER:NormDir(i_parm.srcIfs)
               + %trim(l_src.mbr) + '.' + %trim(l_src.type))
-       = %xlate(C_LOWER:C_UPPER:NormDir(i_parm.tgtIfs)
+       = %xlate(C_LOWER:C_UPPER:NormDir(l_tgtIfs)
                 + %trim(l_tgt.mbr) + '.' + %trim(l_tgt.type));
       return Fail('IAC0012':NormDir(i_parm.srcIfs) + %trim(l_src.mbr)
                   + '.' + %trim(l_src.type):o_msgId:o_msgData);
@@ -316,7 +325,7 @@ dcl-proc ValidateIO export;
                   :o_msgId:o_msgData);
     endif;
   else;
-    l_dir = NormDir(i_parm.tgtIfs);
+    l_dir = NormDir(l_tgtIfs);
     if not DirExists(l_dir) or not IfsAccess(l_dir:2);
       return Fail('IAC0010':l_dir:o_msgId:o_msgData);
     endif;

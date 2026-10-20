@@ -4,7 +4,8 @@
 /*   IAOCLTOCLE SRC(MYLIB/QS36PRC MYPROC) SRCTYPE(OCL36) TGT(QCLLESRC)    */
 /* Target file *SRCFILE and library *SRCLIB mean the source file and   */
 /* library. For an IFS source or target give *NONE as the file and    */
-/* use SRCIFS or TGTIFS (a directory); the IFS name is member.type.    */
+/* use SRCIFS or TGTIFS (a directory; TGTIFS(*SRC) = the source's);   */
+/* the IFS name is member.type.                                        */
 CMD        PROMPT('OCL36 to CLLE converter')
 
 PARM       KWD(SRC) TYPE(SRC_T) MIN(1) PROMPT('Source file and member')
@@ -30,7 +31,7 @@ TGTFILE_Q: QUAL       TYPE(*NAME) LEN(10) DFT(*SRCFILE) +
 PARM       KWD(TGTTYPE) TYPE(*CHAR) LEN(10) DFT(CLLE) +
              PROMPT('Target type')
 PARM       KWD(TGTIFS) TYPE(*CHAR) LEN(1024) VARY(*YES) +
-             DFT(*NONE) SPCVAL((*NONE ' ')) +
+             DFT(*NONE) SPCVAL((*NONE ' ') (*SRC)) +
              PROMPT('Target IFS directory')
 
 PARM       KWD(SRCCCSID) TYPE(*INT4) DFT(*DFT) +
