@@ -18,6 +18,8 @@ dcl-c C_QUOTE '''';
 dcl-c C_DQUOTE '''''';          // two apostrophes (an apostrophe inside text)
 dcl-c C_MAXPARMITEMS 41;           // 40 call parameters plus one to detect more
 dcl-c C_CALLPARMLEN 10;            // length every converted program declares
+dcl-c C_MARKLIB 'QGPL';          // library of the ACTIVE- marker data areas
+dcl-c C_MAXACTIVE 10;
 dcl-c C_DFTWIDTH 80;             // line width assumed when the target width is unknown
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -72,6 +74,13 @@ dcl-s g_tempVariableCount int(10);
 dcl-s g_isSort ind;              // the pending LOAD is #GSORT
 dcl-s g_oclWords varchar(800);          // ,NAME, list: OCL statement words
 dcl-s g_ibmProcedures varchar(4000);    // ,NAME, list: IBM-supplied procedures
+dcl-s g_fileSizeCount int(10);   // ?F'A,name'? results: &F1, &F2, ...
+dcl-s g_dataf1Count int(10);     // DATAF1- flags: &D1, &D2, ...
+dcl-s g_activeCount int(10);     // ACTIVE- flags: &A1, &A2, ...
+dcl-s g_procName varchar(10);    // OCL procedure (source member) name
+dcl-s g_useFileSize ind;         // &FSN and &FSD work variables are needed
+dcl-s g_curLineNo int(10);       // line being converted (for report items)
+dcl-s g_curText varchar(512);
 
 // ------------------------------------------------------------------
 dcl-proc ToUpper;
@@ -270,9 +279,60 @@ dcl-proc ParseLdaExpression;
 end-proc;
 
 // ------------------------------------------------------------------
+// ?F'A,name'? (actual number of data records, 8 digits with leading zeros).
+// Writes the statements that fill a new variable &Fn and returns it, or
+// '' when the expression is not converted: ?F'S,name'? (allocated size,
+// no CL command returns it) and any form with a creation date.
+// i_token is the upper-case text between the question marks.
+dcl-proc FileSizeVariable;
+  dcl-pi *n varchar(20);
+    i_token varchar(60) const;
+  end-pi;
+
+  dcl-s l_inner varchar(60);
+  dcl-s l_commaPos int(10);
+  dcl-s l_type varchar(60);
+  dcl-s l_name varchar(60);
+  dcl-s l_variable varchar(20);
+
+  if %len(i_token) < 6 or SafeSubstr(i_token:1:2) <> 'F'''
+     or SafeSubstr(i_token:%len(i_token):1) <> '''';
+    return '';
+  endif;
+  l_inner = SafeSubstr(i_token:3:%len(i_token) - 3);
+  l_commaPos = %scan(',':l_inner);
+  if l_commaPos < 2;
+    return '';
+  endif;
+  l_type = %trim(SafeSubstr(l_inner:1:l_commaPos - 1));
+  l_name = %trim(SafeSubstrToEnd(l_inner:l_commaPos + 1));
+  if l_type <> 'A' or %scan(',':l_name) > 0;     // S, T and the date form
+    return '';
+  endif;
+  if %len(l_name) = 0 or %len(l_name) > 10
+     or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_#@$':l_name) > 0;
+    return '';
+  endif;
+
+  g_useFileSize = *on;
+  g_fileSizeCount += 1;
+  l_variable = '&F' + %trim(%char(g_fileSizeCount));
+  AddBody('CHGVAR VAR(&FSN) VALUE(0)');
+  AddBody('RTVMBRD FILE(' + l_name + ') MBR(*LAST) NBRCURRCD(&FSN)');
+  AddBody('MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(&FSN) VALUE(0))');
+  AddBody('IF COND(&FSN *GT 16777215) THEN(CHGVAR VAR(&FSN) VALUE(16777215))');
+  AddBody('CHGVAR VAR(&FSD) VALUE(&FSN)');
+  AddBody('CHGVAR VAR(' + l_variable + ') VALUE(&FSD)');
+  RptItem(C_STS_ASSUMPTION:g_curLineNo:g_curText
+          :'File size ' + l_name + ' read with RTVMBRD (NBRCURRCD, last member, '
+          + 'library list); 0 when the file or member cannot be read');
+  return l_variable;
+end-proc;
+
+// ------------------------------------------------------------------
 // Maps the text inside ?...? to a CL variable and its length. Returns ''
 // when the expression is not supported. Supported: ?n? (1-40), ?USER?,
-// ?WS?, ?DATE?, ?L'p,n'?.
+// ?WS?, ?DATE?, ?L'p,n'?, ?F'A,name'?.
 dcl-proc ExpressionVariable;
   dcl-pi *n varchar(20);
     i_token varchar(60) const;
@@ -317,6 +377,10 @@ dcl-proc ExpressionVariable;
   if ParseLdaExpression(l_upperToken:l_position:l_number);
     o_length = l_number;
     return LdaVariableName(l_position:l_number:*on);
+  endif;
+  if SafeSubstr(l_upperToken:1:2) = 'F''';
+    o_length = 8;
+    return FileSizeVariable(l_upperToken);
   endif;
   return '';
 end-proc;
@@ -2077,6 +2141,130 @@ dcl-proc ConditionOperand;
 end-proc;
 
 // ------------------------------------------------------------------
+// DATAF1-name: true when the file (with at least one member) or the library
+// exists. Writes the CHKOBJ statements that set a logical variable &Dn and
+// returns it, or '' for the forms not converted: 'name,date' and 'name,ALL'.
+dcl-proc DataFileCondition;
+  dcl-pi *n varchar(200);
+    i_operand varchar(300) const;
+  end-pi;
+
+  dcl-s l_text varchar(300);
+  dcl-s l_name varchar(60);
+  dcl-s l_flag varchar(10);
+  dcl-s l_isValid ind;
+
+  l_text = i_operand;
+  if %len(l_text) >= 2 and SafeSubstr(l_text:1:1) = C_QUOTE
+     and SafeSubstr(l_text:%len(l_text):1) = C_QUOTE;
+    l_text = SafeSubstr(l_text:2:%len(l_text) - 2);
+  endif;
+  if %len(l_text) = 0 or %scan(',':l_text) > 0 or %scan(C_QUOTE:l_text) > 0;
+    return '';
+  endif;
+  if %scan('?':l_text) = 0
+     and (%len(l_text) > 10
+          or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_#@$':ToUpper(l_text)) > 0);
+    return '';
+  endif;
+  l_name = ConvertOperand(l_text:l_isValid);
+  if not l_isValid or l_name = '';
+    return '';
+  endif;
+
+  g_dataf1Count += 1;
+  l_flag = '&D' + %trim(%char(g_dataf1Count));
+  AddBody('CHGVAR VAR(' + l_flag + ') VALUE(''1'')');
+  AddBody('CHKOBJ OBJ(' + l_name + ') OBJTYPE(*FILE) MBR(*FIRST)');
+  AddBody('MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(' + l_flag + ') VALUE(''0''))');
+  AddBody('IF COND(*NOT ' + l_flag + ') THEN(DO)');
+  AddBody('CHGVAR VAR(' + l_flag + ') VALUE(''1'')');
+  AddBody('CHKOBJ OBJ(QSYS/' + l_name + ') OBJTYPE(*LIB)');
+  AddBody('MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(' + l_flag + ') VALUE(''0''))');
+  AddBody('ENDDO');
+  RptItem(C_STS_ASSUMPTION:g_curLineNo:g_curText
+          :'DATAF1 tested with CHKOBJ on the library list (file with a member, '
+          + 'or library)');
+  return l_flag;
+end-proc;
+
+// ------------------------------------------------------------------
+// ACTIVE-name or ACTIVE-'name1,name2,...': true when any of the procedures
+// is running. Every converted program holds a shared lock on a marker data
+// area named after its OCL procedure (see WriteProgram), so the test tries
+// an exclusive ALCOBJ on it: CPF1002 means the procedure is running.
+// Writes the statements that set a logical variable &An and returns it, or
+// '' when a name cannot be used.
+dcl-proc ActiveCondition;
+  dcl-pi *n varchar(200);
+    i_operand varchar(300) const;
+  end-pi;
+
+  dcl-s l_text varchar(300);
+  dcl-s l_rest varchar(300);
+  dcl-s l_item varchar(60);
+  dcl-s l_name varchar(60);
+  dcl-s l_names varchar(60) dim(C_MAXACTIVE);
+  dcl-s l_nameCnt int(10) inz(0);
+  dcl-s l_commaPos int(10);
+  dcl-s l_index int(10);
+  dcl-s l_flag varchar(10);
+  dcl-s l_isValid ind;
+
+  l_text = i_operand;
+  if %len(l_text) >= 2 and SafeSubstr(l_text:1:1) = C_QUOTE
+     and SafeSubstr(l_text:%len(l_text):1) = C_QUOTE;
+    l_text = SafeSubstr(l_text:2:%len(l_text) - 2);
+  endif;
+  if %len(l_text) = 0;
+    return '';
+  endif;
+
+  l_rest = l_text;
+  dow *on;
+    l_commaPos = %scan(',':l_rest);
+    if l_commaPos = 0;
+      l_item = %trim(l_rest);
+    else;
+      l_item = %trim(SafeSubstr(l_rest:1:l_commaPos - 1));
+    endif;
+    if %len(l_item) = 0 or %scan(C_QUOTE:l_item) > 0 or l_nameCnt >= C_MAXACTIVE;
+      return '';
+    endif;
+    if %scan('?':l_item) = 0
+       and (%len(l_item) > 10
+            or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_#@$':ToUpper(l_item)) > 0);
+      return '';
+    endif;
+    l_nameCnt += 1;
+    l_names(l_nameCnt) = l_item;
+    if l_commaPos = 0;
+      leave;
+    endif;
+    l_rest = SafeSubstrToEnd(l_rest:l_commaPos + 1);
+  enddo;
+
+  g_activeCount += 1;
+  l_flag = '&A' + %trim(%char(g_activeCount));
+  AddBody('CHGVAR VAR(' + l_flag + ') VALUE(''0'')');
+  for l_index = 1 to l_nameCnt;
+    l_name = ConvertOperand(l_names(l_index):l_isValid);
+    if not l_isValid or l_name = '';
+      return '';
+    endif;
+    AddBody('ALCOBJ OBJ((' + C_MARKLIB + '/' + l_name + ' *DTAARA *EXCL)) WAIT(0)');
+    AddBody('MONMSG MSGID(CPF1002) EXEC(CHGVAR VAR(' + l_flag + ') VALUE(''1''))');
+    AddBody('MONMSG MSGID(CPF0000)');
+    AddBody('DLCOBJ OBJ((' + C_MARKLIB + '/' + l_name + ' *DTAARA *EXCL))');
+    AddBody('MONMSG MSGID(CPF0000)');
+  endfor;
+  RptItem(C_STS_ASSUMPTION:g_curLineNo:g_curText
+          :'ACTIVE tested with an exclusive ALCOBJ on the marker data area '
+          + C_MARKLIB + '/name; the procedure must hold a shared lock on it');
+  return l_flag;
+end-proc;
+
+// ------------------------------------------------------------------
 // A condition string as a CL expression: value1/value2 and value1=value2
 // (equal, compared as text) and SWITCHn-0 / SWITCHn-1. '' when the
 // condition is not supported.
@@ -2098,6 +2286,12 @@ dcl-proc ConditionExpression;
   dcl-s l_upperCondition varchar(300);
 
   l_upperCondition = ToUpper(i_cond);
+  if %len(l_upperCondition) > 7 and SafeSubstr(l_upperCondition:1:7) = 'ACTIVE-';
+    return ActiveCondition(SafeSubstrToEnd(i_cond:8));
+  endif;
+  if %len(l_upperCondition) > 7 and SafeSubstr(l_upperCondition:1:7) = 'DATAF1-';
+    return DataFileCondition(SafeSubstrToEnd(i_cond:8));
+  endif;
   if %len(l_upperCondition) = 9 and SafeSubstr(l_upperCondition:1:6) = 'SWITCH'
      and %check('12345678':SafeSubstr(l_upperCondition:7:1)) = 0
      and SafeSubstr(l_upperCondition:8:1) = '-'
@@ -2704,6 +2898,8 @@ dcl-proc ProcessStatement;
     when l_keyword = 'SWITCH';
       ConvertSwitch(i_lineNo:i_text:l_operands);
     when l_keyword = 'RETURN' and %len(l_operands) = 0;
+      AddBody('DLCOBJ OBJ((' + C_MARKLIB + '/' + g_procName + ' *DTAARA *SHRRD))');
+      AddBody('MONMSG MSGID(CPF0000)');
       AddBody('RETURN');
       RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
     other;
@@ -2826,6 +3022,8 @@ dcl-proc ProcessLine;
   dcl-s l_last2 varchar(2);
 
   l_trimmedLine = %trim(i_text);
+  g_curLineNo = i_lineNo;
+  g_curText = i_text;
 
   if g_sortMode;
     if CollectSortLine(i_lineNo:i_text);
@@ -2939,6 +3137,32 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endfor;
+  for l_index = 1 to g_fileSizeCount;
+    if WriteCl('DCL VAR(&F' + %trim(%char(l_index)) + ') TYPE(*CHAR) LEN(8)'
+               :o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endfor;
+  if g_useFileSize;
+    if WriteCl('DCL VAR(&FSN) TYPE(*DEC) LEN(10 0)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+    if WriteCl('DCL VAR(&FSD) TYPE(*DEC) LEN(8 0)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
+  for l_index = 1 to g_activeCount;
+    if WriteCl('DCL VAR(&A' + %trim(%char(l_index)) + ') TYPE(*LGL) LEN(1)'
+               :o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endfor;
+  for l_index = 1 to g_dataf1Count;
+    if WriteCl('DCL VAR(&D' + %trim(%char(l_index)) + ') TYPE(*LGL) LEN(1)'
+               :o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endfor;
   if g_useDate;
     if WriteCl('DCL VAR(&DATE) TYPE(*CHAR) LEN(6)':o_msgId:o_msgData) <> 0;
       return 1;
@@ -2982,12 +3206,35 @@ dcl-proc WriteProgram;
     endif;
   endif;
 
+  // Marker lock for the ACTIVE- test of other procedures (shared, job scope).
+  if WriteCl('CRTDTAARA DTAARA(' + C_MARKLIB + '/' + g_procName
+             + ') TYPE(*CHAR) LEN(1)':o_msgId:o_msgData) <> 0;
+    return 1;
+  endif;
+  if WriteCl('MONMSG MSGID(CPF0000)':o_msgId:o_msgData) <> 0;
+    return 1;
+  endif;
+  if WriteCl('ALCOBJ OBJ((' + C_MARKLIB + '/' + g_procName
+             + ' *DTAARA *SHRRD)) WAIT(0)':o_msgId:o_msgData) <> 0;
+    return 1;
+  endif;
+  if WriteCl('MONMSG MSGID(CPF0000)':o_msgId:o_msgData) <> 0;
+    return 1;
+  endif;
+
   for l_index = 1 to g_bodyCnt;
     if WriteCl(g_body(l_index):o_msgId:o_msgData) <> 0;
       return 1;
     endif;
   endfor;
 
+  if WriteCl('DLCOBJ OBJ((' + C_MARKLIB + '/' + g_procName + ' *DTAARA *SHRRD))'
+             :o_msgId:o_msgData) <> 0;
+    return 1;
+  endif;
+  if WriteCl('MONMSG MSGID(CPF0000)':o_msgId:o_msgData) <> 0;
+    return 1;
+  endif;
   if WriteCl('ENDPGM':o_msgId:o_msgData) <> 0;
     return 1;
   endif;
@@ -3042,6 +3289,13 @@ dcl-proc OclConvert export;
   g_sortExtra = '';
   g_useSql = *off;
   g_isSort = *off;
+  g_fileSizeCount = 0;
+  g_activeCount = 0;
+  g_procName = ToUpper(%trim(i_source.mbr));
+  g_dataf1Count = 0;
+  g_useFileSize = *off;
+  g_curLineNo = 0;
+  g_curText = '';
   g_width = TargetWidthFor(i_target);
   if g_width <= 0;
     g_width = C_DFTWIDTH;

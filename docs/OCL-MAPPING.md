@@ -42,9 +42,37 @@ Evidence: SC41-4731, chapter 3 ("IF", "ELSE", "string1=string2") and chapter 5 (
 | `// ELSE statement` directly after an IF line | `*NOT (condition of the IF line)`; `ELSE IF` chains keep the earlier condition as context | A |
 | condition `a/b` or `a=b` | `a *EQ b`; a and b are a constant or one `?...?` expression; compared as text | A |
 | condition `SWITCHn-0` / `SWITCHn-1` | `%SWITCH(XXXXXXXX)` with the 0 or 1 at position n | A |
+| condition `DATAF1-name` | a logical variable `&Dn`, see below | A |
+| condition `ACTIVE-name` | a logical variable `&An`, see below | A |
 | `// SWITCH nnnnnnnn` | `CHGJOB SWS(nnnnnnnn)` | A |
 
-Other conditions (`DATAF1-`, `ACTIVE-`, `BLOCKS-` and so on) and a conditional `LOAD`, `RUN`, `FILE` or `TAG` are not converted (R). The reference compares two all-numeric values as numbers, so `3` and `03` differ here.
+Other conditions (`BLOCKS-` and so on) and a conditional `LOAD`, `RUN`, `FILE` or `TAG` are not converted (R). The reference compares two all-numeric values as numbers, so `3` and `03` differ here.
+
+### DATAF1 condition
+
+Evidence: SC41-4731, chapter 3, "DATAF1 (Files and Libraries on Disk) Condition". It is true when the file exists (a database file with no member is false) or when a library with that name exists. For `DATAF1-name`, written before the `IF COND(...)` that uses it:
+
+```
+CHGVAR VAR(&D1) VALUE('1')
+CHKOBJ OBJ(name) OBJTYPE(*FILE) MBR(*FIRST)
+MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(&D1) VALUE('0'))
+IF COND(*NOT &D1) THEN(DO)
+CHGVAR VAR(&D1) VALUE('1')
+CHKOBJ OBJ(QSYS/name) OBJTYPE(*LIB)
+MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(&D1) VALUE('0'))
+ENDDO
+```
+
+`&D1` is declared `*LGL` and the condition is `&D1` (`*NOT (&D1)` for `IFF`). The name may be a constant or one expression such as `?2?`; a name with expressions inside a word is built into a `&Tn` variable. Assumptions (A): the file is looked for on the library list, because the OCL says the *current files library*; the S/36 scratch and job file rules are not reproduced. Not converted (R): `'name,date'` (the date selects a creation date) and `'name,ALL'` (a name that starts with the text). The statement is copied as a comment.
+
+### ACTIVE condition
+
+Evidence: SC41-4731, chapter 3, "ACTIVE (Running Procedures) Condition": true when at least one of the named procedures is running (`'proc1,proc2'` is a list; `IFF` is true when none is running); the test for the procedure that contains the test is always false. On the IBM i side a running program holds no lock on its `*PGM` object, and `QSYS2.STACK_INFO` (7.3 TR3 and later) lists the call stack of one job only, so testing every active job needs `*JOBCTL` authority and is slow. The converter uses a cooperative lock instead (decision: shared-lock version).
+
+- Every converted program starts with `CRTDTAARA DTAARA(QGPL/proc) TYPE(*CHAR) LEN(1)` (an existing area is ignored), then `ALCOBJ OBJ((QGPL/proc *DTAARA *SHRRD)) WAIT(0)`, and releases it with `DLCOBJ` before each `RETURN` and before `ENDPGM`. `proc` is the source member name. The library is the constant `C_MARKLIB` in `IAoclCvt`.
+- `ACTIVE-name` or `ACTIVE-'n1,n2'` becomes `&An` (`*LGL`), set before the `IF COND(...)`: for each name `ALCOBJ OBJ((QGPL/name *DTAARA *EXCL)) WAIT(0)`; `MONMSG CPF1002` sets `&An` to `'1'` (running); any other message is ignored; then `DLCOBJ` of the exclusive lock.
+
+Status A. Limits: only procedures converted with this version take the lock, so the test is false for a procedure converted earlier or not converted; the job-scope lock is released when the job ends, so an abended job does not leave it held; a data area with the same name in the marker library is used as the marker; the case of a procedure testing itself (the reference says false) is expected to give false but needs a test on the system.
 
 Text after the operands of a statement (after the first blank outside apostrophes) is a comment and becomes a CL comment, except for `EVALUATE`.
 
@@ -154,7 +182,21 @@ Evidence: SC41-4731, chapter 3. `?n?` is the nth positional parameter of the pro
 | `?WS?` | `&WS` | `RTVJOBA JOB(&WS)` is added. |
 | `?DATE?` | `&DATE` | `RTVSYSVAL SYSVAL(QDATE) RTNVAR(&DATE)`. The S/36 date follows the session date format, QDATE follows the system format (A in practice, not reported yet). |
 | `?L'p,n'?` | `&Lp_n` | `RTVDTAARA DTAARA(*LDA (p n)) RTNVAR(&Lp_n)` is written right before the statement that uses it. |
-| `?n'value'?`, `?F'...'?`, `?nT'..'?` and the other forms | not converted | The statement is copied as a comment (R). |
+| `?F'A,name'?` | `&Fn`, 8 characters with leading zeros | A | The actual number of data records. See below. |
+| `?n'value'?`, `?F'S,name'?`, `?F'T,name'?`, `?F'A,name,date'?`, `?nT'..'?` and the other forms | not converted | The statement is copied as a comment (R). |
+
+`?F'A,name'?` (evidence: SC41-4731, chapter 3, "?F'A,name'? (Actual File Size) Expression"): the result is 8 digits with leading zeros, 00000000 when the file does not exist, has no member or is locked, and 16777215 at most. For each use the converter writes, before the statement:
+
+```
+CHGVAR VAR(&FSN) VALUE(0)
+RTVMBRD FILE(name) MBR(*LAST) NBRCURRCD(&FSN)
+MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(&FSN) VALUE(0))
+IF COND(&FSN *GT 16777215) THEN(CHGVAR VAR(&FSN) VALUE(16777215))
+CHGVAR VAR(&FSD) VALUE(&FSN)
+CHGVAR VAR(&F1) VALUE(&FSD)
+```
+
+`&FSN` is `*DEC (10 0)`, `&FSD` is `*DEC (8 0)` and `&F1` is `*CHAR (8)`; the move through `&FSD` gives the leading zeros. Checked against the IBM i 7.3 CL reference: `RTVMBRD` `NBRCURRCD` is the number of non-deleted records, and `MBR(*LAST)` is the last member in a date-ordered list, which matches "the member with the most recent creation date". Remaining assumption (A): the file is found on the library list (SC41-4730 chapter 11 says the file size expressions use the library list when the library list search is on; `?FLIB?`, the current files library, is not converted). `?F'S,name'?` (allocated size) is R: `RTVMBRD` has no allocated size. `DSPFD TYPE(*ATR) OUTPUT(*OUTFILE)` gives the initial number of records (field `PHRCDC`), but S/36 returns the size in the unit (blocks or records) given when the file was created, and that unit is not kept on the AS/400 file, so it cannot be restored reliably. A form with a creation date is R. In a `FILE` statement `?F'...'?` is used with `BLOCKS-` or `RECORDS-` to create a file, and creating the file (`DISP-NEW`) is not converted yet, so those statements stay R.
 
 CL cannot put a variable inside a word or a quoted text. Where OCL has an expression inside a name (for example `LABEL-STK?10?TRI`), the converter builds the name into a temporary variable `&Tn` with `CHGVAR ... *TCAT ...` before the statement and uses `&Tn` (FILE and LOAD operands). In a copied command (a line without `//`) an expression inside a word is not converted (R).
 
@@ -171,4 +213,4 @@ CL cannot put a variable inside a word or a quoted text. Where OCL has an expres
 
 ## Not converted yet
 
-Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `?F'...'?` file-size expressions, `DATAF1-`/`ACTIVE-` conditions, `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R.
+Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `?F'S,name'?`, `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R.

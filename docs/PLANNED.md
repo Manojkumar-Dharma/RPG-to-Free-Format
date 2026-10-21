@@ -9,7 +9,8 @@ the same commit. Status values: Planned, In progress, Done.
 |----|-----------|------|--------|
 | OCL-01 | IAOCLTOCLE | PRINTER, BLDFILE | In progress (written, needs a compile and test) |
 | OCL-02 | IAOCLTOCLE | Procedure calls other than LOAD and RUN | In progress (written, needs a compile and test) |
-| OCL-03 | IAOCLTOCLE | `?F'...'?` file sizes; DATAF1- and ACTIVE- conditions | Planned |
+| OCL-03 | IAOCLTOCLE | `?F'...'?` file sizes; DATAF1- and ACTIVE- conditions | In progress (`?F'A,..'?`, DATAF1 and ACTIVE written, need a compile and test) |
+| OCL-09 | IAOCLTOCLE | Open items from OCL-03: `?F'S,..'?` allocated size, DATAF1 `'name,ALL'` and date forms | Planned |
 | OCL-04 | IAOCLTOCLE | WAIT, PAUSE, NOHALT, CANCEL | Planned |
 | OCL-05 | IAOCLTOCLE | ATTR, ALLOCATE, DEALLOC, SCRATCH | Planned |
 | OCL-06 | IAOCLTOCLE | SESSION, MEMBER, LIBRARY, MRTPROC | Planned |
@@ -25,7 +26,7 @@ the same commit. Status values: Planned, In progress, Done.
 
 ## Notes
 
-- OCL-01 to OCL-07 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-05 add to
+- OCL-01 to OCL-07 and OCL-09 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-05 add to
   `docs/DSPF-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
