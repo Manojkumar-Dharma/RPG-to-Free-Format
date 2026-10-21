@@ -2169,16 +2169,29 @@ dcl-proc DataFileCondition;
   dcl-s l_isValid ind;
   dcl-s l_commaPos int(10);
   dcl-s l_allForm ind inz(*off);
+  dcl-s l_rest varchar(300);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_libraries varchar(200) inz('');
+  dcl-s l_restComma int(10);
 
   l_text = i_operand;
   if %len(l_text) >= 2 and SafeSubstr(l_text:1:1) = C_QUOTE
      and SafeSubstr(l_text:%len(l_text):1) = C_QUOTE;
     l_text = SafeSubstr(l_text:2:%len(l_text) - 2);
   endif;
-  // 'name,ALL' is converted; 'name,date' is not.
+  // 'name,ALL' and 'name,ALL,library1,library2,...' are converted (the
+  // libraries are searched as well as the library list); 'name,date' is not.
   l_commaPos = %scan(',':l_text);
   if l_commaPos > 0;
-    if ToUpper(%trim(SafeSubstrToEnd(l_text:l_commaPos + 1))) <> 'ALL';
+    l_rest = %trim(SafeSubstrToEnd(l_text:l_commaPos + 1));
+    l_restComma = %scan(',':l_rest);
+    if l_restComma = 0;
+      l_keyword = l_rest;
+    else;
+      l_keyword = %trim(SafeSubstr(l_rest:1:l_restComma - 1));
+      l_libraries = %trim(SafeSubstrToEnd(l_rest:l_restComma + 1));
+    endif;
+    if ToUpper(l_keyword) <> 'ALL';
       return '';
     endif;
     l_allForm = *on;
@@ -2197,7 +2210,7 @@ dcl-proc DataFileCondition;
     return '';
   endif;
   if l_allForm;
-    return DataFileAllCondition(l_name);
+    return DataFileAllCondition(l_name:l_libraries);
   endif;
 
   g_dataf1Count += 1;
@@ -2217,18 +2230,33 @@ dcl-proc DataFileCondition;
 end-proc;
 
 // ------------------------------------------------------------------
-// DATAF1-'name,ALL': true when a file or library whose name starts with the
-// text exists (SC41-4731, "DATAF1 (Files and Libraries on Disk) Condition").
-// Files are looked for in C_ALLSCOPE (the library list), libraries in QSYS.
+// DATAF1-'name,ALL[,library1,...]': true when a file or library whose name
+// starts with the text exists (SC41-4731, "DATAF1 (Files and Libraries on
+// Disk) Condition"). Files are looked for in C_ALLSCOPE (the library list)
+// and in the extra libraries given, libraries in QSYS.
 // DSPOBJD with a generic name writes them to QTEMP/IAOBJD and RTVMBRD counts
 // the rows. Returns the logical variable &Dn.
 dcl-proc DataFileAllCondition;
   dcl-pi *n varchar(200);
     i_name varchar(60) const;
+    i_libraries varchar(200) const;     // extra libraries, comma separated
   end-pi;
 
   dcl-s l_flag varchar(10);
   dcl-s l_generic varchar(60);
+  dcl-s l_libraryItems varchar(200) dim(C_MAXITEMS);
+  dcl-s l_libraryNames varchar(60) dim(C_MAXITEMS);
+  dcl-s l_libraryCount int(10);
+  dcl-s l_index int(10);
+  dcl-s l_isValid ind;
+
+  l_libraryCount = SplitItems(i_libraries:l_libraryItems);
+  for l_index = 1 to l_libraryCount;
+    l_libraryNames(l_index) = ConvertOperand(l_libraryItems(l_index):l_isValid);
+    if not l_isValid or not IsValidName(l_libraryNames(l_index):10);
+      return '';
+    endif;
+  endfor;
 
   g_dataf1Count += 1;
   l_flag = '&D' + %trim(%char(g_dataf1Count));
@@ -2246,6 +2274,12 @@ dcl-proc DataFileAllCondition;
   AddBody('DSPOBJD OBJ(' + C_ALLSCOPE + '/' + l_generic + ') OBJTYPE(*FILE) '
           + 'OUTPUT(*OUTFILE) OUTFILE(QTEMP/IAOBJD) OUTMBR(*FIRST *REPLACE)');
   AddBody('MONMSG MSGID(CPF0000)');
+  for l_index = 1 to l_libraryCount;
+    AddBody('DSPOBJD OBJ(' + l_libraryNames(l_index) + '/' + l_generic
+            + ') OBJTYPE(*FILE) OUTPUT(*OUTFILE) OUTFILE(QTEMP/IAOBJD) '
+            + 'OUTMBR(*FIRST *ADD)');
+    AddBody('MONMSG MSGID(CPF0000)');
+  endfor;
   AddBody('DSPOBJD OBJ(QSYS/' + l_generic + ') OBJTYPE(*LIB) '
           + 'OUTPUT(*OUTFILE) OUTFILE(QTEMP/IAOBJD) OUTMBR(*FIRST *ADD)');
   AddBody('MONMSG MSGID(CPF0000)');
@@ -2255,7 +2289,8 @@ dcl-proc DataFileAllCondition;
   AddBody('IF COND(&FSN *GT 0) THEN(CHGVAR VAR(' + l_flag + ') VALUE(''1''))');
   RptItem(C_STS_ASSUMPTION:g_curLineNo:g_curText
           :'DATAF1 name,ALL tested with DSPOBJD on names starting with the text '
-          + '(files in ' + C_ALLSCOPE + ', libraries in QSYS)');
+          + '(files in ' + C_ALLSCOPE
+          + %trimr(' and ' + %trim(i_libraries)) + ', libraries in QSYS)');
   return l_flag;
 end-proc;
 
