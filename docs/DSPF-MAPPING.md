@@ -89,7 +89,7 @@ Assumptions (A): command keys become `CFnn(nn)`, so data is returned with the ke
 | Output (23-24) | Input (26) | DDS |
 |---|---|---|
 | N or blank | not Y | Constant text at the line and column. A record with no text is skipped (A) |
-| Y | not Y | Output field (`O`). Constant text becomes `DFT('text')` |
+| Y | not Y | With constant text (not a message field): constant text as above (A, reported once), because DDS rejects `DFT` on an output-only field without `OVRDTA` (CPD7620) and the program cannot send data to it. Without constant text: output field (`O`) |
 | indicator | not Y | Output field conditioned by the indicator. Constant text, if any, is a constant conditioned by NOT the indicator |
 | N or blank | Y | Input field (`I`). Constant text is not used (A) |
 | Y | Y | Input/output field (`B`) |
@@ -118,7 +118,7 @@ From the table in SC41-4730 Appendix B: blank and B to A, A to X, M to N, N to M
 | 30 | T: `CHECK(M10)`, E: `CHECK(M11)` |
 | 31 | Z: `CHECK(RZ)`, B: `CHECK(RB)` |
 | 35 | `CHECK(FE)` |
-| 36 | `CHECK(AB)` |
+| 36 | `CHECK(AB)`, only together with `M10` or `M11`; DDS needs another validity checking keyword with it (CPD7656). Otherwise left out (A) |
 | 34 | `DUP` |
 | 51 (or S column 21) | `LOWER`, not on numeric fields |
 

@@ -31,6 +31,7 @@ dcl-s g_override ind;              // the open format uses override
 dcl-s g_lowerDft ind;              // S-spec column 21 = Y for the open format
 dcl-s g_formatCount int(10);
 dcl-s g_generatedFieldNo int(10);
+dcl-s g_outputConstReported ind;   // the Y-output constant assumption is in the report
 dcl-s g_fieldNames varchar(10) dim(C_MAXNAMES);
 dcl-s g_fieldNameCount int(10);
 dcl-s g_srcLineNo int(10);         // line number reported for the current item
@@ -602,12 +603,14 @@ end-proc;
 
 // ------------------------------------------------------------------
 // CHECK, DUP and LOWER keywords of an input field.
+// Returns *ON when CHECK(AB) was left out (see below).
 dcl-proc CollectInput;
-  dcl-pi *n;
+  dcl-pi *n ind;
     i_record char(80) const;
     i_numeric ind const;
   end-pi;
 
+  dcl-s l_abDropped ind inz(*off);
   dcl-s l_checks varchar(30);
   dcl-s l_char char(1);
 
@@ -634,7 +637,13 @@ dcl-proc CollectInput;
     l_checks += ' FE';
   endif;
   if %subst(i_record:36:1) = 'Y';
-    l_checks += ' AB';
+    // DDS: at field level AB must be used with another validity checking
+    // keyword (M10, M11 and so on); CHECK(AB) alone does not compile.
+    if %scan('M10':l_checks) > 0 or %scan('M11':l_checks) > 0;
+      l_checks += ' AB';
+    else;
+      l_abDropped = *on;
+    endif;
   endif;
   if %len(l_checks) > 0;
     CollectKeyword('':'CHECK(' + %trim(l_checks) + ')');
@@ -647,6 +656,7 @@ dcl-proc CollectInput;
           or (%subst(i_record:51:1) = ' ' and g_lowerDft));
     CollectKeyword('':'LOWER');
   endif;
+  return l_abDropped;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -746,7 +756,11 @@ dcl-proc ConvertFieldDefinition;
   g_keywordCount = 0;
 
   // ----- constant text: neither an output field nor an input field -----
-  if l_outputSpec = 'N' and not l_isInput;
+  // Output Y with constant text (not a message field) is also a constant: DDS
+  // does not accept DFT on an output-only field without OVRDTA, which needs an
+  // option indicator.
+  if not l_isInput and (l_outputSpec = 'N'
+     or (l_outputSpec = 'Y' and %len(l_data) > 0 and l_ctype <> 'M'));
     if %len(l_data) = 0;
       RptItem(C_STS_ASSUMPTION:l_lineNo:%trimr(l_record)
               :'Field has no constant text and no data; skipped');
@@ -759,7 +773,14 @@ dcl-proc ConvertFieldDefinition;
       CollectKeyword('':'OVRATR');
     endif;
     WriteCollectedKeywords();
-    RptItem(C_STS_CONVERTED:l_lineNo:%trimr(l_record):'');
+    if l_outputSpec = 'Y' and not g_outputConstReported;
+      g_outputConstReported = *on;
+      RptItem(C_STS_ASSUMPTION:l_lineNo:%trimr(l_record)
+              :'Output Y with constant text is written as a constant (first'
+              + ' one reported); the program cannot send data to it');
+    else;
+      RptItem(C_STS_CONVERTED:l_lineNo:%trimr(l_record):'');
+    endif;
     return;
   endif;
 
@@ -806,7 +827,8 @@ dcl-proc ConvertFieldDefinition;
   endif;
   if l_ctype = 'M';
     l_status = C_STS_REVIEW;
-    l_reason = 'Message (MIC) field: kept as a program output field';
+    l_reason = 'Message (MIC) field: kept as a program output field'
+            + ' (message data ' + %trim(l_data) + ' is not written)';
   endif;
   if l_usage = 'B' and %subst(l_outputSpec:1:1) = 'I';
     l_status = C_STS_REVIEW;
@@ -831,13 +853,13 @@ dcl-proc ConvertFieldDefinition;
                   l_ddsType:l_decimals:l_usage:l_line:l_column:''));
   endif;
 
-  if l_usage = 'O' and %len(l_data) > 0 and l_outputSpec = 'Y';
-    AddLiteral(BuildDdsLine('':*off:' ':'':0:' ':-1:' ':0:0:''):'DFT(':l_data:')');
-  endif;
-
   l_attrInd = CollectAttrs(l_record:l_isInput);
   if l_isInput;
-    CollectInput(l_record:l_numeric);
+    if CollectInput(l_record:l_numeric) and l_status = C_STS_CONVERTED;
+      l_status = C_STS_ASSUMPTION;
+      l_reason = 'CHECK(AB) left out: DDS needs another validity checking'
+              + ' keyword with it';
+    endif;
   endif;
   if g_override;
     if l_attrInd;
@@ -995,6 +1017,7 @@ dcl-proc DspConvert export;
   g_override = *off;
   g_lowerDft = *off;
   g_keywordCount = 0;
+  g_outputConstReported = *off;
 
   if OpenSource(i_source:o_msgId:o_msgData) <> 0;
     return 1;
