@@ -202,7 +202,7 @@ CL cannot put a variable inside a word or a quoted text. Where OCL has an expres
 
 ## EVALUATE
 
-`// EVALUATE Pn[,length]=value ...` becomes `CHGVAR VAR(&Pn) VALUE(...)` for each item. Converted values: a text constant in apostrophes (or `''` for blank), a number (leading zeros dropped, or padded or cut to the length), `?USER?`, `?WS?`, `?DATE?`, `?L'p,n'?`, `?n?`. Arithmetic (`+ - * /` and parentheses), `?F'...'?` and other expressions are not converted (R, one report line per item). Words that are not `Pn=...` are comment text and become a CL comment. Status C, or A when a passed parameter is assigned.
+`// EVALUATE Pn[,length]=value ...` becomes `CHGVAR VAR(&Pn) VALUE(...)` for each item. Converted values: a text constant in apostrophes (or `''` for blank), one expression written inside apostrophes (`P10='?L'201,2'?'` is the same as `P10=?L'201,2'?`: `RTVDTAARA DTAARA(*LDA (201 2)) RTNVAR(&L201_2)` then `CHGVAR VAR(&P10) VALUE(&L201_2)`), a number (leading zeros dropped, or padded or cut to the length), `?USER?`, `?WS?`, `?DATE?`, `?L'p,n'?`, `?n?`. Arithmetic (`+ - * /` and parentheses), `?F'...'?` and other expressions are not converted (R, one report line per item). Words that are not `Pn=...` are comment text and become a CL comment. Status C, or A when a passed parameter is assigned.
 
 ## Other rules
 

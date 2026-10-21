@@ -1369,6 +1369,19 @@ dcl-proc ConvertEvaluate;
       when l_expr = '''''';
         l_value = ' ';
         l_valueLength = 1;
+      when %len(l_expr) >= 5 and SafeSubstr(l_expr:1:2) = C_QUOTE + '?'
+           and SafeSubstr(l_expr:%len(l_expr) - 1:2) = '?' + C_QUOTE
+           and %scan('?':l_expr:3) = %len(l_expr) - 1;
+        // '?expr?': one expression written inside apostrophes, for example
+        // '?L'201,2'?'. The apostrophes only quote the expression.
+        l_variable = ExpressionVariable(
+              SafeSubstr(l_expr:3:%len(l_expr) - 4):l_valueLength);
+        if l_variable = '';
+          ReviewLine(i_lineNo:i_text
+                     :'EVALUATE value ' + l_expr + ' is not converted');
+          l_hasProblem = *on;
+          iter;
+        endif;
       when %len(l_expr) >= 2 and SafeSubstr(l_expr:1:1) = C_QUOTE
            and SafeSubstr(l_expr:%len(l_expr):1) = C_QUOTE;
         l_value = SafeSubstr(l_expr:2:%len(l_expr) - 2);
