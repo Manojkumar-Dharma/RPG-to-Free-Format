@@ -18,7 +18,8 @@ dcl-c C_QUOTE '''';
 dcl-c C_DQUOTE '''''';          // two apostrophes (an apostrophe inside text)
 dcl-c C_MAXPARMITEMS 41;           // 40 call parameters plus one to detect more
 dcl-c C_CALLPARMLEN 10;            // length every converted program declares
-dcl-c C_ALLSCOPE '*LIBL';        // where DATAF1-'name,ALL' looks for files
+dcl-c C_ALLSCOPE '*LIBL';          // where DATAF1-'name,ALL' looks for files
+dcl-c C_FDINITFLD 'PHRCDC';   // DSPFD initial records (unverified)
 dcl-c C_MARKLIB 'QGPL';          // library of the ACTIVE- marker data areas
 dcl-c C_MAXACTIVE 10;
 dcl-c C_DFTWIDTH 80;             // line width assumed when the target width is unknown
@@ -75,7 +76,12 @@ dcl-s g_tempVariableCount int(10);
 dcl-s g_isSort ind;              // the pending LOAD is #GSORT
 dcl-s g_oclWords varchar(800);          // ,NAME, list: OCL statement words
 dcl-s g_ibmProcedures varchar(4000);    // ,NAME, list: IBM-supplied procedures
-dcl-s g_fileSizeCount int(10);   // ?F'A,name'? results: &F1, &F2, ...
+dcl-s g_fileSizeCount int(10);   // ?F'A,name'? and ?F'S,name'? results: &F1, &F2, ...
+dcl-s g_initSizeCnt int(10);     // ?F'S,name'? uses (filled before the body)
+dcl-s g_initSizeVar varchar(20) dim(40);
+dcl-s g_initSizeName varchar(10) dim(40);
+dcl-s g_initLine varchar(200) dim(600);
+dcl-s g_initLineCnt int(10);
 dcl-s g_dataf1Count int(10);     // DATAF1- flags: &D1, &D2, ...
 dcl-s g_activeCount int(10);     // ACTIVE- flags: &A1, &A2, ...
 dcl-s g_procName varchar(10);    // OCL procedure (source member) name
@@ -282,8 +288,8 @@ end-proc;
 // ------------------------------------------------------------------
 // ?F'A,name'? (actual number of data records, 8 digits with leading zeros).
 // Writes the statements that fill a new variable &Fn and returns it, or
-// '' when the expression is not converted: ?F'S,name'? (allocated size,
-// no CL command returns it) and any form with a creation date.
+// '' when the expression is not converted: any form with a creation date.
+// ?F'S,name'? is the initial record allocation (DSPFD), see WriteProgram.
 // i_token is the upper-case text between the question marks.
 dcl-proc FileSizeVariable;
   dcl-pi *n varchar(20);
@@ -307,12 +313,31 @@ dcl-proc FileSizeVariable;
   endif;
   l_type = %trim(SafeSubstr(l_inner:1:l_commaPos - 1));
   l_name = %trim(SafeSubstrToEnd(l_inner:l_commaPos + 1));
-  if l_type <> 'A' or %scan(',':l_name) > 0;     // S, T and the date form
+  if (l_type <> 'A' and l_type <> 'S') or %scan(',':l_name) > 0;   // T and the date form
     return '';
   endif;
   if %len(l_name) = 0 or %len(l_name) > 10
      or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_#@$':l_name) > 0;
     return '';
+  endif;
+
+  if l_type = 'S';
+    // Initial record allocation, read once before the body (see WriteProgram).
+    if g_initSizeCnt >= 40;
+      return '';
+    endif;
+    g_useFileSize = *on;
+    g_fileSizeCount += 1;
+    l_variable = '&F' + %trim(%char(g_fileSizeCount));
+    g_initSizeCnt += 1;
+    g_initSizeVar(g_initSizeCnt) = l_variable;
+    g_initSizeName(g_initSizeCnt) = l_name;
+    RptItem(C_STS_ASSUMPTION:g_curLineNo:g_curText
+            :'File size ' + l_name + ' (allocated) taken as the initial number of '
+            + 'records of the file (DSPFD, field ' + C_FDINITFLD + ', please check '
+            + 'the field name); S/36 gave the size in blocks or records; 0 when '
+            + 'the file is not found');
+    return l_variable;
   endif;
 
   g_useFileSize = *on;
@@ -3226,6 +3251,62 @@ dcl-proc WriteCl;
 end-proc;
 
 // ------------------------------------------------------------------
+dcl-proc AddInitLine;
+  dcl-pi *n;
+    i_text varchar(200) const;
+  end-pi;
+
+  if g_initLineCnt < %elem(g_initLine);
+    g_initLineCnt += 1;
+    g_initLine(g_initLineCnt) = i_text;
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// Statements that fill the ?F'S,name'? variables: one DSPFD into
+// QTEMP/IAFD for all the files, then one read of the outfile.
+dcl-proc WriteInitSizes;
+  dcl-pi *n int(10);
+    o_msgId char(7);
+    o_msgData char(256);
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_line varchar(512);
+  dcl-s l_var varchar(20);
+
+  AddInitLine('DLTF FILE(QTEMP/IAFD)');
+  AddInitLine('MONMSG MSGID(CPF0000)');
+  for l_index = 1 to g_initSizeCnt;
+    AddInitLine('CHGVAR VAR(' + g_initSizeVar(l_index) + ') VALUE(''00000000'')');
+    AddInitLine('DSPFD FILE(' + g_initSizeName(l_index) + ') TYPE(*ATR) FILEATR(*PF) '
+                + 'OUTPUT(*OUTFILE) OUTFILE(QTEMP/IAFD) OUTMBR(*FIRST *ADD)');
+    AddInitLine('MONMSG MSGID(CPF0000)');
+  endfor;
+  AddInitLine('OVRDBF FILE(QAFDPHY) TOFILE(QTEMP/IAFD)');
+  AddInitLine('SZREAD: RCVF');
+  AddInitLine('MONMSG MSGID(CPF0000) EXEC(GOTO CMDLBL(SZEND))');
+  for l_index = 1 to g_initSizeCnt;
+    l_var = g_initSizeVar(l_index);
+    AddInitLine('IF COND(&PHFILE *EQ ''' + g_initSizeName(l_index) + ''') THEN(DO)');
+    AddInitLine('CHGVAR VAR(&FSN) VALUE(&' + C_FDINITFLD + ')');
+    AddInitLine('IF COND(&FSN *GT 99999999) THEN(CHGVAR VAR(&FSN) VALUE(99999999))');
+    AddInitLine('CHGVAR VAR(&FSD) VALUE(&FSN)');
+    AddInitLine('CHGVAR VAR(' + l_var + ') VALUE(&FSD)');
+    AddInitLine('ENDDO');
+  endfor;
+  AddInitLine('GOTO CMDLBL(SZREAD)');
+  AddInitLine('SZEND: DLTOVR FILE(QAFDPHY)');
+  AddInitLine('MONMSG MSGID(CPF0000)');
+  for l_index = 1 to g_initLineCnt;
+    if WriteCl(g_initLine(l_index):o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endfor;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc WriteProgram;
   dcl-pi *n int(10);
     o_msgId char(7);
@@ -3326,6 +3407,11 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endif;
+  if g_initSizeCnt > 0;
+    if WriteCl('DCLF FILE(QSYS/QAFDPHY) RCDFMT(QWHFDPHY)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
   if g_useUser;
     if WriteCl('RTVJOBA USER(&USER)':o_msgId:o_msgData) <> 0;
       return 1;
@@ -3355,6 +3441,10 @@ dcl-proc WriteProgram;
     return 1;
   endif;
   if WriteCl('MONMSG MSGID(CPF0000)':o_msgId:o_msgData) <> 0;
+    return 1;
+  endif;
+
+  if g_initSizeCnt > 0 and WriteInitSizes(o_msgId:o_msgData) <> 0;
     return 1;
   endif;
 
@@ -3426,6 +3516,8 @@ dcl-proc OclConvert export;
   g_useSql = *off;
   g_isSort = *off;
   g_fileSizeCount = 0;
+  g_initSizeCnt = 0;
+  g_initLineCnt = 0;
   g_activeCount = 0;
   g_procName = ToUpper(%trim(i_source.mbr));
   g_dataf1Count = 0;
