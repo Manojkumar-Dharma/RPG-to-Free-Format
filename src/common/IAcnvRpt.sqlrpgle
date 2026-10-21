@@ -53,7 +53,7 @@ dcl-proc ConverterName;
     when i_converter = C_CNV_OCL;
       return 'IAOCLTOCLE  (OCL36 to CLLE)';
     when i_converter = C_CNV_DSPF;
-      return 'IACNVDSPF  (DSP36/38 to DSPF)';
+      return 'IACNVDSPF  (DSPF36/38 to DSPF)';
     when i_converter = C_CNV_FREE;
       return 'IACNVFREE  (RPG to free format)';
   endsl;

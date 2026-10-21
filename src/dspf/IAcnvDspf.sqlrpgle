@@ -1,6 +1,6 @@
 **FREE
 // IAcnvDspf - entry program (CPP) of command IACNVDSPF.
-// Converts DSP36 (S/36 display format source) or DSP38 (S/38 DDS) to
+// Converts DSPF36 (S/36 display format source) or DSPF38 (S/38 DDS) to
 // DDS source for a display file.
 // Validates the common parameters, opens the spooled report, runs the
 // conversion (module IAdspCvt) and sends a completion message.

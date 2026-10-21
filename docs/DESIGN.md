@@ -11,7 +11,7 @@ Three converters, one program (and one command) each. Smallest first.
 | Order | Command | Program | Converts |
 |---|---|---|---|
 | 1 | `IAOCLTOCLE` | `IAoclToCle` | OCL36 to CLLE |
-| 2 | `IACNVDSPF` | `IAcnvDspf` | DSP36 / DSP38 to DSPF (DDS) |
+| 2 | `IACNVDSPF` | `IAcnvDspf` | DSPF36 / DSPF38 to DSPF (DDS) |
 | 3 | `IACNVFREE` | `IAcnvFree` | RPG36 / RPG38 / RPG3 / RPG4 to fully free format (`**FREE`) |
 
 For `IAcnvFree`, the intended route is two stages: normalize the older dialects to fixed-format RPG IV, then convert fixed RPG IV to `**FREE`. IBM's `CVTRPGSRC` may cover stage 1 and must be evaluated first.

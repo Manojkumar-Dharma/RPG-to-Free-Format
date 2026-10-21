@@ -1,17 +1,17 @@
-# DSP36 / DSP38 to DSPF mapping (IACNVDSPF)
+# DSPF36 / DSPF38 to DSPF mapping (IACNVDSPF)
 
 Implemented in `src/dspf/IAdspCvt.sqlrpgle`. The command is `IACNVDSPF` (program `IAcnvDspf`). The output is DDS source for a display file (target type `DSPF`, normally member type DSPF in QDDSSRC). Compile it afterwards with `CRTDSPF`.
 
 ## Sources and evidence
 
-- DSP36 is System/36 display format source (SFGR): S (display control), H (help) and D (field definition) specifications. Column layouts are in SC41-4730 *System/36 Environment Programming* Appendix B, which is in `docs/sc414730.pdf`.
+- DSPF36 is System/36 display format source (SFGR): S (display control), H (help) and D (field definition) specifications. Column layouts are in SC41-4730 *System/36 Environment Programming* Appendix B, which is in `docs/sc414730.pdf`.
 - How `$SFGR` turns SFGR into DDS (`CRTS36DSPF`) is described in the same book, chapter 14: format names and ALTNAME, `*DDS` comments, data type mapping, `INDARA` and `INVITE`, right-to-left (`CHECK(RLTB)`), DFRWRT and FRCDTA.
-- `SRCTYPE` accepts `DSP36` and `DSP38`, and the spellings `DSPF36` and `DSPF38` with the same meaning.
-- DSP38 is System/38 display DDS. It is accepted by `CRTDSPF` as it is, so it is copied unchanged.
+- `SRCTYPE` must be `DSPF36` or `DSPF38`.
+- DSPF38 is System/38 display DDS. It is accepted by `CRTDSPF` as it is, so it is copied unchanged.
 
 Where the manuals do not give the generated DDS, the choice made here is marked **assumption** below. The report shows those lines with status A. Anything that is not converted is kept as a DDS comment and reported with status R.
 
-## Source records (DSP36)
+## Source records (DSPF36)
 
 Records are 80 columns. Columns 1-5 are a sequence number and are not used. Column 6 is the specification type.
 
@@ -128,7 +128,7 @@ Each attribute is Y (always) or an indicator. Always-on attributes are joined in
 
 When the format uses override: a field with an attribute controlled by an indicator gets `OVRATR`, and a field with an output indicator gets `OVRDTA` conditioned by that indicator (A).
 
-## DSP38
+## DSPF38
 
 Each line is copied unchanged and reported C. One report line (A) says the member should be compiled with `CRTDSPF` to confirm. Records longer than 80 columns are reported R.
 
@@ -138,4 +138,4 @@ Help definition (H) specifications, message fields (D column 56 = M, kept as pro
 
 ## Sample
 
-`samples/EMPSCR.dsp36` is a small column-exact DSP36 member (one format, constants, input and output fields, an indicator, a continued constant). Convert it first and send me the generated member and the report if anything looks wrong.
+`samples/EMPSCR.dspf36` is a small column-exact DSPF36 member (one format, constants, input and output fields, an indicator, a continued constant). Convert it first and send me the generated member and the report if anything looks wrong.

@@ -20,7 +20,7 @@ the same commit. Status values: Planned, In progress, Done.
 | DSP-02 | IACNVDSPF | Message fields, array fields, edit codes | Planned |
 | DSP-03 | IACNVDSPF | Output indicators on input/output fields | Planned |
 | DSP-04 | IACNVDSPF | Confirm assumptions: CFnn(nn) command keys, INDARA and INVITE added, OVRDTA/OVRATR override keywords | Planned |
-| DSP-05 | IACNVDSPF | Check the layout against a real QS36SRC DSP36 member (needs a sample from the user) | Planned |
+| DSP-05 | IACNVDSPF | Check the layout against a real QS36SRC DSPF36 member (needs a sample from the user) | Planned |
 | FREE-01 | IACNVFREE | RPG to fully free format, based on the S/36-compatible RPG II guide (SC09-1818) | Planned |
 | FREE-02 | IACNVFREE | Evaluate CVTRPGSRC as stage 1 | Planned |
 

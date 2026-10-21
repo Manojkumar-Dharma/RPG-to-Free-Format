@@ -63,7 +63,7 @@ IAOCLTOCLE SRC(MYLIB/QS36PRC MYPROC) SRCTYPE(OCL36) TGT(QCLLESRC)
 
 Then look at the spooled report (`IACNVRPT`) and the new member. Send the compile messages or the result back so fixes can be pushed.
 
-## 5. IACNVDSPF (DSP36 or DSP38 to DSPF)
+## 5. IACNVDSPF (DSPF36 or DSPF38 to DSPF)
 
 Uses the same service program IAcnvSrv.
 
@@ -74,10 +74,10 @@ CRTPGM PGM(MYLIB/IACNVDSPF) MODULE(MYLIB/IAcnvDspf MYLIB/IAdspCvt) BNDSRVPGM(MYL
 CRTCMD CMD(MYLIB/IACNVDSPF) PGM(MYLIB/IACNVDSPF) SRCSTMF('REPO/src/dspf/IACNVDSPF.cmd')
 ```
 
-First test, with the sample member copied into a source file as type DSP36:
+First test, with the sample member copied into a source file as type DSPF36:
 
 ```
-IACNVDSPF SRC(MYLIB/QS36SRC EMPSCR) SRCTYPE(DSP36) TGT(QDDSSRC)
+IACNVDSPF SRC(MYLIB/QS36SRC EMPSCR) SRCTYPE(DSPF36) TGT(QDDSSRC)
 ```
 
 Then `CRTDSPF FILE(MYLIB/EMPSCR) SRCFILE(MYLIB/QDDSSRC) SRCMBR(EMPSCR)`.

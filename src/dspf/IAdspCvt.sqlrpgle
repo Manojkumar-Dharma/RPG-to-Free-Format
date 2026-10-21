@@ -1,8 +1,8 @@
 **FREE
 // IAdspCvt - conversion module of IAcnvDspf.
-// DSP36: System/36 display format source (SFGR: S, H and D specifications,
+// DSPF36: System/36 display format source (SFGR: S, H and D specifications,
 //        SC41-4730 Appendix B) to AS/400 DDS for a display file.
-// DSP38: System/38 display DDS, copied line by line (see docs/DSPF-MAPPING.md).
+// DSPF38: System/38 display DDS, copied line by line (see docs/DSPF-MAPPING.md).
 // Bind with service program IAcnvSrv.
 
 ctl-opt nomain option(*srcstmt:*nodebugio);
@@ -960,7 +960,7 @@ dcl-proc ConvertDsp36;
 end-proc;
 
 // ------------------------------------------------------------------
-// DSP38: System/38 display DDS is valid input to CRTDSPF as it is.
+// DSPF38: System/38 display DDS is valid input to CRTDSPF as it is.
 dcl-proc CopyDsp38;
   dcl-s l_index int(10);
 
@@ -968,7 +968,7 @@ dcl-proc CopyDsp38;
     AddOutputLine(g_sourceLines(l_index));
     RptItem(C_STS_CONVERTED:g_sourceLineNos(l_index):%trimr(g_sourceLines(l_index)):'');
   endfor;
-  RptItem(C_STS_ASSUMPTION:0:'DSP38 source'
+  RptItem(C_STS_ASSUMPTION:0:'DSPF38 source'
           :'Copied unchanged; compile with CRTDSPF to confirm');
 end-proc;
 
@@ -1025,7 +1025,7 @@ dcl-proc DspConvert export;
   endif;
 
   l_type = %trim(%xlate(C_LOWER:C_UPPER:i_source.type));
-  if l_type = 'DSP38' or l_type = 'DSPF38';
+  if l_type = 'DSPF38';
     CopyDsp38();
   else;
     ConvertDsp36();
