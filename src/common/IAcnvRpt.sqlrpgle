@@ -22,7 +22,20 @@ dcl-proc PutLine;
     i_first ind const;
   end-pi;
 
-  TXT = i_text;
+  dcl-s l_clean varchar(132);
+  dcl-s l_index int(10);
+  dcl-s l_char char(1);
+
+  // Source text can hold control characters (below x'40'); the printer file
+  // does not accept them, so they are printed as blanks.
+  l_clean = i_text;
+  for l_index = 1 to %len(l_clean);
+    l_char = %subst(l_clean:l_index:1);
+    if l_char < x'40';
+      %subst(l_clean:l_index:1) = ' ';
+    endif;
+  endfor;
+  TXT = l_clean;
   if i_first;
     write RPTTOP;
   else;
