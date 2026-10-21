@@ -3,7 +3,7 @@
 //
 // Converted in v1 (see docs/OCL-MAPPING.md for the rules and what is assumed):
 //   comment lines, LOAD + RUN, FILE, LOCAL, TAG, GOTO, RETURN,
-//   substitution expressions ?n?, ?USER?, ?WS?
+//   substitution expressions ?n?, ?USER?, ?WS?, procedure calls
 // Everything else is written as a CL comment and reported as REVIEW.
 // The converted program is collected first, because the PGM statement and
 // the DCLs depend on which substitution expressions were used.
@@ -15,6 +15,9 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 dcl-c C_MAXBODY 5000;
 dcl-c C_MAXITEMS 20;
 dcl-c C_QUOTE '''';
+dcl-c C_DQUOTE '''''';          // two apostrophes (an apostrophe inside text)
+dcl-c C_MAXPARMITEMS 41;           // 40 call parameters plus one to detect more
+dcl-c C_CALLPARMLEN 10;            // length every converted program declares
 dcl-c C_DFTWIDTH 80;             // line width assumed when the target width is unknown
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -67,6 +70,8 @@ dcl-s g_ifLast varchar(500);     // condition of the IF line before (for ELSE)
 dcl-s g_ifCtx varchar(500);      // condition context when that line was an ELSE IF
 dcl-s g_tempVariableCount int(10);
 dcl-s g_isSort ind;              // the pending LOAD is #GSORT
+dcl-s g_oclWords varchar(800);          // ,NAME, list: OCL statement words
+dcl-s g_ibmProcedures varchar(4000);    // ,NAME, list: IBM-supplied procedures
 
 // ------------------------------------------------------------------
 dcl-proc ToUpper;
@@ -2300,6 +2305,324 @@ dcl-proc ConvertSwitch;
 end-proc;
 
 // ------------------------------------------------------------------
+// The names a procedure call must not be mistaken for: OCL statement words
+// and the IBM-supplied procedures of SC41-4731, chapter 4.
+dcl-proc InitReservedNames;
+  g_oclWords = ',';
+  g_oclWords += 'ABEND,ALLOCATE,ATTR,CANCEL,CHANGE,COMM,COMPILE,DATE,DEALLOC,DEBUG,';
+  g_oclWords += 'EVOKE,FILE,FILELIB,FORMS,IMAGE,INCLUDE,INFOMSG,JOBQ,LIBRARY,LOAD,';
+  g_oclWords += 'LOCAL,LOG,MEMBER,MENU,MSG,NOHALT,OFF,POWER,PRINTER,PROMPT,REGION,';
+  g_oclWords += 'RESERVE,RUN,RUN400,SESSION,SETDEV,START,STOP,SWITCH,SYSLIST,TIMERSET,';
+  g_oclWords += 'VARY,WAIT,WORKSTN,END,SOURCE,TAG,GOTO,IF,IFF,IFT,ELSE,EVALUATE,';
+  g_oclWords += 'RETURN,PAUSE,SCRATCH,MRTPROC,BLDFILE,';
+  g_ibmProcedures = ',';
+  g_ibmProcedures += '#STRTUP1,#STRTUP2,ALERT,ALOCFLDR,ALOCLIBR,ALTERCOM,ALTERSDL,';
+  g_ibmProcedures += 'APAR,APPNINFO,ARCHIVE,ASM,ASMLOAD,ASMSAVE,AUTO,AUTOC,BACKUP,';
+  g_ibmProcedures += 'BALPRINT,BASIC,BASICP,BASICR,BASICS,BASLOAD,BASSAVE,BGUATTR,';
+  g_ibmProcedures += 'BGUCHART,BGUDATA,BGUGRAPH,BGULOAD,BGUSAVE,BLDFILE,BLDGRAPH,';
+  g_ibmProcedures += 'BLDINDEX,BLDLIBR,BLDMENU,BUILD,CACHE,CATALOG,CGU,CGULOAD,';
+  g_ibmProcedures += 'CGUSAVE,CHGXLATE,CHNGEMEM,CLRPF,CNFIGICF,CNFIGSSP,CNFIGX25,';
+  g_ibmProcedures += 'COBLOAD,COBOL,COBOLC,COBOLCG,COBOLG,COBOLONL,COBOLP,COBSAVE,';
+  g_ibmProcedures += 'COBSDA,COBSEU,COMPRESS,CONDENSE,COPYDATA,COPYDIAG,COPYI1,';
+  g_ibmProcedures += 'COPYPRT,CREATE,CSALL,DATE,DEFINEID,DEFINEPN,DEFINLOC,DEFINX21,';
+  g_ibmProcedures += 'DEFINX25,DEFSUBD,DELETE,DELNRD,DFA,DFU,DFULOAD,DFUSAVE,DICTLOAD,';
+  g_ibmProcedures += 'DICTSAVE,DISABLE,DISPLAY,DLSLOAD,DLSSAVE,DOCCNV,DOCPLOAD,';
+  g_ibmProcedures += 'DOCPSAVE,DSPLOCKS,DSPMNU,DSPSYS,DSU,DSULOAD,DSUSAVE,DUMP,';
+  g_ibmProcedures += 'EDITNRD,EM3270,ENABLE,ENTER,ENTER#,EP3270,EPDOWNL,EPLMRG,ERAP,';
+  g_ibmProcedures += 'ERR,ES3270,EXTRACT,FORMAT,FROMLIBR,HELP,HISTCOPY,HISTCRT,';
+  g_ibmProcedures += 'HISTORY,ICFDEBUG,ICVERIFY,IDDU,IDDUDCT,IDDUDFN,IDDUDISK,';
+  g_ibmProcedures += 'IDDULINK,IDDUPRT,IDDURBLD,IDDUXLAT,IGC,INIT,INIT9332,INITDIAG,';
+  g_ibmProcedures += 'INQUIRY,INQUIRY#,IPL,ITF,IWLOAD,IWPTLOAD,IWPTSAVE,IWSAVE,JOBSTR,';
+  g_ibmProcedures += 'KEYS,KEYSORT,LANLOAD,LANSAVE,LIBRLIBR,LINES,LIST,LIST#,LISTDATA,';
+  g_ibmProcedures += 'LISTFILE,LISTLIBR,LISTNRD,LOAD3601,LOG,LRTRLOAD,LRTRSAVE,';
+  g_ibmProcedures += 'MAINTX25,MCSCONV,MOVEFLDR,MS3270,MSDOWNL,MSGFILE,MSRJE,NOHALT,';
+  g_ibmProcedures += 'OFCBPRT,OFCCAL,OFCCANCL,OFCCOMM,OFCCONV,OFCDATA,OFCDFLT,OFCDIR,';
+  g_ibmProcedures += 'OFCFILE,OFCGRP,OFCINSTL,OFCLDF,OFCLOAD,OFCMAIL,OFCMAINT,OFCMSG,';
+  g_ibmProcedures += 'OFCQ,OFCSAVE,OFCSRCH,OFCSTART,OFCSTAT,OFCUSER,OLINK,OLPDLOAD,';
+  g_ibmProcedures += 'OLPDSAVE,ORGANIZE,OVERRIDE,PASSTHRU,PASSWORD,PATCH,PCEXCH,';
+  g_ibmProcedures += 'PCEXEC,PCOLOAD,PCOPROF,PCOSAVE,PCU,POST,PRINT,PRINTKEY,PROBLEM,';
+  g_ibmProcedures += 'PROFLOAD,PROFSAVE,PRTGRAPH,PTF,QRY,QRYDE,QRYLOAD,QRYRUN,QRYSAVE,';
+  g_ibmProcedures += 'READINFO,REBLD,RELOAD,RENAME,REQUESTX,RESPONSE,RESTEXTN,';
+  g_ibmProcedures += 'RESTFLDR,RESTLIBR,RESTNRD,RESTORE,RETRIEVE,RGZFILE,RJFILE,';
+  g_ibmProcedures += 'RJTABLE,ROLLKEYS,RPG,RPGC,RPGLOAD,RPGONL,RPGP,RPGR,RPGSAVE,';
+  g_ibmProcedures += 'RPGSDA,RPGSEU,RPGX,SAVE,SAVEEXTN,SAVEFLDR,SAVELIBR,SAVENRD,SDA,';
+  g_ibmProcedures += 'SDALOAD,SDASAVE,SECDEF,SECEDIT,SECLIST,SECREST,SECSAVE,SERVICE,';
+  g_ibmProcedures += 'SERVLOG,SET,SETALERT,SETCOMM,SETDUMP,SEU,SEULOAD,SEUSAVE,';
+  g_ibmProcedures += 'SHRFLOAD,SHRFSAVE,SLIB,SMF,SMFDATA,SMFPRINT,SMFSTOP,SOFTWARE,';
+  g_ibmProcedures += 'SORT,SPECIFY,SRTX,SRTXBLD,SRTXLOAD,SRTXSAVE,STARTM,STATEST,';
+  g_ibmProcedures += 'STOPGRP,STOPM,STRTGRP,SWDLOAD,SWDSAVE,SWITCH,SYSLIST,TAPECOPY,';
+  g_ibmProcedures += 'TAPEINIT,TAPESTAT,TEXTCONV,TEXTDCT,TEXTDOC,TEXTFLDR,TEXTLOAD,';
+  g_ibmProcedures += 'TEXTOBJ,TEXTPROF,TEXTPRTQ,TEXTREL,TEXTSAVE,TIMER,TOLIBR,TRACE,';
+  g_ibmProcedures += 'TRANSFER,TRNMGR,UPDATE,UPDATE#,WRKSPL,WRKUSER,WSFLOAD,WSFSAVE,';
+  g_ibmProcedures += 'XREST,XSAVE,';
+end-proc;
+
+// ------------------------------------------------------------------
+// Classifies the first word of a line (NAME or NAME,LIBRARY):
+// 'U' a name that can be a user procedure, 'I' an IBM-supplied procedure,
+// 'O' an OCL statement word or something that is not a name.
+dcl-proc ClassifyProcedureName;
+  dcl-pi *n char(1);
+    i_word varchar(60) const;
+  end-pi;
+
+  dcl-s l_name varchar(60);
+  dcl-s l_commaPos int(10);
+
+  l_commaPos = %scan(',':i_word);
+  if l_commaPos > 0;
+    l_name = ToUpper(SafeSubstr(i_word:1:l_commaPos - 1));
+  else;
+    l_name = ToUpper(i_word);
+  endif;
+  if %len(l_name) = 0 or %len(l_name) > 10
+     or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ#@$':SafeSubstr(l_name:1:1)) > 0
+     or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$_':l_name) > 0;
+    return 'O';
+  endif;
+  if %scan(',' + l_name + ',':g_oclWords) > 0;
+    return 'O';
+  endif;
+  if %scan(',' + l_name + ',':g_ibmProcedures) > 0;
+    return 'I';
+  endif;
+  return 'U';
+end-proc;
+
+// ------------------------------------------------------------------
+// Splits the data of a procedure call at commas outside quotes. An omitted
+// parameter comes back as an empty item. Returns the count (at most
+// C_MAXPARMITEMS).
+dcl-proc SplitParameters;
+  dcl-pi *n int(10);
+    i_text varchar(512) const;
+    o_items varchar(200) dim(C_MAXPARMITEMS);
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_itemCount int(10) inz(0);
+  dcl-s l_currentItem varchar(200) inz('');
+  dcl-s l_inQuote ind inz(*off);
+  dcl-s l_char char(1);
+
+  if %len(%trim(i_text)) = 0;
+    return 0;
+  endif;
+  for l_index = 1 to %len(i_text);
+    l_char = SafeSubstr(i_text:l_index:1);
+    if l_char = C_QUOTE;
+      l_inQuote = not l_inQuote;
+    endif;
+    if l_char = ',' and not l_inQuote;
+      if l_itemCount < C_MAXPARMITEMS;
+        l_itemCount += 1;
+        o_items(l_itemCount) = %trim(l_currentItem);
+      endif;
+      l_currentItem = '';
+    else;
+      l_currentItem += l_char;
+    endif;
+  endfor;
+  if l_itemCount < C_MAXPARMITEMS;
+    l_itemCount += 1;
+    o_items(l_itemCount) = %trim(l_currentItem);
+  endif;
+  return l_itemCount;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc BlankPad;
+  dcl-pi *n varchar(10);
+    i_count int(10) const;
+  end-pi;
+
+  dcl-s l_pad varchar(10) inz('');
+
+  dow %len(l_pad) < i_count and %len(l_pad) < 10;
+    l_pad += ' ';
+  enddo;
+  return l_pad;
+end-proc;
+
+// ------------------------------------------------------------------
+// One parameter of a procedure call as a CL value. The called program
+// declares every parameter CHAR(10), so text is padded to 10 characters
+// (an omitted parameter is 10 blanks) and a value that is shorter than 10
+// is first moved into a temporary variable. o_isValid is *OFF with the
+// reason in o_reason when the parameter cannot be converted.
+dcl-proc ConvertCallParameter;
+  dcl-pi *n varchar(120);
+    i_item varchar(200) const;
+    o_isValid ind;
+    o_reason varchar(100);
+  end-pi;
+
+  dcl-s l_item varchar(200);
+  dcl-s l_content varchar(200);
+  dcl-s l_variable varchar(20);
+  dcl-s l_variableLength int(10);
+  dcl-s l_valueLength int(10);
+  dcl-s l_questionCount int(10);
+  dcl-s l_tempVariable varchar(20);
+  dcl-s l_isQuoted ind;
+
+  o_isValid = *on;
+  o_reason = '';
+  l_item = %trim(i_item);
+
+  if %len(l_item) = 0;                    // omitted parameter
+    return C_QUOTE + BlankPad(C_CALLPARMLEN) + C_QUOTE;
+  endif;
+
+  l_questionCount = %len(l_item) - %len(%scanrpl('?':'':l_item));
+  if l_questionCount > 0;
+    if l_questionCount = 2 and SafeSubstr(l_item:1:1) = '?'
+       and SafeSubstr(l_item:%len(l_item):1) = '?' and %len(l_item) > 2;
+      l_variable = ExpressionVariable(SafeSubstr(l_item:2:%len(l_item) - 2)
+                                      :l_variableLength);
+      if l_variable = '';
+        o_isValid = *off;
+        o_reason = 'Parameter uses an expression that is not converted';
+        return '';
+      endif;
+      if l_variableLength >= C_CALLPARMLEN;
+        return l_variable;
+      endif;
+      // A shorter variable would be read past its end: copy it first.
+      g_tempVariableCount += 1;
+      l_tempVariable = '&T' + %trim(%char(g_tempVariableCount));
+      AddBody('CHGVAR VAR(' + l_tempVariable + ') VALUE(' + l_variable + ')');
+      return l_tempVariable;
+    endif;
+    l_variable = ConvertOperand(l_item:o_isValid);
+    if not o_isValid;
+      o_reason = 'Parameter uses an expression that is not converted';
+      return '';
+    endif;
+    return l_variable;
+  endif;
+
+  l_isQuoted = %len(l_item) >= 2 and SafeSubstr(l_item:1:1) = C_QUOTE
+               and SafeSubstr(l_item:%len(l_item):1) = C_QUOTE;
+  if l_isQuoted;
+    l_content = SafeSubstr(l_item:2:%len(l_item) - 2);
+  else;
+    l_content = l_item;
+  endif;
+  // A quote inside the text must be doubled (as in CL).
+  if %scan(C_QUOTE:%scanrpl(C_DQUOTE:'':l_content)) > 0
+     or (not l_isQuoted and %scan(C_QUOTE:l_content) > 0);
+    o_isValid = *off;
+    o_reason = 'Parameter text with an apostrophe is not understood';
+    return '';
+  endif;
+  l_valueLength = %len(%scanrpl(C_DQUOTE:C_QUOTE:l_content));
+  if l_valueLength > C_CALLPARMLEN;
+    o_isValid = *off;
+    o_reason = 'Parameter is longer than ' + %char(C_CALLPARMLEN)
+               + ' characters (the called program declares CHAR('
+               + %char(C_CALLPARMLEN) + '))';
+    return '';
+  endif;
+  return C_QUOTE + l_content
+         + BlankPad(C_CALLPARMLEN - l_valueLength) + C_QUOTE;
+end-proc;
+
+// ------------------------------------------------------------------
+// Procedure call:  name[,library] [parameters]  or  // name[,library] [parameters]
+// The called procedure is taken to be converted to a program of the same name,
+// so the call becomes CALL PGM([library/]name) PARM(...).
+dcl-proc ConvertProcedureCall;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_target varchar(60) const;
+    i_data varchar(512) const;
+  end-pi;
+
+  dcl-s l_names varchar(200) dim(C_MAXITEMS);
+  dcl-s l_nameCount int(10);
+  dcl-s l_parms varchar(200) dim(C_MAXPARMITEMS);
+  dcl-s l_parmCount int(10);
+  dcl-s l_index int(10);
+  dcl-s l_isValid ind;
+  dcl-s l_reason varchar(100);
+  dcl-s l_name varchar(60);
+  dcl-s l_library varchar(60);
+  dcl-s l_value varchar(120);
+  dcl-s l_parmList varchar(512) inz('');
+  dcl-s l_call varchar(512);
+  dcl-s l_note varchar(100);
+
+  if g_pendLoad;
+    ReviewLine(g_loadLine:g_loadText
+               :'LOAD was not followed by RUN before a procedure call');
+    g_pendLoad = *off;
+  endif;
+
+  l_nameCount = SplitItems(i_target:l_names);
+  if l_nameCount < 1 or l_nameCount > 2;
+    ReviewLine(i_lineNo:i_text
+               :'Procedure call operands not understood (expected name[,library])');
+    return;
+  endif;
+  l_name = ConvertOperand(l_names(1):l_isValid);
+  l_library = '';
+  if l_isValid and l_nameCount = 2;
+    l_library = ConvertOperand(l_names(2):l_isValid);
+  endif;
+  if not l_isValid;
+    ReviewLine(i_lineNo:i_text
+               :'Procedure call uses an expression that is not converted');
+    return;
+  endif;
+  if not IsValidName(l_name:10) or (l_library <> '' and not IsValidName(l_library:10));
+    ReviewLine(i_lineNo:i_text:'Procedure or library name is not a valid name');
+    return;
+  endif;
+
+  l_parmCount = SplitParameters(i_data:l_parms);
+  if l_parmCount > 40;
+    ReviewLine(i_lineNo:i_text:'More than 40 parameters (CL allows 40 here)');
+    return;
+  endif;
+  for l_index = 1 to l_parmCount;
+    l_value = ConvertCallParameter(l_parms(l_index):l_isValid:l_reason);
+    if not l_isValid;
+      ReviewLine(i_lineNo:i_text:l_reason);
+      return;
+    endif;
+    if %len(l_parmList) + %len(l_value) > 440;
+      ReviewLine(i_lineNo:i_text:'Procedure call is too long to convert');
+      return;
+    endif;
+    if l_index > 1;
+      l_parmList += ' ';
+    endif;
+    l_parmList += l_value;
+  endfor;
+
+  l_call = 'CALL PGM(';
+  if l_library <> '';
+    l_call += l_library + '/';
+  endif;
+  l_call += l_name + ')';
+  if l_parmCount > 0;
+    l_call += ' PARM(' + l_parmList + ')';
+  endif;
+  AddBody(l_call);
+
+  l_note = 'Procedure ' + l_name + ' called as a program of the same name';
+  if l_parmCount > 0;
+    l_note += '; parameters passed as CHAR(' + %char(C_CALLPARMLEN) + ')';
+  endif;
+  if g_afterRun;
+    l_note += '; follows RUN, so remove it if it is program data';
+  endif;
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text:l_note);
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc ProcessStatement;
   dcl-pi *n;
     i_lineNo int(10) const;
@@ -2384,8 +2707,16 @@ dcl-proc ProcessStatement;
       AddBody('RETURN');
       RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
     other;
-      ReviewLine(i_lineNo:i_text
-                 :'OCL statement ' + l_keyword + ' is not converted in this version');
+      select;
+        when ClassifyProcedureName(l_keyword) = 'U';
+          ConvertProcedureCall(i_lineNo:i_text:l_keyword:l_operands);
+        when ClassifyProcedureName(l_keyword) = 'I';
+          ReviewLine(i_lineNo:i_text:'IBM-supplied procedure ' + l_keyword
+                     + ' is not converted');
+        other;
+          ReviewLine(i_lineNo:i_text
+                     :'OCL statement ' + l_keyword + ' is not converted in this version');
+      endsl;
   endsl;
 
   // A condition wraps what the statement wrote into IF ... THEN(DO).
@@ -2437,6 +2768,25 @@ dcl-proc PassThroughClLine;
   else;
     l_command = ToUpper(SafeSubstr(i_text:1:l_blankPos - 1));
   endif;
+  // Without a keyword in parentheses the line is a procedure call.
+  if %scan('(':i_text) = 0 and ClassifyProcedureName(l_command) <> 'O'
+     and l_command <> 'BLDFILE';
+    if ClassifyProcedureName(l_command) = 'I';
+      ReviewLine(i_lineNo:i_text:'IBM-supplied procedure ' + l_command
+                 + ' is not converted');
+      return;
+    endif;
+    if l_blankPos > 0;
+      l_operands = %trim(SafeSubstrToEnd(i_text:l_blankPos + 1));
+    else;
+      l_operands = '';
+    endif;
+    l_tail = SplitStatementTail(l_operands);
+    ConvertProcedureCall(i_lineNo:i_text:l_command:l_operands);
+    AddComment(l_tail);
+    return;
+  endif;
+
   if %len(l_command) > 10 or %len(l_command) = 0
      or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ':SafeSubstr(l_command:1:1)) > 0
      or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$':l_command) > 0;
@@ -2661,6 +3011,7 @@ dcl-proc OclConvert export;
   dcl-s l_first int(10);
   dcl-s l_returnCode int(10);
 
+  InitReservedNames();
   g_bodyCnt = 0;
   g_overflow = *off;
   g_maxParm = 0;

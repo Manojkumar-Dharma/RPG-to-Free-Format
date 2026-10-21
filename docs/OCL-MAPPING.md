@@ -110,10 +110,37 @@ files are filled with blank records by INZPFM (the guide says a new direct file
 must be initialised). A key length, other retention values or more operands
 are listed and the statement is R.
 
+## Procedure calls
+
+Evidence: SC41-4730 chapter 16 ("Calling Procedures", "Calling a Procedure from Another Procedure") and SC41-4731 chapter 2. A procedure is called with `name[,library] data`, `// name[,library] data` or `// INCLUDE name[,library] data` (INCLUDE is not converted yet). The data is a list of positional parameters separated by commas; an omitted parameter keeps its comma (`PROCA PARM1,,PARM3`).
+
+| OCL | CLLE output | Status |
+|---|---|---|
+| `name[,lib] p1,p2,...` or `// name[,lib] p1,p2,...` | `CALL PGM([lib/]name) PARM(v1 v2 ...)` | A |
+| `// IF cond name ...` | wrapped in `IF COND(...) THEN(DO)` as for other statements | A |
+
+Assumptions (all reported A): the called procedure is converted to a program of the same name (the CALL does not say where it lives unless the library is given); each parameter is passed as 10 characters, because every converted program declares its `?n?` parameters `CHAR(10)`.
+
+Parameter rules:
+
+- Text, a number or a quoted text is written as a quoted CL value padded with blanks to 10 characters (`FILE1` becomes `'FILE1     '`). Text is kept as typed.
+- An omitted parameter is 10 blanks.
+- A single `?n?`, `?USER?`, `?WS?`, `?DATE?` or `?L'p,n'?` is passed as its variable. A variable shorter than 10 characters (`&DATE`) is first copied with `CHGVAR` into a temporary variable so the called program does not read past its end.
+- Text mixed with an expression (`A?1?`) is built with `*TCAT` into a temporary variable (the text is upper-cased there).
+- Not converted (R): a parameter longer than 10 characters, a parameter with an apostrophe that is not doubled, other `?...?` expressions, more than 40 parameters, a name that is not a valid name.
+
+What counts as a procedure call:
+
+- On a `//` line, any first word that is not an OCL statement word (the list in `InitReservedNames`, taken from SC41-4731 chapter 5) and not an IBM-supplied procedure.
+- On a line without `//`, the first word, as long as the line has no `keyword(` parentheses. A line with parentheses is still copied as a CL command (see below). A bare command name without parentheses, such as `DSPLIBL`, is therefore taken as a procedure call; check the A items in the report.
+- The IBM-supplied procedures listed in SC41-4731 chapter 4 (`DELETE`, `PRINT`, `COPYDATA`, `LISTDATA`, `SORT` and so on) are not user procedures and are not turned into a CALL: the line becomes a comment and is reported R. Each needs its own AS/400 equivalent. `BLDFILE` is the exception that is converted (above).
+- A procedure call after `// RUN` and before the next `//` line may be program data instead; the report entry says so.
+- Text after the data (after the first blank outside apostrophes) is a comment, as for other statements, so parameter text with blanks must be in apostrophes.
+
 ## Lines without `//`
 
 - A `/* ... */` line is already a CL comment and is copied (text kept).
-- A line that starts like a command name (letters, up to 10 characters) is copied as a command with `?n?` substitution applied, status A (check the command exists; for example `OVRDBF`, `OVRPRTF`, `MULTISUP`).
+- A line that starts like a command name (letters, up to 10 characters) and has a keyword in parentheses is copied as a command with `?n?` substitution applied, status A (check the command exists; for example `OVRDBF`, `OVRPRTF`). Without parentheses it is a procedure call (see Procedure calls).
 - Anything else is R.
 
 ## Substitution expressions
@@ -144,4 +171,4 @@ CL cannot put a variable inside a word or a quoted text. Where OCL has an expres
 
 ## Not converted yet
 
-Statements seen in the IBM guides but not converted: other procedure calls (`BLDFILE` is converted), `?F'...'?` file-size expressions, `DATAF1-`/`ACTIVE-` conditions, `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R.
+Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `?F'...'?` file-size expressions, `DATAF1-`/`ACTIVE-` conditions, `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R.
