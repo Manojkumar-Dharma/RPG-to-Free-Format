@@ -6,6 +6,7 @@ Implemented in `src/dspf/IAdspCvt.sqlrpgle`. The command is `IACNVDSPF` (program
 
 - DSP36 is System/36 display format source (SFGR): S (display control), H (help) and D (field definition) specifications. Column layouts are in SC41-4730 *System/36 Environment Programming* Appendix B, which is in `docs/sc414730.pdf`.
 - How `$SFGR` turns SFGR into DDS (`CRTS36DSPF`) is described in the same book, chapter 14: format names and ALTNAME, `*DDS` comments, data type mapping, `INDARA` and `INVITE`, right-to-left (`CHECK(RLTB)`), DFRWRT and FRCDTA.
+- `SRCTYPE` accepts `DSP36` and `DSP38`, and the spellings `DSPF36` and `DSPF38` with the same meaning.
 - DSP38 is System/38 display DDS. It is accepted by `CRTDSPF` as it is, so it is copied unchanged.
 
 Where the manuals do not give the generated DDS, the choice made here is marked **assumption** below. The report shows those lines with status A. Anything that is not converted is kept as a DDS comment and reported with status R.

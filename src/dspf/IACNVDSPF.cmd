@@ -1,4 +1,5 @@
 /* IACNVDSPF - convert DSP36 or DSP38 source to DDS source (DSPF). */
+/* SRCTYPE accepts DSP36, DSP38 and the spellings DSPF36, DSPF38.  */
 /* CPP: IACNVDSPF. Parameter order here must match the program's.         */
 /* SRC(lib/file member) and TGT(lib/file member) are grouped values:   */
 /*   IACNVDSPF SRC(MYLIB/QS36PRC MYPROC) SRCTYPE(OCL36) TGT(QCLLESRC)    */

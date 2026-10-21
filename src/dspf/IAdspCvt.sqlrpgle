@@ -1025,7 +1025,7 @@ dcl-proc DspConvert export;
   endif;
 
   l_type = %trim(%xlate(C_LOWER:C_UPPER:i_source.type));
-  if l_type = 'DSP38';
+  if l_type = 'DSP38' or l_type = 'DSPF38';
     CopyDsp38();
   else;
     ConvertDsp36();
