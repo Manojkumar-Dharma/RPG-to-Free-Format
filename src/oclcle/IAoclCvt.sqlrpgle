@@ -18,6 +18,7 @@ dcl-c C_QUOTE '''';
 dcl-c C_DQUOTE '''''';          // two apostrophes (an apostrophe inside text)
 dcl-c C_MAXPARMITEMS 41;           // 40 call parameters plus one to detect more
 dcl-c C_CALLPARMLEN 10;            // length every converted program declares
+dcl-c C_ALLSCOPE '*LIBL';        // where DATAF1-'name,ALL' looks for files
 dcl-c C_MARKLIB 'QGPL';          // library of the ACTIVE- marker data areas
 dcl-c C_MAXACTIVE 10;
 dcl-c C_DFTWIDTH 80;             // line width assumed when the target width is unknown
@@ -2166,13 +2167,24 @@ dcl-proc DataFileCondition;
   dcl-s l_name varchar(60);
   dcl-s l_flag varchar(10);
   dcl-s l_isValid ind;
+  dcl-s l_commaPos int(10);
+  dcl-s l_allForm ind inz(*off);
 
   l_text = i_operand;
   if %len(l_text) >= 2 and SafeSubstr(l_text:1:1) = C_QUOTE
      and SafeSubstr(l_text:%len(l_text):1) = C_QUOTE;
     l_text = SafeSubstr(l_text:2:%len(l_text) - 2);
   endif;
-  if %len(l_text) = 0 or %scan(',':l_text) > 0 or %scan(C_QUOTE:l_text) > 0;
+  // 'name,ALL' is converted; 'name,date' is not.
+  l_commaPos = %scan(',':l_text);
+  if l_commaPos > 0;
+    if ToUpper(%trim(SafeSubstrToEnd(l_text:l_commaPos + 1))) <> 'ALL';
+      return '';
+    endif;
+    l_allForm = *on;
+    l_text = %trim(SafeSubstr(l_text:1:l_commaPos - 1));
+  endif;
+  if %len(l_text) = 0 or %scan(C_QUOTE:l_text) > 0;
     return '';
   endif;
   if %scan('?':l_text) = 0
@@ -2183,6 +2195,9 @@ dcl-proc DataFileCondition;
   l_name = ConvertOperand(l_text:l_isValid);
   if not l_isValid or l_name = '';
     return '';
+  endif;
+  if l_allForm;
+    return DataFileAllCondition(l_name);
   endif;
 
   g_dataf1Count += 1;
@@ -2198,6 +2213,49 @@ dcl-proc DataFileCondition;
   RptItem(C_STS_ASSUMPTION:g_curLineNo:g_curText
           :'DATAF1 tested with CHKOBJ on the library list (file with a member, '
           + 'or library)');
+  return l_flag;
+end-proc;
+
+// ------------------------------------------------------------------
+// DATAF1-'name,ALL': true when a file or library whose name starts with the
+// text exists (SC41-4731, "DATAF1 (Files and Libraries on Disk) Condition").
+// Files are looked for in C_ALLSCOPE (the library list), libraries in QSYS.
+// DSPOBJD with a generic name writes them to QTEMP/IAOBJD and RTVMBRD counts
+// the rows. Returns the logical variable &Dn.
+dcl-proc DataFileAllCondition;
+  dcl-pi *n varchar(200);
+    i_name varchar(60) const;
+  end-pi;
+
+  dcl-s l_flag varchar(10);
+  dcl-s l_generic varchar(60);
+
+  g_dataf1Count += 1;
+  l_flag = '&D' + %trim(%char(g_dataf1Count));
+  g_useFileSize = *on;                     // &FSN is used for the row count
+  if SafeSubstr(i_name:1:1) = '&';         // a variable: add the * at run time
+    g_tempVariableCount += 1;
+    l_generic = '&T' + %trim(%char(g_tempVariableCount));
+    AddBody('CHGVAR VAR(' + l_generic + ') VALUE(' + i_name + ' *TCAT ''*'')');
+  else;
+    l_generic = i_name + '*';
+  endif;
+  AddBody('CHGVAR VAR(' + l_flag + ') VALUE(''0'')');
+  AddBody('DLTF FILE(QTEMP/IAOBJD)');
+  AddBody('MONMSG MSGID(CPF0000)');
+  AddBody('DSPOBJD OBJ(' + C_ALLSCOPE + '/' + l_generic + ') OBJTYPE(*FILE) '
+          + 'OUTPUT(*OUTFILE) OUTFILE(QTEMP/IAOBJD) OUTMBR(*FIRST *REPLACE)');
+  AddBody('MONMSG MSGID(CPF0000)');
+  AddBody('DSPOBJD OBJ(QSYS/' + l_generic + ') OBJTYPE(*LIB) '
+          + 'OUTPUT(*OUTFILE) OUTFILE(QTEMP/IAOBJD) OUTMBR(*FIRST *ADD)');
+  AddBody('MONMSG MSGID(CPF0000)');
+  AddBody('CHGVAR VAR(&FSN) VALUE(0)');
+  AddBody('RTVMBRD FILE(QTEMP/IAOBJD) MBR(*FIRST) NBRCURRCD(&FSN)');
+  AddBody('MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(&FSN) VALUE(0))');
+  AddBody('IF COND(&FSN *GT 0) THEN(CHGVAR VAR(' + l_flag + ') VALUE(''1''))');
+  RptItem(C_STS_ASSUMPTION:g_curLineNo:g_curText
+          :'DATAF1 name,ALL tested with DSPOBJD on names starting with the text '
+          + '(files in ' + C_ALLSCOPE + ', libraries in QSYS)');
   return l_flag;
 end-proc;
 
@@ -2348,6 +2406,30 @@ dcl-proc ConditionExpression;
 end-proc;
 
 // ------------------------------------------------------------------
+// The opposite of a CL condition. A single comparison (a *EQ b) becomes
+// a *NE b; a logical variable (&D1) becomes *NOT &D1; anything else is
+// wrapped in *NOT (...).
+dcl-proc NegateCondition;
+  dcl-pi *n varchar(200);
+    i_cond varchar(200) const;
+  end-pi;
+
+  dcl-s l_eqPos int(10);
+
+  l_eqPos = %scan(' *EQ ':i_cond);
+  if l_eqPos > 0 and %scan(' *EQ ':i_cond:l_eqPos + 1) = 0
+     and %scan(' *AND ':i_cond) = 0 and %scan(' *OR ':i_cond) = 0
+     and %scan('*NOT':i_cond) = 0 and %scan('%':i_cond) = 0
+     and %scan('(':i_cond) = 0;
+    return SafeSubstr(i_cond:1:l_eqPos) + '*NE ' + SafeSubstrToEnd(i_cond:l_eqPos + 5);
+  endif;
+  if SafeSubstr(i_cond:1:1) = '&' and %scan(' ':i_cond) = 0;
+    return '*NOT ' + i_cond;
+  endif;
+  return '*NOT (' + i_cond + ')';
+end-proc;
+
+// ------------------------------------------------------------------
 // Takes the leading IF / IFT / IFF / ELSE words off the statement text and
 // returns the CL condition they make (empty when there are none). An ELSE
 // must be the first word and refers to the IF on the line before it.
@@ -2432,7 +2514,7 @@ dcl-proc ParseIfPrefix;
         return *off;
       endif;
       if l_keyword = 'IFF';
-        l_converted = '*NOT (' + l_converted + ')';
+        l_converted = NegateCondition(l_converted);
       endif;
       if l_lineLast = '';
         l_lineLast = l_converted;
@@ -2936,7 +3018,13 @@ dcl-proc ProcessStatement;
         l_hasClLines = *on;
       endif;
     endfor;
-    if l_hasClLines and g_bodyCnt + 2 <= C_MAXBODY;
+    if l_hasClLines and g_bodyCnt = l_start + 1
+       and %len(g_body(g_bodyCnt)) + %len(l_cond) < 440;
+      // one statement: IF COND(...) THEN(statement)
+      g_body(g_bodyCnt) = 'IF COND(' + l_cond + ') THEN(' + g_body(g_bodyCnt) + ')';
+      RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+              :'IF/IFF/ELSE condition compared as text');
+    elseif l_hasClLines and g_bodyCnt + 2 <= C_MAXBODY;
       for l_index = g_bodyCnt downto l_start + 1;
         g_body(l_index + 1) = g_body(l_index);
       endfor;

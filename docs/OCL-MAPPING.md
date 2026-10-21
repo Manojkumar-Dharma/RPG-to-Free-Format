@@ -36,8 +36,8 @@ Evidence: SC41-4731, chapter 3 ("IF", "ELSE", "string1=string2") and chapter 5 (
 
 | OCL | CLLE output | Status |
 |---|---|---|
-| `// IF cond statement` (also `IFT`) | the statement's CL lines wrapped in `IF COND(...) THEN(DO)` ... `ENDDO` | A |
-| `// IFF cond statement` | same with `*NOT (...)` | A |
+| `// IF cond statement` (also `IFT`) | `IF COND(...) THEN(statement)` when the statement is one CL line; otherwise its CL lines wrapped in `IF COND(...) THEN(DO)` ... `ENDDO` | A |
+| `// IFF cond statement` | same with the opposite condition: `a/b` becomes `a *NE b`, a logical variable `*NOT &D1`, anything else `*NOT (...)` | A |
 | `// IF c1 IF c2 statement` | `(c1) *AND (c2)` | A |
 | `// ELSE statement` directly after an IF line | `*NOT (condition of the IF line)`; `ELSE IF` chains keep the earlier condition as context | A |
 | condition `a/b` or `a=b` | `a *EQ b`; a and b are a constant or one `?...?` expression; compared as text | A |
@@ -63,7 +63,23 @@ MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(&D1) VALUE('0'))
 ENDDO
 ```
 
-`&D1` is declared `*LGL` and the condition is `&D1` (`*NOT (&D1)` for `IFF`). The name may be a constant or one expression such as `?2?`; a name with expressions inside a word is built into a `&Tn` variable. Assumptions (A): the file is looked for on the library list, because the OCL says the *current files library*; the S/36 scratch and job file rules are not reproduced. Not converted (R): `'name,date'` (the date selects a creation date) and `'name,ALL'` (a name that starts with the text). The statement is copied as a comment.
+`&D1` is declared `*LGL` and the condition is `&D1` (`*NOT (&D1)` for `IFF`). The name may be a constant or one expression such as `?2?`; a name with expressions inside a word is built into a `&Tn` variable. Assumptions (A): the file is looked for on the library list, because the OCL says the *current files library*; the S/36 scratch and job file rules are not reproduced. `DATAF1-'name,ALL'` (true when a file or library whose name *starts with* the text exists; the reference says only local files and libraries are detected) becomes, written before the `IF COND(...)`:
+
+```
+CHGVAR VAR(&D2) VALUE('0')
+DLTF FILE(QTEMP/IAOBJD)
+MONMSG MSGID(CPF0000)
+DSPOBJD OBJ(*LIBL/name*) OBJTYPE(*FILE) OUTPUT(*OUTFILE) OUTFILE(QTEMP/IAOBJD) OUTMBR(*FIRST *REPLACE)
+MONMSG MSGID(CPF0000)
+DSPOBJD OBJ(QSYS/name*) OBJTYPE(*LIB) OUTPUT(*OUTFILE) OUTFILE(QTEMP/IAOBJD) OUTMBR(*FIRST *ADD)
+MONMSG MSGID(CPF0000)
+CHGVAR VAR(&FSN) VALUE(0)
+RTVMBRD FILE(QTEMP/IAOBJD) MBR(*FIRST) NBRCURRCD(&FSN)
+MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(&FSN) VALUE(0))
+IF COND(&FSN *GT 0) THEN(CHGVAR VAR(&D2) VALUE('1'))
+```
+
+Assumptions (A): files are looked for on the library list (constant `C_ALLSCOPE` in `IAoclCvt`; set it to `*ALL` to look in every library instead), libraries in QSYS; a name given as a variable gets the `*` added at run time. Not tested on the system yet: `DSPOBJD` with a generic name that matches nothing is expected to send a message that the `MONMSG` ignores. Not converted (R): `'name,date'` (the date selects a creation date). The statement is copied as a comment.
 
 ### ACTIVE condition
 
