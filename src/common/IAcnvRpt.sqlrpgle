@@ -8,9 +8,10 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 
 /copy qcpysrc,IAcnvSrvP
 
-dcl-f IACNVRPT printer usage(*output) usropn;
+dcl-f IACNVRPT printer usage(*output) usropn oflind(g_pageFull);
 
 dcl-s g_open ind inz(*off);
+dcl-s g_pageFull ind inz(*off);      // overflow indicator of IACNVRPT
 dcl-s g_conv int(10) inz(0);
 dcl-s g_assump int(10) inz(0);
 dcl-s g_review int(10) inz(0);
@@ -36,8 +37,11 @@ dcl-proc PutLine;
     endif;
   endfor;
   TXT = l_clean;
-  if i_first;
+  // When the overflow line was reached on the last write, CPF5004 would be
+  // sent on the next one. Start a new page instead and reset the indicator.
+  if i_first or g_pageFull;
     write RPTTOP;
+    g_pageFull = *off;
   else;
     write RPTLINE;
   endif;
@@ -92,6 +96,7 @@ dcl-proc RptOpen export;
   endmon;
 
   g_open = *on;
+  g_pageFull = *off;
   g_conv = 0;
   g_assump = 0;
   g_review = 0;
