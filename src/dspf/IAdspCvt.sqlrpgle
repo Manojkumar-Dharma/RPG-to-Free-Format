@@ -51,6 +51,7 @@ dcl-s g_srcFormatCount int(10);
 // Message file for message fields (command parameter MSGF); blank when none.
 dcl-s g_msgFile varchar(10) inz('');
 dcl-s g_msgLib varchar(10) inz('*LIBL');
+dcl-s g_msgFieldNo int(10) inz(0);  // generated MSGID fields: MSG1, MSG2, ...
 
 // ------------------------------------------------------------------
 // Safe substring helpers (RPG %SUBST fails on empty or out-of-range input).
@@ -457,6 +458,7 @@ dcl-proc ConvertDisplayControl;
   g_formatCount += 1;
   g_fieldNameCount = 0;
   g_generatedFieldNo = 0;
+  g_msgFieldNo = 0;
   g_formatOpen = *on;
 
   if ValidDdsName(l_name);
@@ -790,11 +792,13 @@ dcl-proc OtherMessageMember;
 end-proc;
 
 // ------------------------------------------------------------------
-// MSGCON(length message-id [library/]file) at a line and column, as one DDS
-// line (or two, with the file on a continuation line when it is too long for
-// the keyword area). The condition is an indicator, or NOT it; '' for none.
-dcl-proc AddMessageConstant;
-  dcl-pi *n;
+// MSGID(message-id [library/]file) on a generated output field (name MSGn) of
+// the given length at a line and column: the message text is read from the
+// message file when the program writes the record (the file is searched in
+// the library list unless a library is given). The condition is an
+// indicator, or NOT it; '' for none. Returns the field name.
+dcl-proc AddMessageField;
+  dcl-pi *n varchar(10);
     i_indicator varchar(2) const;
     i_negated ind const;
     i_line int(10) const;
@@ -805,21 +809,33 @@ dcl-proc AddMessageConstant;
 
   dcl-s l_head varchar(30);
   dcl-s l_tail varchar(30);
+  dcl-s l_name varchar(10);
+  dcl-s l_keyword varchar(36);
 
-  l_head = 'MSGCON(' + %trim(%char(i_length)) + ' ' + i_messageId;
+  g_msgFieldNo += 1;
+  l_name = 'MSG' + %trim(%char(g_msgFieldNo));
+  dow IsNameUsed(l_name);
+    g_msgFieldNo += 1;
+    l_name = 'MSG' + %trim(%char(g_msgFieldNo));
+  enddo;
+  RememberName(l_name);
+
+  l_head = 'MSGID(' + i_messageId;
   if g_msgLib = '*LIBL';
     l_tail = g_msgFile + ')';
   else;
     l_tail = g_msgLib + '/' + g_msgFile + ')';
   endif;
   if %len(l_head) + 1 + %len(l_tail) <= C_KEYW;
-    AddOutputLine(BuildDdsLine(i_indicator:i_negated:' ':'':0:' ':-1:' '
-                  :i_line:i_column:l_head + ' ' + l_tail));
+    l_keyword = l_head + ' ' + l_tail;
+    AddOutputLine(BuildDdsLine(i_indicator:i_negated:' ':l_name:i_length:'A':-1
+                  :'O':i_line:i_column:l_keyword));
   else;
-    AddOutputLine(BuildDdsLine(i_indicator:i_negated:' ':'':0:' ':-1:' '
-                  :i_line:i_column:l_head + ' +'));
+    AddOutputLine(BuildDdsLine(i_indicator:i_negated:' ':l_name:i_length:'A':-1
+                  :'O':i_line:i_column:l_head + ' +'));
     AddKeywordLine('':l_tail);
   endif;
+  return l_name;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -843,6 +859,7 @@ dcl-proc ConvertFieldDefinition;
   dcl-s l_ddsType char(1);
   dcl-s l_usage char(1);
   dcl-s l_data varchar(512);
+  dcl-s l_msgField varchar(10);
   dcl-s l_cont ind;
   dcl-s l_numeric ind;
   dcl-s l_attrInd ind;
@@ -934,14 +951,14 @@ dcl-proc ConvertFieldDefinition;
   endif;
   if l_ctype = 'M' and not l_isInput and l_outputSpec = 'Y'
      and l_messageId <> '' and g_msgFile <> '';
-    AddMessageConstant('':*off:l_line:l_column:l_length:l_messageId);
+    l_msgField = AddMessageField('':*off:l_line:l_column:l_length:l_messageId);
     l_attrInd = CollectAttrs(l_record:*off);
     if g_override and l_attrInd;
       CollectKeyword('':'OVRATR');
     endif;
     WriteCollectedKeywords();
-    l_reason = 'Message ' + l_messageId + ' written as MSGCON in the message'
-            + ' file of the MSGF parameter';
+    l_reason = 'Message ' + l_messageId + ' written as field ' + l_msgField
+            + ' with MSGID (file of the MSGF parameter, read at run time)';
     l_member = OtherMessageMember(l_data);
     if l_member <> '';
       l_reason = l_reason + '; message member ' + l_member
@@ -1003,14 +1020,14 @@ dcl-proc ConvertFieldDefinition;
                 + ' kept as a program output field';
       when g_msgFile = '';
         l_reason = 'Message field ' + l_messageId + ': give the MSGF parameter'
-                + ' to write MSGCON; kept as a program output field';
+                + ' to write MSGID; kept as a program output field';
       when l_isInput;
         l_reason = 'Message field that allows input: kept as an input/output'
                 + ' field, the message is not written';
       when %subst(l_outputSpec:1:1) = 'I';
         l_status = C_STS_ASSUMPTION;
         l_reason = 'Program output field while the indicator is on; message '
-                + l_messageId + ' (MSGCON) while it is off';
+                + l_messageId + ' (MSGID) while it is off';
       other;
         l_reason = 'Message field ' + l_messageId + ' with output N: kept as'
                 + ' a program output field';
@@ -1060,7 +1077,7 @@ dcl-proc ConvertFieldDefinition;
   // message shown while the output indicator is off
   if l_ctype = 'M' and l_usage = 'O' and %subst(l_outputSpec:1:1) = 'I'
      and l_messageId <> '' and g_msgFile <> '';
-    AddMessageConstant(l_indicator:*on:l_line:l_column:l_length:l_messageId);
+    l_msgField = AddMessageField(l_indicator:*on:l_line:l_column:l_length:l_messageId);
     l_attrInd = CollectAttrs(l_record:*off);
     WriteCollectedKeywords();
   endif;

@@ -110,13 +110,13 @@ On S/36 the member is tied to a message file only at run time (`// MEMBER` or `O
 
 | Output (23-24) | MIC | `MSGF` | Result |
 |---|---|---|---|
-| Y, no input | valid | given | `MSGCON(length USRnnnn [library/]file)` at the line and column, length = the D field length (A). A member other than U1 is reported in the same line; the one file is used |
-| indicator, no input | valid | given | Output field conditioned by the indicator (the program sends the message) and `MSGCON` conditioned by NOT the indicator (A) |
+| Y, no input | valid | given | An output field named `MSG1`, `MSG2`, ... of the D field length at the line and column, with `MSGID(USRnnnn [library/]file)` (A). The text is read from the message file when the program writes the record. A member other than U1 is reported in the same line; the one file is used |
+| indicator, no input | valid | given | Output field conditioned by the indicator (the program sends the message) and a `MSGn` field with `MSGID` conditioned by NOT the indicator (A) |
 | any | valid | not given | Kept as a program output field, status R, with the message id in the report |
 | Y | blank or not valid | any | Kept as a program output field, status R: the program (or PROMPT) supplies the MIC at run time, which has no DDS equivalent |
 | any | any | any, input allowed | Kept as an input/output field, status R |
 
-`MSGCON(length message-id [library/]file)` matches the IBM i DDS reference. The message file **and every message description** used (`USR0001`, `USR000A`, `USR0002` in the sample) must exist when `CRTDSPF` runs, otherwise it fails with CPD8006 (message description not found). Create them first, for example `ADDMSGD MSGID(USR0001) MSGF(MYLIB/ORDMSGF) MSG('...')`. For an output field under indicator 07 and an `MSGCON` under N07 at the same position, `CRTDSPF` gives the warning CPD7865 (field overlaps); the file is still created and the two never show together.
+`MSGID(message-id [library/]file)` is used instead of `MSGCON` because the message is read at run time, so `CRTDSPF` does not need the message descriptions. The message file must be on the library list (or the `MSGF` library given) when the program runs, and `OVRMSGF` can change it. The field is usage O, so the program cannot use it. For an output field under indicator 07 and a `MSGn` field under N07 at the same position `CRTDSPF` gives the warning CPD7865 (field overlaps); the file is still created and the two never show together.
 
 ### Edit code (column 25)
 
@@ -194,4 +194,4 @@ Array fields (WSU only: the manual shows only the column labels elements per row
 
 `samples/HELPSCR.dspf36` has four H records (help format of this source with a boundary, a format in another file with a library, restore N and a suppress indicator, an online document, and a null area) and two help formats. Expected DDS for the first format: an `H` line with `HLPARA(3 15 3 19)`, `HLPRCD(ORDHLP01)`, `HLPBDY`; then an `H` line with `HLPARA(5 15 5 30)` and `HLPRCD(ORDHLP02 MYLIB/ORDHELP)` conditioned by `N05` (the restore N is reported, not written); then an `H` line with `HLPARA(7 15 7 25)` and `HLPDOC(ORDLBL ORDDOC ORDFLD)` (its boundary Y is reported, not written); then an `H` line with `HLPARA(*NONE)` and `HLPRCD(ORDHLP03)`. The formats ORDHLP01 and ORDHLP03 get `HLPSEQ(ORDHLP 1)` and `HLPSEQ(ORDHLP 3)`.
 
-`samples/MSGSCR.dspf36` has two message constants (U1 and U2 members), a message with an output indicator, a message field with no id and a field with an edit code. Convert it with `MSGF(MYLIB/ORDMSGF)` (any name; it must exist for `CRTDSPF`). Expected: `MSGCON(30 USR0001 ORDMSGF)` at line 1 column 2; `MSGCON(40 USR000A ORDMSGF)` at line 3 (member U2 noted in the report, A); `ERRMSG` as a 50-character output field conditioned by 07 and `MSGCON(50 USR0002 ORDMSGF)` conditioned by N07; `PGMMSG` as an output field, R; `AMOUNT` as written before, R for the edit code.
+`samples/MSGSCR.dspf36` has two message constants (U1 and U2 members), a message with an output indicator, a message field with no id and a field with an edit code. Convert it with `MSGF(MYLIB/ORDMSGF)` (any name; it must exist for `CRTDSPF`). Expected: an output field `MSG1` with `MSGID(USR0001 ORDMSGF)` at line 1 column 2; `MSG2` with `MSGID(USR000A ORDMSGF)` at line 3 (member U2 noted in the report, A); `ERRMSG` as a 50-character output field conditioned by 07 and `MSG3` with `MSGID(USR0002 ORDMSGF)` conditioned by N07; `PGMMSG` as an output field, R; `AMOUNT` as written before, R for the edit code.
