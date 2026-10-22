@@ -178,6 +178,8 @@ DDS written for each H record, after the record-level keywords of its format and
 | Restore display (47-48) | Not written: DDS has no keyword for it (`RSTDSP` is a `CRTDSPF` parameter; `HLPRTN` returns control to the program, which is something else). Reported A |
 | Help format name `axxxxxnn` | `HLPSEQ(axxxxx nn)` on that format: group name = first 6 characters, sequence = last two digits (the group name is an assumption, A) |
 
+The help areas only work with the `HELP` keyword without a response indicator (IBM i DDS for display files, `HELP`). It is added to the format, before the first H line, when the S specification did not already produce it.
+
 Not valid entries (Y or N in 44-45, a corner without the other, a row over 27, a lower right corner above or left of the upper left, a library without a file, and so on) are kept as a DDS comment and reported R.
 
 ## DSPF38

@@ -47,6 +47,7 @@ dcl-c C_MAXFMT 300;
 dcl-s g_srcFormatNames varchar(10) dim(C_MAXFMT);
 dcl-s g_ddsFormatNames varchar(10) dim(C_MAXFMT);
 dcl-s g_srcFormatCount int(10);
+dcl-s g_formatHelpKey ind inz(*off);   // HELP keyword written for this format
 
 // Message file for message fields (command parameter MSGF); blank when none.
 dcl-s g_msgFile varchar(10) inz('');
@@ -426,6 +427,9 @@ dcl-proc AddKeyKeywords;
     if IsKeyEnabled(%subst(i_record:27:1):%scan(%char(l_keyNo):l_mask) > 0);
       l_keyword = %trim(%subst(C_FKEYS:(l_keyNo - 1) * 8 + 1:8));
       AddKeywordLine('':l_keyword);
+      if l_keyword = 'HELP';
+        g_formatHelpKey = *on;
+      endif;
     endif;
   endfor;
 
@@ -550,6 +554,7 @@ dcl-proc ConvertDisplayControl;
     AddKeywordLine(IndicatorNumber(l_spec):'LOCK');
   endif;
 
+  g_formatHelpKey = *off;
   AddKeyKeywords(i_record);
   AddKeywordLine('':'INVITE');
 
@@ -1367,6 +1372,12 @@ dcl-proc ConvertHelpDefinition;
                + %trim(%char(l_lowerColumn)) + ')';
   else;
     l_areaText = 'HLPARA(*NONE)';
+  endif;
+  // Help areas need the HELP keyword without a response indicator (IBM i DDS
+  // reference, HELP): added to the format when the S specification gave none.
+  if not g_formatHelpKey;
+    AddKeywordLine('':'HELP');
+    g_formatHelpKey = *on;
   endif;
   // The H in column 17 starts the help specification; HLPARA takes no option
   // indicator, so the suppress indicator goes on HLPRCD / HLPDOC (indicator off
