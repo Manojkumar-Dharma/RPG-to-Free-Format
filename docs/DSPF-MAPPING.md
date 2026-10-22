@@ -116,7 +116,7 @@ On S/36 the member is tied to a message file only at run time (`// MEMBER` or `O
 | Y | blank or not valid | any | Kept as a program output field, status R: the program (or PROMPT) supplies the MIC at run time, which has no DDS equivalent |
 | any | any | any, input allowed | Kept as an input/output field, status R |
 
-`MSGCON` and its operand order are assumptions (A): the manual describes the S/36 side only, so confirm the first compile with `CRTDSPF`. The message file has to exist then.
+`MSGCON(length message-id [library/]file)` matches the IBM i DDS reference. The message file **and every message description** used (`USR0001`, `USR000A`, `USR0002` in the sample) must exist when `CRTDSPF` runs, otherwise it fails with CPD8006 (message description not found). Create them first, for example `ADDMSGD MSGID(USR0001) MSGF(MYLIB/ORDMSGF) MSG('...')`. For an output field under indicator 07 and an `MSGCON` under N07 at the same position, `CRTDSPF` gives the warning CPD7865 (field overlaps); the file is still created and the two never show together.
 
 ### Edit code (column 25)
 
