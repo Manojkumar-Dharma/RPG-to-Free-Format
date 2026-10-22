@@ -203,25 +203,45 @@ Array fields (WSU only: the manual shows only the column labels elements per row
 
 ## Sample
 
-`samples/EMPSCR.dspf36` is a small column-exact DSPF36 member (one format, constants, input and output fields, an indicator, a continued constant). Convert it first and send me the generated member and the report if anything looks wrong.
+All test cases are in one member, `samples/DSPFALL.dspf36`: a record format per feature, each starting with a comment that says what it tests. Add a new case as a new format at the end, and a row to the table below. Convert it with a message file, then compile and compare the report with the table:
 
-`samples/HELPSCR.dspf36` has four H records (help format of this source with a boundary, a format in another file with a library, restore N and a suppress indicator, an online document, and a null area) and two help formats. Expected DDS for the first format: an `H` line with `HLPARA(3 15 3 19)`, `HLPRCD(ORDHLP01)`, `HLPBDY`; then an `H` line with `HLPARA(5 15 5 30)` and `HLPRCD(ORDHLP02 MYLIB/ORDHELP)` conditioned by `N05` (the restore N is reported, not written); then an `H` line with `HLPARA(7 15 7 25)` and `HLPDOC(ORDLBL ORDDOC ORDFLD)` (its boundary Y is reported, not written); then an `H` line with `HLPARA(*NONE)` and `HLPRCD(ORDHLP03)`. The formats ORDHLP01 and ORDHLP03 get `HLPSEQ(ORDHLP 1)` and `HLPSEQ(ORDHLP 3)`.
+```
+IACNVDSPF SRC(MYLIB/QS36SRC DSPFALL) SRCTYPE(DSPF36) TGT(QDDSSRC) MSGF(MYLIB/ORDMSGF)
+CRTDSPF FILE(MYLIB/DSPFALL) SRCFILE(MYLIB/QDDSSRC) SRCMBR(DSPFALL)
+```
 
-`samples/MSGSCR.dspf36` has two message constants (U1 and U2 members), a message with an output indicator, and a message field with no id. Convert it with `MSGF(MYLIB/ORDMSGF)` (any name; it must exist for `CRTDSPF`). Expected: an output field `MSG1` with `MSGID(USR0001 ORDMSGF)` at line 1 column 2; `MSG2` with `MSGID(USR000A ORDMSGF)` at line 3 (member U2 noted in the report, A); `ERRMSG` as a 50-character output field conditioned by 07 and `MSG3` with `MSGID(USR0002 ORDMSGF)` conditioned by N07; `PGMMSG` as an output field, R;
+Some cases are not valid input on purpose, so the report (not the compile) shows them: they come out as DDS comments with status R. One compile error anywhere stops `CRTDSPF` for the whole file, so a failing format is found from the compiler messages: the format name is in the preceding comment. To test one format alone, copy the S record and its D records into a new member.
 
-`samples/EDTSCR.dspf36` has five D records with an edit code. Expected: `AMOUNT` as a 9-digit output field, data type `Y`, with `EDTCDE(1)` (A); `BADCD` (code W) written without `EDTCDE`, R; `INONLY` (input only) written without `EDTCDE`, R; `BOTHFLD` as a signed numeric input/output field of 7 digits with `EDTCDE(J)` (A); the constant with an edit code written as a constant, R.
+Not in the sample (would stop the compile or needs a program): fields in columns 100-132 (`A0` to `D2`, need `*DS4` size conditioning; add them by hand in `F132`), and a help format that is not in the source (name used as it is).
 
-`samples/EDTALL.dspf36` has three formats that cover every edit code (1-4, A-D, J-Q, X-Z, 5-9: 24 codes). Expected results:
-
-| Format | Fields | Expected |
+| Format | Tests | Expected |
 |---|---|---|
-| `EDTOUT` | `EO1` to `EO9`, `EOA` to `EOZ` (name = EO plus the code), output only, length 9 | Each as a 9-digit output field (`Y`, 0 decimals) with `EDTCDE(code)`, A |
-| `EDTBOTH` | `EB1` to `EBZ`, input/output, data type S, length 8 | Each as a 7-digit input/output field (`Y`, 0 decimals) with `EDTCDE(code)`, A |
-| `EDTMISC` | `ELOWOUT` (code j), `ELOWBOTH` (code z, data type S) | Lowercase is accepted: `EDTCDE(J)` and `EDTCDE(Z)`, A |
-| `EDTMISC` | `BADW`, `BADE`, `BAD0`, `BADDASH` (codes W, E, 0, -) | Field written without `EDTCDE`, R (not a DDS edit code) |
-| `EDTMISC` | `INONLY` (input only) | Written without `EDTCDE`, R |
-| `EDTMISC` | `BOTHALP`, `BOTHNUM`, `BOTHDIG` (input/output, data types A, N, D) | Written without `EDTCDE`, R (needs data type S) |
-| `EDTMISC` | constant `TOTAL:` with code 1 | Written as a constant, R (edit code ignored) |
+| (top) | D and H before the first S, record type `Q` | R each, nothing written (the `Q` record becomes a DDS comment) |
+| `FKEYY` | Keys `Y`, mask `1236AB`; right-to-left (col 40, first S) | `PRINT ROLLUP ROLLDOWN HOME CF01(01) CF02(02)`; file-level `CHECK(RLTB)` |
+| `FKEYN` | Keys `N`, mask `45CD` | All keys except `CLEAR HELP CF03 CF04` |
+| `FKEYR` | Keys `R` | No key keywords |
+| `FKEYALL` | Keys blank | Every function key and `CF01` to `CF24` |
+| `FKEYMIX` | Function keys `Y` mask `5`, command keys blank | `HELP` and all `CFnn` |
+| `FSTARTV`, `FSTARTN`, `FCLR10` | Start line and lines to clear | `SLNO(*VAR) CLRL(*ALL)`; `SLNO(5) CLRL(*NO)`; `CLRL(10)` |
+| `FOPTY` | Lowercase Y, return input N, alarm, blink, erase, lock Y | `ALARM BLINK ERASEINP LOCK`, no `RTNDTA`; `LCFLD` has `LOWER`, `NOLC` and numeric `NUMLC` do not |
+| `FOPTI` | Alarm 31, blink 32, erase 33, override 34, lock 35 | Each keyword conditioned by its indicator; A for override |
+| `1BADFMT` | Name not valid in DDS | `FMTn` with `ALTNAME('1BADFMT')`, A |
+| `F132` | Column 39 `Y` | `DSPSIZ(24 80 *DS3 27 132 *DS4)`, A |
+| `FBADS` | Start line 0, alarm `Q` | R; the format is still written |
+| `FCONST` | Constants: N, blank and Y output, no text, continued, apostrophe, `C`, input with text | Constants (Y output reported once); no text skipped (A); continued text joined; `''` doubled; input text ignored (A) |
+| `FOUT` | Output fields, indicators, names | `OUTY` output; `OUTI` conditioned by 41; `OUTIC` conditioned by 42 plus a constant under N42; `OUTN` skipped; blank, duplicate and invalid names become `FLDn` (A); `LONGNAME` and `OUT$#@_1` kept |
+| `FINPUT` | Input, input/output, output indicator on input, length 1 signed | `I`, `I`, `B`; `ININD` is `B` and R (indicator dropped); `INS1` R (needs length 2) |
+| `FTYPES` | Data types A B M N S R Z D K E F O X blank | DDS types `X A N M S I A D W A A A A A` (`S` length minus 1) |
+| `FBADD` | No length, no line, no column, output `Q` | R each, not written |
+| `FATTR` | HI BL ND RI UL CS, indicators, PR, PC, combinations | `DSPATR(...)` per attribute, indicator forms conditioned; `IALL` has `DSPATR(HI BL RI UL CS)` and `PR` conditioned by 56 |
+| `FATTRPC` | Position cursor `Y` | `DSPATR(PC)` on `IPC` |
+| `FCHECK` | MF ME M10 M11 RZ RB FE AB DUP LOWER | `CHECK(...)` per field; `CKAB10` has `M10 AB`; `CKABONLY` has no `AB`, A; `CKNUMLOW` has no `LOWER`; `CKOUT` (output) gets no checks |
+| `FOVER` | Override (S 33-34) | `OVERRIDE(34)`, `OVRATR` on `OVIN`/`OVBOTH`, `OVRDTA` conditioned by 37 on `OVOUT`, A |
+| `FHELP` | 18 H records | 6 valid: `HLPARA` lines with `HLPRCD`/`HLPDOC` (see H table above); the 12 not valid ones R as comments; `1BADFMT` becomes `HLPRCD(FMTn)` |
+| `ORDHLP01`, `ORDHLP03`, `ORDHLP05` | Help formats | `HLPSEQ(ORDHLP 1)`, `(ORDHLP 3)`, `(ORDHLP 5)`, A |
+| `FMSG` | Message fields | `MSG1` to `MSG9` output fields with `MSGID(USRnnnn file)` (member `U2`, `P1`, `P2`, `M1`, `M2` noted, A; `B001` becomes `USZB001`); `ERRMSG` under 44 plus `MSG10` under N44; `PGMMSG`, `BADMIC`, `MSGIN`, `MSGOUTN` kept as fields, R |
+| `EDTOUT`, `EDTBOTH` | All 24 edit codes (1-4, A-D, J-Q, X-Z, 5-9) | `EO`/`EB` plus the code, data type `Y`, `EDTCDE(code)`, A |
+| `EDTMISC` | Lowercase codes, W E 0 -, input only, other data types, constant | `EDTCDE(J)`, `EDTCDE(Z)`; the others written without `EDTCDE`, R |
+| `FDDS` | `*DDS` line, comment, blank | `*DDS` line copied as a DDS line; comment kept; blank skipped |
 
-Note the letters W and E: they are not DDS edit codes (W and E are RPG codes only), so they must be reported, not passed through. If a real S/36 member shows other values in column 25, add them to the table above and to `C_EDTCDES` in `IAdspCvt`.
-
+Note the letters W and E: they are not DDS edit codes (W and E are RPG codes only), so they are reported, not passed through. If a real S/36 member shows other values in column 25, add them to the table above and to `C_EDTCDES` in `IAdspCvt`.

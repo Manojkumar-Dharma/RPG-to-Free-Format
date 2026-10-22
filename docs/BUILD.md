@@ -77,16 +77,12 @@ CRTCMD CMD(MYLIB/IACNVDSPF) PGM(MYLIB/IACNVDSPF) SRCSTMF('REPO/src/dspf/IACNVDSP
 First test, with the sample member copied into a source file as type DSPF36:
 
 ```
-IACNVDSPF SRC(MYLIB/QS36SRC EMPSCR) SRCTYPE(DSPF36) TGT(QDDSSRC)
+IACNVDSPF SRC(MYLIB/QS36SRC DSPFALL) SRCTYPE(DSPF36) TGT(QDDSSRC) MSGF(MYLIB/ORDMSGF)
 ```
 
-Then `CRTDSPF FILE(MYLIB/EMPSCR) SRCFILE(MYLIB/QDDSSRC) SRCMBR(EMPSCR)`.
+Then `CRTDSPF FILE(MYLIB/DSPFALL) SRCFILE(MYLIB/QDDSSRC) SRCMBR(DSPFALL)`.
 
-A source with message fields (D column 56 = M) needs the message file they refer to; it must exist when the display file is created:
-
-```
-IACNVDSPF SRC(MYLIB/QS36SRC MSGSCR) SRCTYPE(DSPF36) TGT(QDDSSRC) MSGF(MYLIB/ORDMSGF)
-```
+A source with message fields (D column 56 = M) needs the message file they refer to (`MSGF` parameter). It is read when the program runs, so it only has to be on the library list then, not when the display file is created.
 
 Without `MSGF` message fields are reported for review and kept as program output fields. Module IAdspCvt must be compiled before IAcnvDspf is bound: after this change `DspConvert` has two more parameters (message file and library), so compile both modules again and run CRTPGM and CRTCMD again.
 
