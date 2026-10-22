@@ -16,7 +16,7 @@ the same commit. Status values: Planned, In progress, Done.
 | OCL-06 | IAOCLTOCLE | SESSION, MEMBER, LIBRARY, MRTPROC | Planned |
 | OCL-07 | IAOCLTOCLE | PROMPT, HELP, INCLUDE | Planned |
 | OCL-08 | IAOCLTOCLE | Explicit SRCCCSID for IFS input | Planned |
-| DSP-01 | IACNVDSPF | H (help) specs | Planned |
+| DSP-01 | IACNVDSPF | H (help) specs | In progress (written, needs a compile and test) |
 | DSP-02 | IACNVDSPF | Message fields, array fields, edit codes | Planned |
 | DSP-03 | IACNVDSPF | Output indicators on input/output fields | Planned |
 | DSP-04 | IACNVDSPF | Confirm assumptions: CFnn(nn) command keys, INDARA and INVITE added, OVRDTA/OVRATR override keywords | Planned |

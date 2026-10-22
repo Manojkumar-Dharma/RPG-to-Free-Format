@@ -21,7 +21,7 @@ Records are 80 columns. Columns 1-5 are a sequence number and are not used. Colu
 | `*` in column 7 | DDS comment (`A` in column 6, text from column 8 unchanged) |
 | `*DDS` in columns 1-4 and `*` in column 7 | DDS line inserted as is: column 6 becomes `A`, column 7 becomes blank (as `$SFGR` does) |
 | `S` | Start of a record format (below) |
-| `H` | Not converted yet: kept as a DDS comment, status R |
+| `H` | A help area (below). Before the first `S`: reported R and skipped |
 | `D` | One field or constant text (below) |
 | Anything else | Kept as a DDS comment, status R |
 
@@ -40,6 +40,7 @@ A `D` record before the first `S` is reported R and skipped.
 | S columns | DDS |
 |---|---|
 | 7-14 name | `R name`. A name that is not valid in DDS becomes `FMTn` and the original is kept with `ALTNAME('name')` (A) |
+| 7-14 help format name `axxxxxnn` | `HLPSEQ(nn)` is added for an 8-character name of a letter, five letters or digits and two digits (SC41-4730 chapter 14) (A) |
 | 17-18 start line | blank: nothing; `V`: `SLNO(*VAR)`; number: `SLNO(n)` |
 | 19-20 lines to clear | blank: `CLRL(*ALL)`; `0`: `CLRL(*NO)`; number: `CLRL(n)` |
 | 21 lowercase | Y makes input fields `LOWER` unless the D record says N (column 51) |
@@ -128,14 +129,46 @@ Each attribute is Y (always) or an indicator. Always-on attributes are joined in
 
 When the format uses override: a field with an attribute controlled by an indicator gets `OVRATR`, and a field with an output indicator gets `OVRDTA` conditioned by that indicator (A).
 
+## H specification: help area
+
+H records follow an S record and come before its first D record. Each one is a help area: a rectangle of the display, and what the Help key shows while the cursor is in it (SC41-4730 Appendix B). Columns used:
+
+| H columns | Meaning |
+|---|---|
+| 7-14 | Help format name (`axxxxxnn`), or the help text label of an online document |
+| 16-23 | Display file that holds the help format, or the document name |
+| 25-32 | Library of that display file, or the folder of the document |
+| 34-37, 39-42 | Upper left and lower right corner, `rrcc` (column `A0` to `D2` for 100 to 132). Both blank is a null help area |
+| 44-45 | Suppress selection: blank, or an indicator (when on, the area is ignored) |
+| 47-48 | Restore the display format after help: `Y` or blank, `N`, or an indicator |
+| 50-51 | Boundary for Page Up and Page Down: blank or `N`, `Y`, or an indicator |
+| 53 | `Y` online document, blank or `N` help format |
+
+DDS written for each H record, after the keywords of its format:
+
+| Source | DDS (assumption A) |
+|---|---|
+| Area given | `HLPARA(row col row col)`, rows and columns as in the H record (like the D lines, relative to the start line; the S start line is not added) |
+| Null area | `HLPARA(*NONE)` |
+| Help format, blank 16-23 | `HLPRCD(format)`. The format is looked up in the whole source, so a format that is defined further down is found and a renamed one (`FMTn`) gets its DDS name. A name not in the source is used as it is when it is valid in DDS |
+| Help format in another file | `HLPRCD(format lib/file)` (`file` alone when 25-32 is blank). When a name is not valid in DDS the record is ignored, as `$SFGR` does (SC41-4730 chapter 14): kept as a comment, status R |
+| Online document | `HLPDOC(label document folder)`. Label, document and folder must all be given |
+| Suppress indicator | `HLPARA` and `HLPRCD` or `HLPDOC` are conditioned by NOT the indicator |
+| Boundary `Y` / indicator | `HLPBDY` / `HLPBDY` conditioned by the indicator |
+| Restore `N` / indicator | `HLPRTN` / `HLPRTN` conditioned by NOT the indicator |
+
+Not valid entries (Y or N in 44-45, a corner without the other, a row over 27, a lower right corner above or left of the upper left, a library without a file, and so on) are kept as a DDS comment and reported R. The manual only describes the DDS result for `HLPSEQ`; the other keywords, their order and the `HLPDOC` and `HLPRCD` operands are assumptions to confirm with `CRTDSPF`.
+
 ## DSPF38
 
 Each line is copied unchanged and reported C. One report line (A) says the member should be compiled with `CRTDSPF` to confirm. Records longer than 80 columns are reported R.
 
 ## Not converted yet
 
-Help definition (H) specifications, message fields (D column 56 = M, kept as program output fields), array fields (WSU only), edit codes (WSU only), and reduced behaviour for output indicators on input/output fields.
+Message fields (D column 56 = M, kept as program output fields), array fields (WSU only), edit codes (WSU only), and reduced behaviour for output indicators on input/output fields.
 
 ## Sample
 
 `samples/EMPSCR.dspf36` is a small column-exact DSPF36 member (one format, constants, input and output fields, an indicator, a continued constant). Convert it first and send me the generated member and the report if anything looks wrong.
+
+`samples/HELPSCR.dspf36` has four H records (help format of this source with a boundary, a format in another file with a library, restore N and a suppress indicator, an online document, and a null area) and two help formats. Expected DDS for the first format: `HLPARA(3 15 3 19)`, `HLPRCD(ORDHLP01)`, `HLPBDY`; then `HLPARA(5 15 5 30)` and `HLPRCD(ORDHLP02 MYLIB/ORDHELP)` both conditioned by `N05`, and `HLPRTN`; then `HLPDOC(ORDLBL ORDDOC ORDFLD)`; then `HLPARA(*NONE)` and `HLPRCD(ORDHLP03)`. The formats ORDHLP01 and ORDHLP03 get `HLPSEQ(1)` and `HLPSEQ(3)`.

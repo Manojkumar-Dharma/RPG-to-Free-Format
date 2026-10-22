@@ -1,0 +1,11 @@
+00010SORDENT      24
+00020HORDHLP01                    315  319       Y
+00030HORDHLP02 ORDHELP  MYLIB     515  530  5 N
+00040HORDLBL   ORDDOC   ORDFLD    715  725          Y
+00050HORDHLP03
+00070D          30 1 2                                 CORDER ENTRY
+00080DORDNO      5 315N  Y
+00090SORDHLP01    24
+00100D          20 2 2                                 CORDER NUMBER HELP
+00110SORDHLP03    24
+00120D          20 2 2                                 CGENERAL ORDER HELP

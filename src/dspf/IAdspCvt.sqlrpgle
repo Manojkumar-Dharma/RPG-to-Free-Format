@@ -42,6 +42,12 @@ dcl-s g_keywordIndicators varchar(2) dim(C_MAXKW);
 dcl-s g_keywordTexts varchar(80) dim(C_MAXKW);
 dcl-s g_keywordCount int(10);
 
+// Format names of the whole source, for help formats that are defined later.
+dcl-c C_MAXFMT 300;
+dcl-s g_srcFormatNames varchar(10) dim(C_MAXFMT);
+dcl-s g_ddsFormatNames varchar(10) dim(C_MAXFMT);
+dcl-s g_srcFormatCount int(10);
+
 // ------------------------------------------------------------------
 // Safe substring helpers (RPG %SUBST fails on empty or out-of-range input).
 dcl-proc SafeMidText;
@@ -440,6 +446,13 @@ dcl-proc ConvertDisplayControl;
   AddOutputLine(BuildDdsLine('':*off:'R':l_ddsName:0:' ':-1:' ':0:0:''));
   if l_ddsName <> l_name and %len(l_name) > 0;
     AddKeywordLine('':'ALTNAME(' + C_QUOTE + l_name + C_QUOTE + ')');
+  endif;
+  if IsHelpFormatName(l_name);
+    AddKeywordLine('':'HLPSEQ(' + %trim(%char(%int(%subst(l_name:7:2)))) + ')');
+    if l_status = C_STS_CONVERTED;
+      l_status = C_STS_ASSUMPTION;
+      l_reason = 'HLPSEQ added from the last two digits of the help format name';
+    endif;
   endif;
 
   // Start line (17-18)
@@ -920,6 +933,293 @@ dcl-proc AddFileLevelKeywords;
 end-proc;
 
 // ------------------------------------------------------------------
+// Help format name of the form axxxxxnn (SC41-4730 Appendix B, H specification):
+// a letter, five letters or digits and two digits.
+dcl-proc IsHelpFormatName;
+  dcl-pi *n ind;
+    i_name varchar(10) const;
+  end-pi;
+
+  if %len(i_name) <> 8;
+    return *off;
+  endif;
+  if %check(C_UPPER:%subst(i_name:1:1)) > 0;
+    return *off;
+  endif;
+  if %check(C_UPPER + '0123456789':%subst(i_name:2:5)) > 0;
+    return *off;
+  endif;
+  return %check('0123456789':%subst(i_name:7:2)) = 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// A keyword line conditioned by an indicator, or by NOT the indicator.
+dcl-proc AddCondKeywordLine;
+  dcl-pi *n;
+    i_indicator varchar(2) const;
+    i_negated ind const;
+    i_text varchar(36) const;
+  end-pi;
+
+  AddOutputLine(BuildDdsLine(i_indicator:i_negated:' ':'':0:' ':-1:' ':0:0:i_text));
+end-proc;
+
+// ------------------------------------------------------------------
+// Every S specification name and the DDS format name it gets (the same rule
+// as ConvertDisplayControl), so an H specification can refer to a help format
+// that is defined further down in the source.
+dcl-proc CollectFormatNames;
+  dcl-s l_index int(10);
+  dcl-s l_count int(10) inz(0);
+  dcl-s l_name varchar(10);
+
+  g_srcFormatCount = 0;
+  for l_index = 1 to g_sourceCount;
+    if %xlate(C_LOWER:C_UPPER:%subst(g_sourceLines(l_index):6:1)) = 'S'
+       and %subst(g_sourceLines(l_index):7:1) <> '*';
+      l_count += 1;
+      if g_srcFormatCount < C_MAXFMT;
+        g_srcFormatCount += 1;
+        l_name = ColumnText(g_sourceLines(l_index):7:14);
+        g_srcFormatNames(g_srcFormatCount) = l_name;
+        if ValidDdsName(l_name);
+          g_ddsFormatNames(g_srcFormatCount) = l_name;
+        else;
+          g_ddsFormatNames(g_srcFormatCount) = 'FMT' + %trim(%char(l_count));
+        endif;
+      endif;
+    endif;
+  endfor;
+end-proc;
+
+// The DDS name of a format of this source, '' when there is none.
+dcl-proc FindFormatDdsName;
+  dcl-pi *n varchar(10);
+    i_name varchar(10) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  for l_index = 1 to g_srcFormatCount;
+    if g_srcFormatNames(l_index) = i_name;
+      return g_ddsFormatNames(l_index);
+    endif;
+  endfor;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// H specification: one help area. Written after the S specification (and
+// before the first D specification) as record-level help keywords:
+//   HLPARA(row col row col) or HLPARA(*NONE) for a null area, then
+//   HLPRCD(format [lib/file]) for a help format or HLPDOC(label doc folder) for
+//   an online document, then HLPBDY and HLPRTN when columns 50-51 / 47-48 ask.
+// Suppress selection (44-45, an indicator) conditions HLPARA and HLPRCD/HLPDOC by
+// NOT the indicator. Only HLPSEQ is described in the manual: the other keywords
+// and their order are assumptions (A) to confirm with CRTDSPF.
+dcl-proc ConvertHelpDefinition;
+  dcl-pi *n;
+    i_record char(80) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  dcl-s l_name varchar(10);
+  dcl-s l_file varchar(10);
+  dcl-s l_library varchar(10);
+  dcl-s l_ddsName varchar(10);
+  dcl-s l_error varchar(100) inz('');
+  dcl-s l_note varchar(100) inz('');
+  dcl-s l_reason varchar(200);
+  dcl-s l_text varchar(20);
+  dcl-s l_spec varchar(3);
+  dcl-s l_isDocument ind inz(*off);
+  dcl-s l_hasArea ind inz(*off);
+  dcl-s l_upperRow int(10);
+  dcl-s l_upperColumn int(10);
+  dcl-s l_lowerRow int(10);
+  dcl-s l_lowerColumn int(10);
+  dcl-s l_suppress varchar(2) inz('');
+  dcl-s l_boundary char(1) inz('N');          // N none, Y always, I indicator
+  dcl-s l_boundaryIndicator varchar(2) inz('');
+  dcl-s l_restore char(1) inz('D');           // D default, N never, I indicator
+  dcl-s l_restoreIndicator varchar(2) inz('');
+  dcl-s l_areaText varchar(36);
+  dcl-s l_head varchar(30) inz('');
+  dcl-s l_tail varchar(30) inz('');
+  dcl-s l_outputRecord char(80);
+
+  l_name = ColumnText(i_record:7:14);
+  l_file = ColumnText(i_record:16:23);
+  l_library = ColumnText(i_record:25:32);
+
+  // Column 53: online document (Y) or help format (blank or N)
+  l_text = %xlate(C_LOWER:C_UPPER:ColumnText(i_record:53:53));
+  select;
+    when l_text = 'Y';
+      l_isDocument = *on;
+    when l_text = '' or l_text = 'N';
+      l_isDocument = *off;
+    other;
+      l_error = 'Online document entry (column 53) is not Y or N';
+  endsl;
+
+  if l_error = '' and l_name = '';
+    l_error = 'Help format name or help text label (columns 7-14) is blank';
+  endif;
+
+  // Help area corners (34-37 and 39-42): both given, or both blank (null area)
+  if l_error = '';
+    l_hasArea = ColumnText(i_record:34:37) <> '' or ColumnText(i_record:39:42) <> '';
+    if l_hasArea;
+      l_upperRow = ToNumber(ColumnText(i_record:34:35));
+      l_upperColumn = DecodeColumn(ColumnText(i_record:36:37));
+      l_lowerRow = ToNumber(ColumnText(i_record:39:40));
+      l_lowerColumn = DecodeColumn(ColumnText(i_record:41:42));
+      if l_upperRow < 1 or l_upperRow > 27 or l_lowerRow < 1 or l_lowerRow > 27
+         or l_upperColumn < 1 or l_upperColumn > 132
+         or l_lowerColumn < 1 or l_lowerColumn > 132;
+        l_error = 'Help area row or column is missing or not valid';
+      elseif l_lowerRow < l_upperRow or l_lowerColumn < l_upperColumn;
+        l_error = 'Help area lower right corner is above or left of the upper left';
+      endif;
+    endif;
+  endif;
+
+  // Suppress selection (44-45): blank or an indicator (Y and N are not allowed)
+  if l_error = '';
+    l_spec = ParseIndicatorSpec(ColumnText(i_record:44:45));
+    if l_spec = 'Y' or l_spec = '?';
+      l_error = 'Suppress selection (columns 44-45) must be blank or an indicator';
+    else;
+      l_suppress = IndicatorNumber(l_spec);
+    endif;
+  endif;
+
+  // Restore display format (47-48): Y or blank, N, or an indicator
+  if l_error = '';
+    l_text = %xlate(C_LOWER:C_UPPER:ColumnText(i_record:47:48));
+    if l_text = '' or l_text = 'Y';
+      l_restore = 'D';
+    elseif l_text = 'N';
+      l_restore = 'N';
+    else;
+      l_spec = ParseIndicatorSpec(l_text);
+      if %len(l_spec) = 3 and %subst(l_spec:1:1) = 'I';
+        l_restore = 'I';
+        l_restoreIndicator = IndicatorNumber(l_spec);
+      else;
+        l_error = 'Restore display format (columns 47-48) is not Y, N or an indicator';
+      endif;
+    endif;
+  endif;
+
+  // Boundary (50-51): blank or N, Y, or an indicator
+  if l_error = '';
+    l_spec = ParseIndicatorSpec(ColumnText(i_record:50:51));
+    select;
+      when l_spec = 'Y';
+        l_boundary = 'Y';
+      when l_spec = '?';
+        l_error = 'Boundary (columns 50-51) is not Y, N or an indicator';
+      when l_spec <> 'N';
+        l_boundary = 'I';
+        l_boundaryIndicator = IndicatorNumber(l_spec);
+    endsl;
+  endif;
+
+  // What the area shows
+  if l_error = '';
+    if l_isDocument;
+      if l_file = '' or l_library = '';
+        l_error = 'Online document needs a document name and a folder name';
+      elseif %len(l_name) > 8 or %scan(',':l_name) > 0 or %scan(' ':l_name) > 0
+             or %scan(C_QUOTE:l_name) > 0;
+        l_error = 'Help text label is not valid (1-8 characters, no comma or quote)';
+      else;
+        l_head = 'HLPDOC(' + l_name + ' ' + l_file + ' ' + l_library + ')';
+      endif;
+    elseif l_file = '' and l_library <> '';
+      l_error = 'Help library given without a help display file name';
+    elseif l_file = '';
+      l_ddsName = FindFormatDdsName(l_name);
+      if l_ddsName = '' and ValidDdsName(l_name);
+        l_ddsName = l_name;
+        l_note = 'Help format is not in this source; name used as it is';
+      endif;
+      if l_ddsName = '';
+        l_error = 'Help format is not in this source and its name is not valid in DDS';
+      else;
+        l_head = 'HLPRCD(' + l_ddsName + ')';
+      endif;
+    elseif not ValidDdsName(l_name) or not ValidDdsName(l_file)
+           or (l_library <> '' and not ValidDdsName(l_library));
+      // $SFGR ignores it too: the other file's DDS format name is not known
+      l_error = 'Help format in another file: a name is not valid in DDS (ignored)';
+    else;
+      l_head = 'HLPRCD(' + l_name;
+      if l_library <> '';
+        l_tail = l_library + '/' + l_file + ')';
+      else;
+        l_tail = l_file + ')';
+      endif;
+      if %len(l_head) + 1 + %len(l_tail) <= C_KEYW;
+        l_head = l_head + ' ' + l_tail;
+        l_tail = '';
+      endif;
+    endif;
+  endif;
+
+  if l_error <> '';
+    l_outputRecord = i_record;
+    %subst(l_outputRecord:1:5) = *blanks;
+    %subst(l_outputRecord:6:1) = 'A';
+    %subst(l_outputRecord:7:1) = '*';
+    AddOutputLine(l_outputRecord);
+    RptItem(C_STS_REVIEW:i_lineNo:%trimr(i_record):l_error);
+    return;
+  endif;
+
+  if l_hasArea;
+    l_areaText = 'HLPARA(' + %trim(%char(l_upperRow)) + ' '
+               + %trim(%char(l_upperColumn)) + ' '
+               + %trim(%char(l_lowerRow)) + ' '
+               + %trim(%char(l_lowerColumn)) + ')';
+  else;
+    l_areaText = 'HLPARA(*NONE)';
+  endif;
+  AddCondKeywordLine(l_suppress:*on:l_areaText);
+  if l_tail = '';
+    AddCondKeywordLine(l_suppress:*on:l_head);
+  else;
+    AddCondKeywordLine(l_suppress:*on:l_head + ' +');
+    AddKeywordLine('':l_tail);
+  endif;
+  select;
+    when l_boundary = 'Y';
+      AddKeywordLine('':'HLPBDY');
+    when l_boundary = 'I';
+      AddKeywordLine(l_boundaryIndicator:'HLPBDY');
+  endsl;
+  select;
+    when l_restore = 'N';
+      AddKeywordLine('':'HLPRTN');
+    when l_restore = 'I';
+      AddCondKeywordLine(l_restoreIndicator:*on:'HLPRTN');
+  endsl;
+
+  if l_isDocument;
+    l_reason = 'Written as HLPARA and HLPDOC';
+  else;
+    l_reason = 'Written as HLPARA and HLPRCD';
+  endif;
+  l_reason = l_reason + '; keywords assumed, compile to confirm';
+  if l_note <> '';
+    l_reason = l_reason + '; ' + l_note;
+  endif;
+  RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(i_record):l_reason);
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc ConvertDsp36;
   dcl-s l_index int(10);
   dcl-s l_record char(80);
@@ -930,6 +1230,7 @@ dcl-proc ConvertDsp36;
   g_formatCount = 0;
   g_override = *off;
   AddFileLevelKeywords();
+  CollectFormatNames();
 
   l_index = 1;
   dow l_index <= g_sourceCount;
@@ -954,13 +1255,12 @@ dcl-proc ConvertDsp36;
       when l_recordType = 'S';
         ConvertDisplayControl(l_record:g_sourceLineNos(l_index));
       when l_recordType = 'H';
-        l_outputRecord = l_record;
-        %subst(l_outputRecord:1:5) = *blanks;
-        %subst(l_outputRecord:6:1) = 'A';
-        %subst(l_outputRecord:7:1) = '*';
-        AddOutputLine(l_outputRecord);
-        RptItem(C_STS_REVIEW:g_sourceLineNos(l_index):%trimr(l_record)
-                :'Help definition (H) not converted; kept as a DDS comment');
+        if not g_formatOpen;
+          RptItem(C_STS_REVIEW:g_sourceLineNos(l_index):%trimr(l_record)
+                  :'H specification before the first S specification');
+        else;
+          ConvertHelpDefinition(l_record:g_sourceLineNos(l_index));
+        endif;
       when l_recordType = 'D';
         if not g_formatOpen;
           RptItem(C_STS_REVIEW:g_sourceLineNos(l_index):%trimr(l_record)
