@@ -990,9 +990,9 @@ dcl-proc ConvertFieldDefinition;
   endif;
 
   // Edit code (column 25): EDTCDE is only valid on output-capable numeric
-  // fields. An output-only field is then written as zoned numeric (S, 0
-  // decimals: the D specification has no decimal positions); an input/output
-  // field must already be signed numeric (data type S).
+  // fields, written with data type Y and 0 decimals (the D specification has no
+  // decimal positions). An input/output field must be signed numeric (data type
+  // S) in the source.
   l_editCode = %xlate(C_LOWER:C_UPPER:%subst(l_record:25:1));
   if l_editCode <> ' ' and l_ctype <> 'M';
     select;
@@ -1009,13 +1009,16 @@ dcl-proc ConvertFieldDefinition;
         l_editOk = *on;
     endsl;
   endif;
-  if l_editOk and not l_isInput;
-    l_ddsType = 'S';
+  // EDTCDE is only valid with data type Y or blank (IBM i DDS reference; CRTDSPF
+  // gives CPD7554 with S). Y is zoned numeric without a sign position, so an
+  // input/output field keeps the digits of its signed length (length - 1).
+  if l_editOk;
+    l_ddsType = 'Y';
   endif;
 
   l_fieldLength = l_length;
   l_decimals = -1;
-  if l_ddsType = 'S';
+  if l_ddsType = 'S' or l_ddsType = 'Y';
     l_decimals = 0;
     if l_isInput;
       l_fieldLength = l_length - 1;
