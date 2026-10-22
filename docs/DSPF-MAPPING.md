@@ -210,3 +210,18 @@ Array fields (WSU only: the manual shows only the column labels elements per row
 `samples/MSGSCR.dspf36` has two message constants (U1 and U2 members), a message with an output indicator, and a message field with no id. Convert it with `MSGF(MYLIB/ORDMSGF)` (any name; it must exist for `CRTDSPF`). Expected: an output field `MSG1` with `MSGID(USR0001 ORDMSGF)` at line 1 column 2; `MSG2` with `MSGID(USR000A ORDMSGF)` at line 3 (member U2 noted in the report, A); `ERRMSG` as a 50-character output field conditioned by 07 and `MSG3` with `MSGID(USR0002 ORDMSGF)` conditioned by N07; `PGMMSG` as an output field, R;
 
 `samples/EDTSCR.dspf36` has five D records with an edit code. Expected: `AMOUNT` as a 9-digit zoned output field with `EDTCDE(1)` (A); `BADCD` (code W) written without `EDTCDE`, R; `INONLY` (input only) written without `EDTCDE`, R; `BOTHFLD` as a signed numeric input/output field of 7 digits with `EDTCDE(J)` (A); the constant with an edit code written as a constant, R.
+
+`samples/EDTALL.dspf36` has three formats that cover every edit code (1-4, A-D, J-Q, X-Z, 5-9: 24 codes). Expected results:
+
+| Format | Fields | Expected |
+|---|---|---|
+| `EDTOUT` | `EO1` to `EO9`, `EOA` to `EOZ` (name = EO plus the code), output only, length 9 | Each as a 9-digit zoned output field (`S`, 0 decimals) with `EDTCDE(code)`, A |
+| `EDTBOTH` | `EB1` to `EBZ`, input/output, data type S, length 8 | Each as a 7-digit signed numeric input/output field with `EDTCDE(code)`, A |
+| `EDTMISC` | `ELOWOUT` (code j), `ELOWBOTH` (code z, data type S) | Lowercase is accepted: `EDTCDE(J)` and `EDTCDE(Z)`, A |
+| `EDTMISC` | `BADW`, `BADE`, `BAD0`, `BADDASH` (codes W, E, 0, -) | Field written without `EDTCDE`, R (not a DDS edit code) |
+| `EDTMISC` | `INONLY` (input only) | Written without `EDTCDE`, R |
+| `EDTMISC` | `BOTHALP`, `BOTHNUM`, `BOTHDIG` (input/output, data types A, N, D) | Written without `EDTCDE`, R (needs data type S) |
+| `EDTMISC` | constant `TOTAL:` with code 1 | Written as a constant, R (edit code ignored) |
+
+Note the letters W and E: they are not DDS edit codes (W and E are RPG codes only), so they must be reported, not passed through. If a real S/36 member shows other values in column 25, add them to the table above and to `C_EDTCDES` in `IAdspCvt`.
+
