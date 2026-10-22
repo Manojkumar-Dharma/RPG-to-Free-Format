@@ -13,9 +13,17 @@ ctl-opt main(Main) option(*srcstmt:*nodebugio);
 dcl-pr DspConvert int(10);
   i_src likeds(IAcnvDesc_t) const;
   i_tgt likeds(IAcnvDesc_t) const;
+  i_msgFile char(10) const;
+  i_msgLib char(10) const;
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
+
+// MSGF(file library): a qualified name arrives as the name then the library.
+dcl-ds IAcnvQual_t qualified template;
+  file char(10);
+  lib char(10);
+end-ds;
 
 dcl-proc Main;
   dcl-pi *n;
@@ -28,6 +36,7 @@ dcl-proc Main;
     i_srcCcsid int(10) const;
     i_tgtCcsid int(10) const;
     i_replace char(4) const;
+    i_msgf likeds(IAcnvQual_t) const;
   end-pi;
 
   dcl-ds l_parm likeds(IAcnvParm_t);
@@ -40,6 +49,8 @@ dcl-proc Main;
   dcl-s l_review int(10);
   dcl-s l_returnCode int(10);
   dcl-s l_counts char(256);
+  dcl-s l_msgFile char(10);
+  dcl-s l_msgLib char(10);
 
   // An IFS source or target has no file: the library is not used then.
   l_parm.srcFile = i_sourceFileMember.file;
@@ -72,12 +83,34 @@ dcl-proc Main;
     return;
   endif;
 
+  // Message file for message fields: *NONE (blank) means not given.
+  l_msgFile = *blanks;
+  l_msgLib = *blanks;
+  if i_msgf.file <> *blanks and i_msgf.file <> '*NONE';
+    l_msgFile = %xlate('abcdefghijklmnopqrstuvwxyz':'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+                       :i_msgf.file);
+    l_msgLib = %xlate('abcdefghijklmnopqrstuvwxyz':'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+                      :i_msgf.lib);
+    if l_msgLib = *blanks;
+      l_msgLib = '*LIBL';
+    endif;
+    if not IsSafeName(l_msgFile);
+      SendEscape('IAC0016':%trim(l_msgFile));
+      return;
+    endif;
+    if not IsSafeName(l_msgLib);
+      SendEscape('IAC0016':%trim(l_msgLib));
+      return;
+    endif;
+  endif;
+
   if RptOpen(C_CNV_DSPF:l_sourceDesc:l_targetDesc) <> 0;
     SendEscape('IAC0102':'Cannot open the report file IACNVRPT');
     return;
   endif;
 
-  l_returnCode = DspConvert(l_sourceDesc:l_targetDesc:l_msgId:l_msgData);
+  l_returnCode = DspConvert(l_sourceDesc:l_targetDesc:l_msgFile:l_msgLib:l_msgId
+                         :l_msgData);
   RptClose(l_conv:l_assump:l_review);
 
   if l_returnCode <> 0;

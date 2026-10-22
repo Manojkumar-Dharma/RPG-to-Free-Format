@@ -102,6 +102,26 @@ Field names are kept when valid and unique in the format. Otherwise they become 
 
 From the table in SC41-4730 Appendix B: blank and B to A, A to X, M to N, N to M, S to S (length minus 1, 0 decimals), R to I, Z to A, D to D, K to W. The double-byte types E, F, O and X become A. Output-only fields are always A.
 
+### Message fields (column 56 = M)
+
+Columns 57-62 hold the message identification code (MIC, four characters 0-9 or A-F) and the message member (`U1` or blank, `U2`, `P1`, `P2`, `M1`, `M2`). SC41-4730 says `$SFGR` assumes the message ID prefix `USR`, and that DBCS messages (MIC above A000) have the prefix `USZ` (chapter 15).
+
+On S/36 the member is tied to a message file only at run time (`// MEMBER` or `OVRMSGF`), so the converted display file needs the message file from the command parameter `MSGF(file library)` (one file for all message fields; `*NONE` by default).
+
+| Output (23-24) | MIC | `MSGF` | Result |
+|---|---|---|---|
+| Y, no input | valid | given | `MSGCON(length USRnnnn [library/]file)` at the line and column, length = the D field length (A). A member other than U1 is reported in the same line; the one file is used |
+| indicator, no input | valid | given | Output field conditioned by the indicator (the program sends the message) and `MSGCON` conditioned by NOT the indicator (A) |
+| any | valid | not given | Kept as a program output field, status R, with the message id in the report |
+| Y | blank or not valid | any | Kept as a program output field, status R: the program (or PROMPT) supplies the MIC at run time, which has no DDS equivalent |
+| any | any | any, input allowed | Kept as an input/output field, status R |
+
+`MSGCON` and its operand order are assumptions (A): the manual describes the S/36 side only, so confirm the first compile with `CRTDSPF`. The message file has to exist then.
+
+### Edit code (column 25)
+
+Column 25 is an edit code on the D specification form, marked WSU only. SC41-4730 gives no entry values and no DDS result for it, and the field length and decimals needed for `EDTCDE` are not in the D specification. A D record with an entry in column 25 is therefore converted as before and reported R (edit code not converted).
+
 ### Attributes and checks
 
 | D columns | DDS |
@@ -165,10 +185,12 @@ Each line is copied unchanged and reported C. One report line (A) says the membe
 
 ## Not converted yet
 
-Message fields (D column 56 = M, kept as program output fields), array fields (WSU only), edit codes (WSU only), and reduced behaviour for output indicators on input/output fields.
+Array fields (WSU only: the manual shows only the column labels elements per row or column, fill direction, line skip factor, horizontal positions and space factor, with no entry values), edit codes (reported, see above), and reduced behaviour for output indicators on input/output fields.
 
 ## Sample
 
 `samples/EMPSCR.dspf36` is a small column-exact DSPF36 member (one format, constants, input and output fields, an indicator, a continued constant). Convert it first and send me the generated member and the report if anything looks wrong.
 
 `samples/HELPSCR.dspf36` has four H records (help format of this source with a boundary, a format in another file with a library, restore N and a suppress indicator, an online document, and a null area) and two help formats. Expected DDS for the first format: `HLPARA(3 15 3 19)`, `HLPRCD(ORDHLP01)`, `HLPBDY`; then `HLPARA(5 15 5 30)` and `HLPRCD(ORDHLP02 MYLIB/ORDHELP)` both conditioned by `N05`, and `HLPRTN`; then `HLPDOC(ORDLBL ORDDOC ORDFLD)`; then `HLPARA(*NONE)` and `HLPRCD(ORDHLP03)`. The formats ORDHLP01 and ORDHLP03 get `HLPSEQ(1)` and `HLPSEQ(3)`.
+
+`samples/MSGSCR.dspf36` has two message constants (U1 and U2 members), a message with an output indicator, a message field with no id and a field with an edit code. Convert it with `MSGF(MYLIB/ORDMSGF)` (any name; it must exist for `CRTDSPF`). Expected: `MSGCON(30 USR0001 ORDMSGF)` at line 1 column 2; `MSGCON(40 USR000A ORDMSGF)` at line 3 (member U2 noted in the report, A); `ERRMSG` as a 50-character output field conditioned by 07 and `MSGCON(50 USR0002 ORDMSGF)` conditioned by N07; `PGMMSG` as an output field, R; `AMOUNT` as written before, R for the edit code.

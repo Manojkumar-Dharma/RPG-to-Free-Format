@@ -48,6 +48,10 @@ dcl-s g_srcFormatNames varchar(10) dim(C_MAXFMT);
 dcl-s g_ddsFormatNames varchar(10) dim(C_MAXFMT);
 dcl-s g_srcFormatCount int(10);
 
+// Message file for message fields (command parameter MSGF); blank when none.
+dcl-s g_msgFile varchar(10) inz('');
+dcl-s g_msgLib varchar(10) inz('*LIBL');
+
 // ------------------------------------------------------------------
 // Safe substring helpers (RPG %SUBST fails on empty or out-of-range input).
 dcl-proc SafeMidText;
@@ -359,6 +363,26 @@ dcl-proc RememberName;
     g_fieldNameCount += 1;
     g_fieldNames(g_fieldNameCount) = i_name;
   endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// Help format name of the form axxxxxnn (SC41-4730 Appendix B, H specification):
+// a letter, five letters or digits and two digits.
+dcl-proc IsHelpFormatName;
+  dcl-pi *n ind;
+    i_name varchar(10) const;
+  end-pi;
+
+  if %len(i_name) <> 8;
+    return *off;
+  endif;
+  if %check(C_UPPER:%subst(i_name:1:1)) > 0;
+    return *off;
+  endif;
+  if %check(C_UPPER + '0123456789':%subst(i_name:2:5)) > 0;
+    return *off;
+  endif;
+  return %check('0123456789':%subst(i_name:7:2)) = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -700,6 +724,104 @@ end-proc;
 
 
 // ------------------------------------------------------------------
+// D column 25 is an edit code (WSU only; SC41-4730 Appendix B has no entry
+// values or DDS result for it): not converted, so the item is reported for
+// review. Does not change a status that is already R.
+dcl-proc ReportEditCode;
+  dcl-pi *n;
+    i_record char(80) const;
+    io_status char(1);
+    io_reason varchar(200);
+  end-pi;
+
+  if %subst(i_record:25:1) = ' ';
+    return;
+  endif;
+  if io_status <> C_STS_REVIEW;
+    io_status = C_STS_REVIEW;
+    io_reason = %trim(io_reason + ' Edit code ' + %subst(i_record:25:1)
+              + ' (column 25, WSU only) is not converted.');
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// Message id of a message field (D column 56 = M): columns 57-60 are the
+// 4-character MIC (0-9, A-F), columns 61-62 the message member (U1 or blank,
+// U2, P1, P2, M1, M2). $SFGR assumes the prefix USR (SC41-4730 B-24); the
+// prefix of DBCS messages (MIC above A000) is USZ (chapter 15).
+// Returns USRnnnn, or '' when the data is blank or not a valid MIC.
+dcl-proc MessageIdOf;
+  dcl-pi *n varchar(7);
+    i_data varchar(512) const;
+  end-pi;
+
+  dcl-s l_mic varchar(4);
+
+  if %len(i_data) < 4;
+    return '';
+  endif;
+  l_mic = %xlate(C_LOWER:C_UPPER:%subst(i_data:1:4));
+  if %check('0123456789ABCDEF':l_mic) > 0;
+    return '';
+  endif;
+  if %scan(%subst(l_mic:1:1):'ABCDEF') > 0 and l_mic > 'A000';
+    return 'USZ' + l_mic;
+  endif;
+  return 'USR' + l_mic;
+end-proc;
+
+// The message member (columns 61-62) when it is not U1 or blank, else ''.
+dcl-proc OtherMessageMember;
+  dcl-pi *n varchar(2);
+    i_data varchar(512) const;
+  end-pi;
+
+  dcl-s l_member varchar(2);
+
+  if %len(i_data) < 6;
+    return '';
+  endif;
+  l_member = %trim(%xlate(C_LOWER:C_UPPER:%subst(i_data:5:2)));
+  if l_member = 'U1';
+    return '';
+  endif;
+  return l_member;
+end-proc;
+
+// ------------------------------------------------------------------
+// MSGCON(length message-id [library/]file) at a line and column, as one DDS
+// line (or two, with the file on a continuation line when it is too long for
+// the keyword area). The condition is an indicator, or NOT it; '' for none.
+dcl-proc AddMessageConstant;
+  dcl-pi *n;
+    i_indicator varchar(2) const;
+    i_negated ind const;
+    i_line int(10) const;
+    i_column int(10) const;
+    i_length int(10) const;
+    i_messageId varchar(7) const;
+  end-pi;
+
+  dcl-s l_head varchar(30);
+  dcl-s l_tail varchar(30);
+
+  l_head = 'MSGCON(' + %trim(%char(i_length)) + ' ' + i_messageId;
+  if g_msgLib = '*LIBL';
+    l_tail = g_msgFile + ')';
+  else;
+    l_tail = g_msgLib + '/' + g_msgFile + ')';
+  endif;
+  if %len(l_head) + 1 + %len(l_tail) <= C_KEYW;
+    AddOutputLine(BuildDdsLine(i_indicator:i_negated:' ':'':0:' ':-1:' '
+                  :i_line:i_column:l_head + ' ' + l_tail));
+  else;
+    AddOutputLine(BuildDdsLine(i_indicator:i_negated:' ':'':0:' ':-1:' '
+                  :i_line:i_column:l_head + ' +'));
+    AddKeywordLine('':l_tail);
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
 // D specification: one field or constant. io_i is the index of the record
 // and moves on when the constant continues on following records.
 dcl-proc ConvertFieldDefinition;
@@ -731,6 +853,8 @@ dcl-proc ConvertFieldDefinition;
   dcl-s l_front char(80);
   dcl-s l_nameGenerated ind inz(*off);
   dcl-s l_reported ind inz(*off);
+  dcl-s l_messageId varchar(7) inz('');
+  dcl-s l_member varchar(2) inz('');
 
   l_record = g_sourceLines(io_index);
   l_lineNo = g_sourceLineNos(io_index);
@@ -786,6 +910,11 @@ dcl-proc ConvertFieldDefinition;
       CollectKeyword('':'OVRATR');
     endif;
     WriteCollectedKeywords();
+    ReportEditCode(l_record:l_status:l_reason);
+    if l_status = C_STS_REVIEW;
+      RptItem(l_status:l_lineNo:%trimr(l_record):l_reason);
+      return;
+    endif;
     if l_outputSpec = 'Y' and not g_outputConstReported;
       g_outputConstReported = *on;
       RptItem(C_STS_ASSUMPTION:l_lineNo:%trimr(l_record)
@@ -794,6 +923,32 @@ dcl-proc ConvertFieldDefinition;
     else;
       RptItem(C_STS_CONVERTED:l_lineNo:%trimr(l_record):'');
     endif;
+    return;
+  endif;
+
+  // ----- message constant: output Y, constant type M with a message id -----
+  l_messageId = '';
+  if l_ctype = 'M';
+    l_messageId = MessageIdOf(l_data);
+  endif;
+  if l_ctype = 'M' and not l_isInput and l_outputSpec = 'Y'
+     and l_messageId <> '' and g_msgFile <> '';
+    AddMessageConstant('':*off:l_line:l_column:l_length:l_messageId);
+    l_attrInd = CollectAttrs(l_record:*off);
+    if g_override and l_attrInd;
+      CollectKeyword('':'OVRATR');
+    endif;
+    WriteCollectedKeywords();
+    l_reason = 'Message ' + l_messageId + ' written as MSGCON in the message'
+            + ' file of the MSGF parameter';
+    l_member = OtherMessageMember(l_data);
+    if l_member <> '';
+      l_reason = l_reason + '; message member ' + l_member
+              + ' is not U1 but the same file is used';
+    endif;
+    l_status = C_STS_ASSUMPTION;
+    ReportEditCode(l_record:l_status:l_reason);
+    RptItem(l_status:l_lineNo:%trimr(l_record):l_reason);
     return;
   endif;
 
@@ -840,8 +995,25 @@ dcl-proc ConvertFieldDefinition;
   endif;
   if l_ctype = 'M';
     l_status = C_STS_REVIEW;
-    l_reason = 'Message (MIC) field: kept as a program output field'
-            + ' (message data ' + %trim(l_data) + ' is not written)';
+    select;
+      when l_messageId = '';
+        l_reason = 'Message field without a valid message id: the program'
+                + ' supplies the message at run time (no DDS equivalent);'
+                + ' kept as a program output field';
+      when g_msgFile = '';
+        l_reason = 'Message field ' + l_messageId + ': give the MSGF parameter'
+                + ' to write MSGCON; kept as a program output field';
+      when l_isInput;
+        l_reason = 'Message field that allows input: kept as an input/output'
+                + ' field, the message is not written';
+      when %subst(l_outputSpec:1:1) = 'I';
+        l_status = C_STS_ASSUMPTION;
+        l_reason = 'Program output field while the indicator is on; message '
+                + l_messageId + ' (MSGCON) while it is off';
+      other;
+        l_reason = 'Message field ' + l_messageId + ' with output N: kept as'
+                + ' a program output field';
+    endsl;
   endif;
   if l_usage = 'B' and %subst(l_outputSpec:1:1) = 'I';
     l_status = C_STS_REVIEW;
@@ -884,14 +1056,24 @@ dcl-proc ConvertFieldDefinition;
   endif;
   WriteCollectedKeywords();
 
+  // message shown while the output indicator is off
+  if l_ctype = 'M' and l_usage = 'O' and %subst(l_outputSpec:1:1) = 'I'
+     and l_messageId <> '' and g_msgFile <> '';
+    AddMessageConstant(l_indicator:*on:l_line:l_column:l_length:l_messageId);
+    l_attrInd = CollectAttrs(l_record:*off);
+    WriteCollectedKeywords();
+  endif;
+
   // constant shown while the output indicator is off
-  if l_usage = 'O' and %subst(l_outputSpec:1:1) = 'I' and %len(l_data) > 0;
+  if l_ctype <> 'M' and l_usage = 'O' and %subst(l_outputSpec:1:1) = 'I'
+     and %len(l_data) > 0;
     l_front = BuildDdsLine(l_indicator:*on:' ':'':0:' ':-1:' ':l_line:l_column:'');
     AddLiteral(l_front:'':l_data:'');
     l_attrInd = CollectAttrs(l_record:*off);
     WriteCollectedKeywords();
   endif;
 
+  ReportEditCode(l_record:l_status:l_reason);
   RptItem(l_status:l_lineNo:%trimr(l_record):l_reason);
 end-proc;
 
@@ -930,26 +1112,6 @@ dcl-proc AddFileLevelKeywords;
   RptItem(C_STS_ASSUMPTION:0:'File-level DDS'
           :'DSPSIZ and INDARA added (CHECK(RLTB) for right-to-left); '
           + 'INVITE added to every format');
-end-proc;
-
-// ------------------------------------------------------------------
-// Help format name of the form axxxxxnn (SC41-4730 Appendix B, H specification):
-// a letter, five letters or digits and two digits.
-dcl-proc IsHelpFormatName;
-  dcl-pi *n ind;
-    i_name varchar(10) const;
-  end-pi;
-
-  if %len(i_name) <> 8;
-    return *off;
-  endif;
-  if %check(C_UPPER:%subst(i_name:1:1)) > 0;
-    return *off;
-  endif;
-  if %check(C_UPPER + '0123456789':%subst(i_name:2:5)) > 0;
-    return *off;
-  endif;
-  return %check('0123456789':%subst(i_name:7:2)) = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1299,6 +1461,8 @@ dcl-proc DspConvert export;
   dcl-pi *n int(10);
     i_source likeds(IAcnvDesc_t) const;
     i_target likeds(IAcnvDesc_t) const;
+    i_msgFile char(10) const;
+    i_msgLib char(10) const;
     o_msgId char(7);
     o_msgData char(256);
   end-pi;
@@ -1318,6 +1482,11 @@ dcl-proc DspConvert export;
   g_lowerDft = *off;
   g_keywordCount = 0;
   g_outputConstReported = *off;
+  g_msgFile = %trim(i_msgFile);
+  g_msgLib = %trim(i_msgLib);
+  if g_msgLib = '';
+    g_msgLib = '*LIBL';
+  endif;
 
   if OpenSource(i_source:o_msgId:o_msgData) <> 0;
     return 1;

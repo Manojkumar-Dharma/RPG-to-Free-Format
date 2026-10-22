@@ -1,0 +1,6 @@
+00010SMSGDEMO     24
+00020D          30 1 2Y                                M0001U1
+00030D          40 3 2Y                                M000AU2
+00040DERRMSG    5022 2 7                               M0002
+00050DPGMMSG    5023 2Y                                M
+00060DAMOUNT     9 515Y 1 N

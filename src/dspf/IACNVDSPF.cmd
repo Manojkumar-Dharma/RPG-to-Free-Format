@@ -40,3 +40,8 @@ PARM       KWD(TGTCCSID) TYPE(*INT4) DFT(*DFT) +
              SPCVAL((*DFT -1)) PROMPT('Target CCSID')
 PARM       KWD(REPLACE) TYPE(*CHAR) LEN(4) RSTD(*YES) DFT(*NO) +
              VALUES(*NO *YES) PROMPT('Replace existing target')
+PARM       KWD(MSGF) TYPE(MSGF_Q) DFT(*NONE) +
+             PROMPT('Message file for message fields')
+MSGF_Q:    QUAL       TYPE(*NAME) LEN(10) DFT(*NONE) SPCVAL((*NONE ' '))
+           QUAL       TYPE(*NAME) LEN(10) DFT(*LIBL) +
+                        SPCVAL((*LIBL) (*CURLIB)) PROMPT('Library')
