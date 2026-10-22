@@ -120,7 +120,18 @@ On S/36 the member is tied to a message file only at run time (`// MEMBER` or `O
 
 ### Edit code (column 25)
 
-Column 25 is an edit code on the D specification form, marked WSU only. SC41-4730 gives no entry values and no DDS result for it, and the field length and decimals needed for `EDTCDE` are not in the D specification. A D record with an entry in column 25 is therefore converted as before and reported R (edit code not converted).
+Column 25 is an edit code on the D specification form, marked WSU only. SC41-4730 gives no entry values and no DDS result for it, so the values are taken from the DDS `EDTCDE` keyword (1-4, A-D, J-Q, X-Z, and the user-defined 5-9), and IBM i DDS for display files says `EDTCDE` is only valid on output-capable numeric fields and that the display length grows by the editing characters.
+
+| Field | Result |
+|---|---|
+| Output only, valid code | Written as zoned numeric (data type `S`, length as in the D record, 0 decimals: the D specification has no decimal positions) with `EDTCDE(x)` (A) |
+| Input/output, data type S, valid code | `EDTCDE(x)` added to the signed numeric field (A) |
+| Input/output, other data types | Not written, status R: `EDTCDE` needs a numeric-only field |
+| Input only | Not written, status R |
+| Code not in the list above | Not written, status R |
+| Constant or message field | Ignored, status R |
+
+The output length is a guess: if the S/36 field length already includes the editing characters, the converted field is too wide. Check the first conversion on the display.
 
 ### Attributes and checks
 
@@ -188,7 +199,7 @@ Each line is copied unchanged and reported C. One report line (A) says the membe
 
 ## Not converted yet
 
-Array fields (WSU only: the manual shows only the column labels elements per row or column, fill direction, line skip factor, horizontal positions and space factor, with no entry values), edit codes (reported, see above), and reduced behaviour for output indicators on input/output fields.
+Array fields (WSU only: the manual shows only the column labels elements per row or column, fill direction, line skip factor, horizontal positions and space factor, with no entry values), edit codes (written as EDTCDE, see above), and reduced behaviour for output indicators on input/output fields.
 
 ## Sample
 
@@ -196,4 +207,6 @@ Array fields (WSU only: the manual shows only the column labels elements per row
 
 `samples/HELPSCR.dspf36` has four H records (help format of this source with a boundary, a format in another file with a library, restore N and a suppress indicator, an online document, and a null area) and two help formats. Expected DDS for the first format: an `H` line with `HLPARA(3 15 3 19)`, `HLPRCD(ORDHLP01)`, `HLPBDY`; then an `H` line with `HLPARA(5 15 5 30)` and `HLPRCD(ORDHLP02 MYLIB/ORDHELP)` conditioned by `N05` (the restore N is reported, not written); then an `H` line with `HLPARA(7 15 7 25)` and `HLPDOC(ORDLBL ORDDOC ORDFLD)` (its boundary Y is reported, not written); then an `H` line with `HLPARA(*NONE)` and `HLPRCD(ORDHLP03)`. The formats ORDHLP01 and ORDHLP03 get `HLPSEQ(ORDHLP 1)` and `HLPSEQ(ORDHLP 3)`.
 
-`samples/MSGSCR.dspf36` has two message constants (U1 and U2 members), a message with an output indicator, a message field with no id and a field with an edit code. Convert it with `MSGF(MYLIB/ORDMSGF)` (any name; it must exist for `CRTDSPF`). Expected: an output field `MSG1` with `MSGID(USR0001 ORDMSGF)` at line 1 column 2; `MSG2` with `MSGID(USR000A ORDMSGF)` at line 3 (member U2 noted in the report, A); `ERRMSG` as a 50-character output field conditioned by 07 and `MSG3` with `MSGID(USR0002 ORDMSGF)` conditioned by N07; `PGMMSG` as an output field, R; `AMOUNT` as written before, R for the edit code.
+`samples/MSGSCR.dspf36` has two message constants (U1 and U2 members), a message with an output indicator, and a message field with no id. Convert it with `MSGF(MYLIB/ORDMSGF)` (any name; it must exist for `CRTDSPF`). Expected: an output field `MSG1` with `MSGID(USR0001 ORDMSGF)` at line 1 column 2; `MSG2` with `MSGID(USR000A ORDMSGF)` at line 3 (member U2 noted in the report, A); `ERRMSG` as a 50-character output field conditioned by 07 and `MSG3` with `MSGID(USR0002 ORDMSGF)` conditioned by N07; `PGMMSG` as an output field, R;
+
+`samples/EDTSCR.dspf36` has five D records with an edit code. Expected: `AMOUNT` as a 9-digit zoned output field with `EDTCDE(1)` (A); `BADCD` (code W) written without `EDTCDE`, R; `INONLY` (input only) written without `EDTCDE`, R; `BOTHFLD` as a signed numeric input/output field of 7 digits with `EDTCDE(J)` (A); the constant with an edit code written as a constant, R.

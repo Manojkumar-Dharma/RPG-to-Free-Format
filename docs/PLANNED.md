@@ -16,8 +16,8 @@ the same commit. Status values: Planned, In progress, Done.
 | OCL-06 | IAOCLTOCLE | SESSION, MEMBER, LIBRARY, MRTPROC | Planned |
 | OCL-07 | IAOCLTOCLE | PROMPT, HELP, INCLUDE | Planned |
 | OCL-08 | IAOCLTOCLE | Explicit SRCCCSID for IFS input | Planned |
-| DSP-01 | IACNVDSPF | H (help) specs | In progress (written, needs a compile and test) |
-| DSP-02 | IACNVDSPF | Message fields, array fields, edit codes | In progress (message fields written with a new MSGF parameter, needs a compile and test; edit codes are reported only; array fields need the WSU column layout, which SC41-4730 does not give) |
+| DSP-01 | IACNVDSPF | H (help) specs | Done (tested) |
+| DSP-02 | IACNVDSPF | Message fields, array fields, edit codes | In progress (message fields written as MSGID fields; edit codes written as EDTCDE, needs a compile and test; array fields are WSU only, not supported on the AS/400 and not converted) |
 | DSP-03 | IACNVDSPF | Output indicators on input/output fields | Planned |
 | DSP-04 | IACNVDSPF | Confirm assumptions: CFnn(nn) command keys, INDARA and INVITE added, OVRDTA/OVRATR override keywords | Planned |
 | DSP-05 | IACNVDSPF | Check the layout against a real QS36SRC DSPF36 member (needs a sample from the user) | Planned |

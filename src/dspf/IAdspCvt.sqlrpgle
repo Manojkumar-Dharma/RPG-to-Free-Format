@@ -732,9 +732,10 @@ end-proc;
 
 
 // ------------------------------------------------------------------
-// D column 25 is an edit code (WSU only; SC41-4730 Appendix B has no entry
-// values or DDS result for it): not converted, so the item is reported for
-// review. Does not change a status that is already R.
+// D column 25 is an edit code (marked WSU only in SC41-4730, which has no entry
+// values). It is written as EDTCDE on numeric output-capable fields (see
+// ConvertFieldDefinition); on constants and message fields it is not used: the
+// item is reported for review. Does not change a status that is already R.
 dcl-proc ReportEditCode;
   dcl-pi *n;
     i_record char(80) const;
@@ -748,7 +749,7 @@ dcl-proc ReportEditCode;
   if io_status <> C_STS_REVIEW;
     io_status = C_STS_REVIEW;
     io_reason = %trim(io_reason + ' Edit code ' + %subst(i_record:25:1)
-              + ' (column 25, WSU only) is not converted.');
+              + ' (column 25) is not used on this item and is ignored.');
   endif;
 end-proc;
 
@@ -851,6 +852,9 @@ dcl-proc ConvertFieldDefinition;
     io_index int(10);
   end-pi;
 
+  // DDS edit codes: 1-4, A-D, J-Q, X-Z and the user-defined 5-9 (EDTCDE).
+  dcl-c C_EDTCDES '1234ABCDJKLMNOPQXYZ56789';
+
   dcl-s l_record char(80);
   dcl-s l_lineNo int(10);
   dcl-s l_name varchar(10);
@@ -878,6 +882,9 @@ dcl-proc ConvertFieldDefinition;
   dcl-s l_reported ind inz(*off);
   dcl-s l_messageId varchar(7) inz('');
   dcl-s l_member varchar(2) inz('');
+  dcl-s l_editCode char(1) inz(' ');
+  dcl-s l_editOk ind inz(*off);
+  dcl-s l_editNote varchar(120) inz('');
 
   l_record = g_sourceLines(io_index);
   l_lineNo = g_sourceLineNos(io_index);
@@ -981,15 +988,42 @@ dcl-proc ConvertFieldDefinition;
   if l_isInput;
     l_ddsType = DdsType(l_dataType);
   endif;
+
+  // Edit code (column 25): EDTCDE is only valid on output-capable numeric
+  // fields. An output-only field is then written as zoned numeric (S, 0
+  // decimals: the D specification has no decimal positions); an input/output
+  // field must already be signed numeric (data type S).
+  l_editCode = %xlate(C_LOWER:C_UPPER:%subst(l_record:25:1));
+  if l_editCode <> ' ' and l_ctype <> 'M';
+    select;
+      when %scan(l_editCode:C_EDTCDES) = 0;
+        l_editNote = 'Edit code ' + l_editCode + ' (column 25) is not a DDS'
+                   + ' edit code; not written';
+      when l_isInput and l_outputSpec = 'N';
+        l_editNote = 'Edit code ' + l_editCode + ' (column 25) is on an'
+                   + ' input-only field; not written';
+      when l_isInput and l_ddsType <> 'S';
+        l_editNote = 'Edit code ' + l_editCode + ' (column 25) needs data'
+                   + ' type S on an input/output field; not written';
+      other;
+        l_editOk = *on;
+    endsl;
+  endif;
+  if l_editOk and not l_isInput;
+    l_ddsType = 'S';
+  endif;
+
   l_fieldLength = l_length;
   l_decimals = -1;
   if l_ddsType = 'S';
-    l_fieldLength = l_length - 1;
     l_decimals = 0;
-    if l_fieldLength < 1;
-      RptItem(C_STS_REVIEW:l_lineNo:%trimr(l_record)
-              :'Signed numeric field needs a length of at least 2');
-      return;
+    if l_isInput;
+      l_fieldLength = l_length - 1;
+      if l_fieldLength < 1;
+        RptItem(C_STS_REVIEW:l_lineNo:%trimr(l_record)
+                :'Signed numeric field needs a length of at least 2');
+        return;
+      endif;
     endif;
   endif;
 
@@ -1050,6 +1084,23 @@ dcl-proc ConvertFieldDefinition;
     endif;
   endif;
 
+  if l_editOk;
+    if l_status = C_STS_CONVERTED;
+      l_status = C_STS_ASSUMPTION;
+      l_reason = 'Edit code ' + l_editCode + ' written as EDTCDE';
+      if not l_isInput;
+        l_reason = l_reason + '; output field written as zoned numeric (S, 0'
+                 + ' decimals), the display grows by the editing characters';
+      endif;
+    endif;
+  elseif l_editNote <> '';
+    l_status = C_STS_REVIEW;
+    if l_reason <> '';
+      l_reason = l_reason + '; ';
+    endif;
+    l_reason = l_reason + l_editNote;
+  endif;
+
   // The field record. A pure output field with an output indicator is
   // shown only while the indicator is on; the constant text (if any) is
   // shown while it is off.
@@ -1068,6 +1119,9 @@ dcl-proc ConvertFieldDefinition;
       l_reason = 'CHECK(AB) left out: DDS needs another validity checking'
               + ' keyword with it';
     endif;
+  endif;
+  if l_editOk;
+    CollectKeyword('':'EDTCDE(' + l_editCode + ')');
   endif;
   if g_override;
     if l_attrInd;
@@ -1096,7 +1150,9 @@ dcl-proc ConvertFieldDefinition;
     WriteCollectedKeywords();
   endif;
 
-  ReportEditCode(l_record:l_status:l_reason);
+  if l_ctype = 'M';
+    ReportEditCode(l_record:l_status:l_reason);
+  endif;
   RptItem(l_status:l_lineNo:%trimr(l_record):l_reason);
 end-proc;
 
