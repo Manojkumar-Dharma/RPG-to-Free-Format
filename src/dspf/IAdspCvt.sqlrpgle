@@ -472,10 +472,11 @@ dcl-proc ConvertDisplayControl;
     AddKeywordLine('':'ALTNAME(' + C_QUOTE + l_name + C_QUOTE + ')');
   endif;
   if IsHelpFormatName(l_name);
-    AddKeywordLine('':'HLPSEQ(' + %trim(%char(%int(%subst(l_name:7:2)))) + ')');
+    AddKeywordLine('':'HLPSEQ(' + %subst(l_name:1:6) + ' '
+                   + %trim(%char(%int(%subst(l_name:7:2)))) + ')');
     if l_status = C_STS_CONVERTED;
       l_status = C_STS_ASSUMPTION;
-      l_reason = 'HLPSEQ added from the last two digits of the help format name';
+      l_reason = 'HLPSEQ added: group = first 6 characters, sequence = last 2 digits';
     endif;
   endif;
 
@@ -1173,12 +1174,13 @@ end-proc;
 // ------------------------------------------------------------------
 // H specification: one help area. Written after the S specification (and
 // before the first D specification) as record-level help keywords:
-//   HLPARA(row col row col) or HLPARA(*NONE) for a null area, then
-//   HLPRCD(format [lib/file]) for a help format or HLPDOC(label doc folder) for
-//   an online document, then HLPBDY and HLPRTN when columns 50-51 / 47-48 ask.
-// Suppress selection (44-45, an indicator) conditions HLPARA and HLPRCD/HLPDOC by
-// NOT the indicator. Only HLPSEQ is described in the manual: the other keywords
-// and their order are assumptions (A) to confirm with CRTDSPF.
+//   H  HLPARA(row col row col) or HLPARA(*NONE) for a null area (the H is in
+//      column 17), then HLPRCD(format [lib/file]) for a help format or
+//      HLPDOC(label doc folder) for an online document, then HLPBDY (not with
+//      HLPDOC) when column 50-51 asks.
+// Suppress selection (44-45, an indicator) conditions HLPRCD/HLPDOC by NOT the
+// indicator (HLPARA takes no option indicator). Restore display (47-48) has no
+// DDS keyword and is reported, not written.
 dcl-proc ConvertHelpDefinition;
   dcl-pi *n;
     i_record char(80) const;
@@ -1190,8 +1192,8 @@ dcl-proc ConvertHelpDefinition;
   dcl-s l_library varchar(10);
   dcl-s l_ddsName varchar(10);
   dcl-s l_error varchar(100) inz('');
-  dcl-s l_note varchar(100) inz('');
-  dcl-s l_reason varchar(200);
+  dcl-s l_note varchar(250) inz('');
+  dcl-s l_reason varchar(400);
   dcl-s l_text varchar(20);
   dcl-s l_spec varchar(3);
   dcl-s l_isDocument ind inz(*off);
@@ -1349,25 +1351,34 @@ dcl-proc ConvertHelpDefinition;
   else;
     l_areaText = 'HLPARA(*NONE)';
   endif;
-  AddCondKeywordLine(l_suppress:*on:l_areaText);
+  // The H in column 17 starts the help specification; HLPARA takes no option
+  // indicator, so the suppress indicator goes on HLPRCD / HLPDOC (indicator off
+  // = help active).
+  AddOutputLine(BuildDdsLine('':*off:'H':'':0:' ':-1:' ':0:0:l_areaText));
   if l_tail = '';
     AddCondKeywordLine(l_suppress:*on:l_head);
   else;
     AddCondKeywordLine(l_suppress:*on:l_head + ' +');
     AddKeywordLine('':l_tail);
   endif;
-  select;
-    when l_boundary = 'Y';
-      AddKeywordLine('':'HLPBDY');
-    when l_boundary = 'I';
-      AddKeywordLine(l_boundaryIndicator:'HLPBDY');
-  endsl;
-  select;
-    when l_restore = 'N';
-      AddKeywordLine('':'HLPRTN');
-    when l_restore = 'I';
-      AddCondKeywordLine(l_restoreIndicator:*on:'HLPRTN');
-  endsl;
+  // HLPDOC cannot be used with HLPBDY or HLPRTN (IBM i DDS reference).
+  if l_isDocument and l_boundary <> 'N';
+    l_note = 'Boundary (columns 50-51) not written: HLPBDY cannot be used with HLPDOC';
+  else;
+    select;
+      when l_boundary = 'Y';
+        AddKeywordLine('':'HLPBDY');
+      when l_boundary = 'I';
+        AddKeywordLine(l_boundaryIndicator:'HLPBDY');
+    endsl;
+  endif;
+  if l_restore <> 'D';
+    if l_note <> '';
+      l_note = l_note + '; ';
+    endif;
+    l_note = l_note + 'Restore display (columns 47-48) not written: no DDS '
+           + 'keyword (RSTDSP is a CRTDSPF parameter)';
+  endif;
 
   if l_isDocument;
     l_reason = 'Written as HLPARA and HLPDOC';

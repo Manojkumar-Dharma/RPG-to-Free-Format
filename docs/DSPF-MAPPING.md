@@ -164,20 +164,21 @@ H records follow an S record and come before its first D record. Each one is a h
 | 50-51 | Boundary for Page Up and Page Down: blank or `N`, `Y`, or an indicator |
 | 53 | `Y` online document, blank or `N` help format |
 
-DDS written for each H record, after the keywords of its format:
+DDS written for each H record, after the record-level keywords of its format and before its first field. Checked against the IBM i DDS reference (HLPARA, HLPRCD, HLPBDY, HLPDOC, HLPRTN, HLPSEQ) after `CRTDSPF` rejected the first version (CPD7486: the help keywords were written at record level):
 
-| Source | DDS (assumption A) |
+| Source | DDS |
 |---|---|
-| Area given | `HLPARA(row col row col)`, rows and columns as in the H record (like the D lines, relative to the start line; the S start line is not added) |
+| Start of the area | A line with `H` in column 17 and `HLPARA(row col row col)` (rows and columns as in the H record, like the D lines; the S start line is not added). `HLPARA` takes no option indicator |
 | Null area | `HLPARA(*NONE)` |
 | Help format, blank 16-23 | `HLPRCD(format)`. The format is looked up in the whole source, so a format that is defined further down is found and a renamed one (`FMTn`) gets its DDS name. A name not in the source is used as it is when it is valid in DDS |
 | Help format in another file | `HLPRCD(format lib/file)` (`file` alone when 25-32 is blank). When a name is not valid in DDS the record is ignored, as `$SFGR` does (SC41-4730 chapter 14): kept as a comment, status R |
 | Online document | `HLPDOC(label document folder)`. Label, document and folder must all be given |
-| Suppress indicator | `HLPARA` and `HLPRCD` or `HLPDOC` are conditioned by NOT the indicator |
-| Boundary `Y` / indicator | `HLPBDY` / `HLPBDY` conditioned by the indicator |
-| Restore `N` / indicator | `HLPRTN` / `HLPRTN` conditioned by NOT the indicator |
+| Suppress indicator | `HLPRCD` or `HLPDOC` is conditioned by NOT the indicator (the specification is active when it is off) |
+| Boundary `Y` / indicator | `HLPBDY` / `HLPBDY` conditioned by the indicator. Not written with `HLPDOC` (not allowed together), reported A |
+| Restore display (47-48) | Not written: DDS has no keyword for it (`RSTDSP` is a `CRTDSPF` parameter; `HLPRTN` returns control to the program, which is something else). Reported A |
+| Help format name `axxxxxnn` | `HLPSEQ(axxxxx nn)` on that format: group name = first 6 characters, sequence = last two digits (the group name is an assumption, A) |
 
-Not valid entries (Y or N in 44-45, a corner without the other, a row over 27, a lower right corner above or left of the upper left, a library without a file, and so on) are kept as a DDS comment and reported R. The manual only describes the DDS result for `HLPSEQ`; the other keywords, their order and the `HLPDOC` and `HLPRCD` operands are assumptions to confirm with `CRTDSPF`.
+Not valid entries (Y or N in 44-45, a corner without the other, a row over 27, a lower right corner above or left of the upper left, a library without a file, and so on) are kept as a DDS comment and reported R.
 
 ## DSPF38
 
@@ -191,6 +192,6 @@ Array fields (WSU only: the manual shows only the column labels elements per row
 
 `samples/EMPSCR.dspf36` is a small column-exact DSPF36 member (one format, constants, input and output fields, an indicator, a continued constant). Convert it first and send me the generated member and the report if anything looks wrong.
 
-`samples/HELPSCR.dspf36` has four H records (help format of this source with a boundary, a format in another file with a library, restore N and a suppress indicator, an online document, and a null area) and two help formats. Expected DDS for the first format: `HLPARA(3 15 3 19)`, `HLPRCD(ORDHLP01)`, `HLPBDY`; then `HLPARA(5 15 5 30)` and `HLPRCD(ORDHLP02 MYLIB/ORDHELP)` both conditioned by `N05`, and `HLPRTN`; then `HLPDOC(ORDLBL ORDDOC ORDFLD)`; then `HLPARA(*NONE)` and `HLPRCD(ORDHLP03)`. The formats ORDHLP01 and ORDHLP03 get `HLPSEQ(1)` and `HLPSEQ(3)`.
+`samples/HELPSCR.dspf36` has four H records (help format of this source with a boundary, a format in another file with a library, restore N and a suppress indicator, an online document, and a null area) and two help formats. Expected DDS for the first format: an `H` line with `HLPARA(3 15 3 19)`, `HLPRCD(ORDHLP01)`, `HLPBDY`; then an `H` line with `HLPARA(5 15 5 30)` and `HLPRCD(ORDHLP02 MYLIB/ORDHELP)` conditioned by `N05` (the restore N is reported, not written); then an `H` line with `HLPARA(7 15 7 25)` and `HLPDOC(ORDLBL ORDDOC ORDFLD)` (its boundary Y is reported, not written); then an `H` line with `HLPARA(*NONE)` and `HLPRCD(ORDHLP03)`. The formats ORDHLP01 and ORDHLP03 get `HLPSEQ(ORDHLP 1)` and `HLPSEQ(ORDHLP 3)`.
 
 `samples/MSGSCR.dspf36` has two message constants (U1 and U2 members), a message with an output indicator, a message field with no id and a field with an edit code. Convert it with `MSGF(MYLIB/ORDMSGF)` (any name; it must exist for `CRTDSPF`). Expected: `MSGCON(30 USR0001 ORDMSGF)` at line 1 column 2; `MSGCON(40 USR000A ORDMSGF)` at line 3 (member U2 noted in the report, A); `ERRMSG` as a 50-character output field conditioned by 07 and `MSGCON(50 USR0002 ORDMSGF)` conditioned by N07; `PGMMSG` as an output field, R; `AMOUNT` as written before, R for the edit code.
