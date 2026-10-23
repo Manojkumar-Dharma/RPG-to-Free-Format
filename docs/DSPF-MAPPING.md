@@ -94,7 +94,7 @@ Assumptions (A): command keys become `CFnn(nn)`, so data is returned with the ke
 | indicator | not Y | Output field conditioned by the indicator. Constant text, if any, is a constant conditioned by NOT the indicator |
 | N or blank | Y | Input field (`I`). Constant text is not used (A) |
 | Y | Y | Input/output field (`B`) |
-| indicator | Y | Input/output field (`B`), status R: the output indicator is dropped |
+| indicator | Y | Input/output field defined twice with the same name (A): `B` conditioned by the indicator (the program's data is shown while it is on) and `I` conditioned by NOT the indicator (input only, no data sent, while it is off). Attributes, checks and `LOWER` are written under both; `EDTCDE` and `OVRDTA` only under the `B` one |
 
 Field names are kept when valid and unique in the format. Otherwise they become `FLDn` (A), because S/36 programs address display fields by position.
 
@@ -199,7 +199,7 @@ Each line is copied unchanged and reported C. One report line (A) says the membe
 
 ## Not converted yet
 
-Array fields (WSU only: the manual shows only the column labels elements per row or column, fill direction, line skip factor, horizontal positions and space factor, with no entry values), edit codes (written as EDTCDE, see above), and reduced behaviour for output indicators on input/output fields.
+Array fields (WSU only: the manual shows only the column labels elements per row or column, fill direction, line skip factor, horizontal positions and space factor, with no entry values). Edit codes are written as EDTCDE (see above) and output indicators on input/output fields as two definitions of the field (see the kind-of-record table).
 
 ## Sample
 
@@ -230,7 +230,7 @@ Not in the sample (would stop the compile or needs a program): fields in columns
 | `FBADS` | Start line 0, alarm `Q` | R; the format is still written |
 | `FCONST` | Constants: N, blank and Y output, no text, continued, apostrophe, `C`, input with text | Constants (Y output reported once); no text skipped (A); continued text joined; `''` doubled; input text ignored (A) |
 | `FOUT` | Output fields, indicators, names | `OUTY` output; `OUTI` conditioned by 41; `OUTIC` conditioned by 42 plus a constant under N42; `OUTN` skipped; blank, duplicate and invalid names become `FLDn` (A); `LONGNAME` and `OUT$#@_1` kept |
-| `FINPUT` | Input, input/output, output indicator on input, length 1 signed | `I`, `I`, `B`; `ININD` is `B` and R (indicator dropped); `INS1` R (needs length 2) |
+| `FINPUT` | Input, input/output, output indicator on input, length 1 signed | `I`, `I`, `B`; `ININD` is `B` under 43 plus `I` under N43, A; `INS1` R (needs length 2) |
 | `FTYPES` | Data types A B M N S R Z D K E F O X blank | DDS types `X A N M S I A D A A A A A A` (`S` length minus 1). `K` is `A` here because the first S record is right-to-left; without it `K` is `W` |
 | `FBADD` | No length, no line, no column, output `Q` | R each, not written |
 | `FATTR` | HI BL ND RI UL CS, indicators, PR, PC, combinations | `DSPATR(...)` per attribute, indicator forms conditioned; `IALL` has `DSPATR(HI BL RI UL CS)` and `PR` conditioned by 56 |

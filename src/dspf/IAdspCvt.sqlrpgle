@@ -909,6 +909,9 @@ dcl-proc ConvertFieldDefinition;
   dcl-s l_editOk ind inz(*off);
   dcl-s l_editDigits int(10) inz(0);
   dcl-s l_editNote varchar(120) inz('');
+  dcl-s l_dualDefinition ind inz(*off);   // input/output field with output indicator
+  dcl-s l_baseKeywordCount int(10) inz(0);
+  dcl-s l_index int(10);
 
   l_record = g_sourceLines(io_index);
   l_lineNo = g_sourceLineNos(io_index);
@@ -1112,10 +1115,15 @@ dcl-proc ConvertFieldDefinition;
                 + ' a program output field';
     endsl;
   endif;
-  if l_usage = 'B' and %subst(l_outputSpec:1:1) = 'I';
-    l_status = C_STS_REVIEW;
-    l_reason = 'Output indicator on an input/output field: written as a plain'
-            + ' input/output field';
+  // DSP-03: an input/output field with an output indicator is defined twice
+  // with the same name: input/output while the indicator is on (the program's
+  // data is shown) and input only while it is off (no data is sent).
+  l_dualDefinition = (l_usage = 'B' and %subst(l_outputSpec:1:1) = 'I');
+  if l_dualDefinition and l_status <> C_STS_REVIEW;
+    l_status = C_STS_ASSUMPTION;
+    l_reason = 'Output indicator ' + l_indicator + ' on an input/output field:'
+            + ' written twice with the same name, input/output while ' + l_indicator
+            + ' is on and input only while it is off';
   endif;
   if l_usage = 'I' and %len(l_data) > 0;
     if l_status = C_STS_CONVERTED;
@@ -1144,7 +1152,7 @@ dcl-proc ConvertFieldDefinition;
   // The field record. A pure output field with an output indicator is
   // shown only while the indicator is on; the constant text (if any) is
   // shown while it is off.
-  if l_usage = 'O' and %subst(l_outputSpec:1:1) = 'I';
+  if (l_usage = 'O' or l_dualDefinition) and %subst(l_outputSpec:1:1) = 'I';
     AddOutputLine(BuildDdsLine(l_indicator:*off:' ':l_name:l_fieldLength:
                   l_ddsType:l_decimals:l_usage:l_line:l_column:''));
   else;
@@ -1164,6 +1172,7 @@ dcl-proc ConvertFieldDefinition;
       l_reason = 'CHECK(RZ/RB) left out: DDS does not allow it with CHECK(MF)';
     endif;
   endif;
+  l_baseKeywordCount = g_keywordCount;      // keywords the input-only copy shares
   if l_editOk;
     CollectKeyword('':'EDTCDE(' + l_editCode + ')');
   endif;
@@ -1174,6 +1183,17 @@ dcl-proc ConvertFieldDefinition;
     if %subst(l_outputSpec:1:1) = 'I';
       CollectKeyword(l_indicator:'OVRDTA');
     endif;
+  endif;
+  if l_dualDefinition;
+    // First definition (indicator on): all keywords. Second definition
+    // (indicator off): input only, with the attributes and checks but without
+    // EDTCDE (output only) and OVRDTA (output data).
+    for l_index = 1 to g_keywordCount;
+      AddKeywordLine(g_keywordIndicators(l_index):g_keywordTexts(l_index));
+    endfor;
+    AddOutputLine(BuildDdsLine(l_indicator:*on:' ':l_name:l_fieldLength:
+                  l_ddsType:l_decimals:'I':l_line:l_column:''));
+    g_keywordCount = l_baseKeywordCount;
   endif;
   WriteCollectedKeywords();
 
