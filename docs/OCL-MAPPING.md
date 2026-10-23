@@ -175,6 +175,21 @@ Evidence: SC41-4731, chapter 5 ("WAIT OCL Statement", "NOHALT OCL Statement", "C
 | `// CANCEL` | `DLCOBJ` of the marker lock, `RETURN` | A | The reference cancels the procedure and treats the job end as abnormal, returning to the keyboard. Written like `// RETURN`, so a called program returns to its caller only; the abnormal end is not reproduced. `// IFF DATAF1-FILEA CANCEL` works through the usual condition handling. |
 | `// CANCEL PRT,...` | comment | R | Cancels spool file entries (printer ID, `ALL`, `FORMS`, `USER`). Not converted yet: the two-character S/36 printer ID has no known AS/400 device name, and the `*JOBCTL` scope needs a decision (OCL-10). |
 
+## LIBRARY, SESSION, MEMBER and MRTPROC
+
+Evidence: SC41-4731, chapter 5 ("LIBRARY OCL Statement", "SESSION OCL Statement", "MEMBER OCL Statement"); SC41-4730, chapter 13 ("Mapping SESSION OCL Statement to the OVRICFDEVE Command", Figure 13-10) and chapter 1 and 5 (a message member is a message file, `*MSGF`). Sample: `samples/LIBSESS.ocl`. None of this has been compiled or run on a system yet.
+
+| OCL | CLLE output | Status | Notes |
+|---|---|---|---|
+| `// LIBRARY NAME-lib[,SESSION-NO]` | `CHGCURLIB CURLIB(lib)`; at every exit `CHGCURLIB CURLIB(&OLDCURLIB)` | A | The reference says the library is current only while the procedure runs, and the previous one is current again at the end. The program starts with `RTVJOBA CURLIB(&OLDCURLIB)` (`*NONE` is kept as `*CRTDFT`). The restore is written at `// RETURN`, `// CANCEL` and the end of the program, after the first LIBRARY statement in the source only. The OS/400 search order differs from the S/36 one (system libraries first); not reproduced. |
+| `// LIBRARY NAME-0` | `CHGCURLIB CURLIB(*CRTDFT)` | A | Only `#LIBRARY` is searched on the S/36 system; here no current library. |
+| `// LIBRARY NAME-lib,SESSION-YES` | `CHGCURLIB CURLIB(lib)` at every exit | A | The session library takes effect after the job ends, not for the running procedure, so the change is made when the program exits and stays. |
+| `// LIBRARY` with both SESSION-NO and SESSION-YES in one procedure, between LOAD and RUN, a name that is not valid, or other operands | comment | R | |
+| `// SESSION SYMID-id,LOCATION-name[,GROUP-mode][,APPCNET-YES\|NO]` between LOAD and RUN | `OVRICFDEVE PGMDEV(id) RMTLOCNAME(name) [MODE(mode)]` | A | APPC form, mapping from Figure 13-10 (`APPCNET` is checked and ignored). The reference says an OVRICFDEVE run from a CL program applies only while that program runs, so no `DLTOVR` is written (to test). A SYMID that starts with a digit (`1S`) may need quotes. |
+| `// SESSION` for the other communications types (BSCEL, asynchronous, finance, retail, SNUF: `LWSID`, `APPLID`, `PARTNER`, ...), not between LOAD and RUN, or bad operands | comment | R | Figure 13-10 shows the mapping, but the value formats are not known for these types. |
+| `// MEMBER USER1-m,USER2-m,LIBRARY-lib,...` | comment | R | A message member is a `*MSGF` on the AS/400 system, read only by the `// *` message statement and the `?...?` message expressions; those are not converted yet (OCL-11), and there is no CL command that sets a "current message member". |
+| `MRTPROC` | procedure call (OCL-02) | A | Not an OCL statement: the IBM guide uses MRTPROC as the name of a sample MRT procedure. A MRT procedure converts like any other procedure; the MRT behaviour (several requesters, `MRTMAX`) belongs to the program and the procedure attributes, not to the source. Taken out of the reserved word list so it is called like any other procedure. |
+
 ## Procedure calls
 
 Evidence: SC41-4730 chapter 16 ("Calling Procedures", "Calling a Procedure from Another Procedure") and SC41-4731 chapter 2. A procedure is called with `name[,library] data`, `// name[,library] data` or `// INCLUDE name[,library] data` (INCLUDE is not converted yet). The data is a list of positional parameters separated by commas; an omitted parameter keeps its comma (`PROCA PARM1,,PARM3`).
@@ -250,4 +265,4 @@ CL cannot put a variable inside a word or a quoted text. Where OCL has an expres
 
 ## Not converted yet
 
-Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, `SCRATCH`, `INCLUDE`, and `CANCEL PRT,...` (spool file entries). Each is copied as a comment and reported R.
+Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `ATTR`, `ALLOCATE`, `DEALLOC`, `PROMPT`, `HELP`, `SCRATCH`, `INCLUDE`, `MEMBER`, `SESSION` for communications types other than APPC, and `CANCEL PRT,...` (spool file entries). Each is copied as a comment and reported R.

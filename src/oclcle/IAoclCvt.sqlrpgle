@@ -4,7 +4,7 @@
 // Converted in v1 (see docs/OCL-MAPPING.md for the rules and what is assumed):
 //   comment lines, LOAD + RUN, FILE, LOCAL, TAG, GOTO, RETURN,
 //   substitution expressions ?n?, ?USER?, ?WS?, procedure calls,
-//   WAIT, PAUSE, NOHALT, CANCEL (without operands)
+//   WAIT, PAUSE, NOHALT, CANCEL (without operands), LIBRARY, SESSION (APPC)
 // Everything else is written as a CL comment and reported as REVIEW.
 // The converted program is collected first, because the PGM statement and
 // the DCLs depend on which substitution expressions were used.
@@ -88,6 +88,8 @@ dcl-s g_activeCount int(10);     // ACTIVE- flags: &A1, &A2, ...
 dcl-s g_procName varchar(10);    // OCL procedure (source member) name
 dcl-s g_useFileSize ind;         // &FSN and &FSD work variables are needed
 dcl-s g_usePause ind;            // &PAUSERPY reply variable is needed
+dcl-s g_libMode int(10);         // LIBRARY: 0 none, 1 SESSION-NO, 2 SESSION-YES
+dcl-s g_sessionLib varchar(60);  // library set at exit by LIBRARY SESSION-YES
 dcl-s g_curLineNo int(10);       // line being converted (for report items)
 dcl-s g_curText varchar(512);
 
@@ -2665,7 +2667,7 @@ dcl-proc InitReservedNames;
   g_oclWords += 'LOCAL,LOG,MEMBER,MENU,MSG,NOHALT,OFF,POWER,PRINTER,PROMPT,REGION,';
   g_oclWords += 'RESERVE,RUN,RUN400,SESSION,SETDEV,START,STOP,SWITCH,SYSLIST,TIMERSET,';
   g_oclWords += 'VARY,WAIT,WORKSTN,END,SOURCE,TAG,GOTO,IF,IFF,IFT,ELSE,EVALUATE,';
-  g_oclWords += 'RETURN,PAUSE,SCRATCH,MRTPROC,BLDFILE,';
+  g_oclWords += 'RETURN,PAUSE,SCRATCH,BLDFILE,';
   g_ibmProcedures = ',';
   g_ibmProcedures += '#STRTUP1,#STRTUP2,ALERT,ALOCFLDR,ALOCLIBR,ALTERCOM,ALTERSDL,';
   g_ibmProcedures += 'APAR,APPNINFO,ARCHIVE,ASM,ASMLOAD,ASMSAVE,AUTO,AUTOC,BACKUP,';
@@ -3161,11 +3163,220 @@ dcl-proc ConvertCancel;
     return;
   endif;
 
+  AddCurLibExit();
   AddBody('DLCOBJ OBJ((' + C_MARKLIB + '/' + g_procName + ' *DTAARA *SHRRD))');
   AddBody('MONMSG MSGID(CPF0000)');
   AddBody('RETURN');
   RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
           :'CANCEL written as RETURN; abnormal end, return to keyboard not reproduced');
+end-proc;
+
+// ------------------------------------------------------------------
+// LIBRARY NAME-library[,SESSION-NO|YES] (SC41-4731, chapter 5). The current
+// library of the procedure becomes the OS/400 current library. SESSION-NO
+// lasts until the procedure ends, so the original one is put back at every
+// exit (see AddCurLibExit). SESSION-YES does not change the library of the
+// running procedure, only the one the display station keeps afterwards, so it
+// is set at every exit. NAME-0 (only #LIBRARY searched) is *CRTDFT.
+dcl-proc ConvertLibrary;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_itemCount int(10);
+  dcl-s l_itemIndex int(10);
+  dcl-s l_isValid ind;
+  dcl-s l_hasProblem ind inz(*off);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
+  dcl-s l_name varchar(60) inz('');
+  dcl-s l_session varchar(60) inz('NO');
+  dcl-s l_target varchar(60);
+  dcl-s l_newMode int(10);
+
+  if g_pendLoad;
+    ReviewLine(i_lineNo:i_text:'LIBRARY between LOAD and RUN is not allowed');
+    return;
+  endif;
+
+  l_itemCount = SplitItems(i_operands:l_items);
+  if l_itemCount < 1;
+    ReviewLine(i_lineNo:i_text:'LIBRARY needs NAME-library');
+    return;
+  endif;
+
+  for l_itemIndex = 1 to l_itemCount;
+    SplitKeyword(l_items(l_itemIndex):l_keyword:l_value);
+    l_isValid = *on;
+    select;
+      when l_keyword = 'NAME';
+        l_name = ConvertOperand(l_value:l_isValid);
+      when l_keyword = 'SESSION';
+        l_session = ToUpper(l_value);
+      other;
+        l_hasProblem = *on;
+    endsl;
+    if not l_isValid;
+      l_hasProblem = *on;
+    endif;
+  endfor;
+  if l_hasProblem or l_name = '' or (l_session <> 'NO' and l_session <> 'YES');
+    ReviewLine(i_lineNo:i_text
+               :'LIBRARY operands not understood (NAME-library, SESSION-NO or YES)');
+    return;
+  endif;
+
+  if l_name = '0';
+    l_target = '*CRTDFT';
+  else;
+    if not IsValidName(l_name:10);
+      ReviewLine(i_lineNo:i_text:'LIBRARY name is not a valid name');
+      return;
+    endif;
+    l_target = l_name;
+  endif;
+
+  if l_session = 'YES';
+    l_newMode = 2;
+  else;
+    l_newMode = 1;
+  endif;
+  if g_libMode <> 0 and g_libMode <> l_newMode;
+    ReviewLine(i_lineNo:i_text
+               :'LIBRARY with SESSION-NO and SESSION-YES in one procedure');
+    return;
+  endif;
+  g_libMode = l_newMode;
+
+  if l_session = 'NO';
+    AddBody('CHGCURLIB CURLIB(' + l_target + ')');
+    RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+            :'LIBRARY as CHGCURLIB, original library put back at exit (to test)');
+  else;
+    g_sessionLib = l_target;
+    AddComment('OCL: ' + %trim(i_text) + ' (CHGCURLIB is written at each exit)');
+    RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+            :'LIBRARY SESSION-YES as CHGCURLIB at exit, session library (to test)');
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// The lines every exit of the procedure (RETURN, CANCEL, the end) writes for
+// the LIBRARY statement: put the original current library back (SESSION-NO)
+// or set the session library (SESSION-YES).
+dcl-proc AddCurLibExit;
+  select;
+    when g_libMode = 1;
+      AddBody('CHGCURLIB CURLIB(&OLDCURLIB)');
+      AddBody('MONMSG MSGID(CPF0000)');
+    when g_libMode = 2;
+      AddBody('CHGCURLIB CURLIB(' + g_sessionLib + ')');
+      AddBody('MONMSG MSGID(CPF0000)');
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+// SESSION SYMID-id,LOCATION-name[,GROUP-mode][,APPCNET-YES|NO]: the APPC form
+// (SC41-4730, chapter 13, Figure 13-10). Written between LOAD and RUN, so the
+// override is written before the CALL. The reference says an OVRICFDEVE run
+// from a CL program applies only while that program runs. The other
+// communications types (BSCEL, asynchronous, finance, retail, SNUF) are not
+// converted.
+dcl-proc ConvertSession;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_itemCount int(10);
+  dcl-s l_itemIndex int(10);
+  dcl-s l_isValid ind;
+  dcl-s l_hasProblem ind inz(*off);
+  dcl-s l_otherType ind inz(*off);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
+  dcl-s l_symbolic varchar(60) inz('');
+  dcl-s l_location varchar(60) inz('');
+  dcl-s l_group varchar(60) inz('');
+  dcl-s l_appcNet varchar(60) inz('');
+  dcl-s l_command varchar(200);
+
+  if not g_pendLoad;
+    ReviewLine(i_lineNo:i_text:'SESSION must be between LOAD and RUN');
+    return;
+  endif;
+
+  l_itemCount = SplitItems(i_operands:l_items);
+  if l_itemCount < 1;
+    ReviewLine(i_lineNo:i_text:'SESSION needs SYMID and LOCATION');
+    return;
+  endif;
+
+  for l_itemIndex = 1 to l_itemCount;
+    SplitKeyword(l_items(l_itemIndex):l_keyword:l_value);
+    l_isValid = *on;
+    select;
+      when l_keyword = 'SYMID';
+        l_symbolic = ConvertOperand(l_value:l_isValid);
+      when l_keyword = 'LOCATION';
+        l_location = ConvertOperand(l_value:l_isValid);
+      when l_keyword = 'GROUP';
+        l_group = ConvertOperand(l_value:l_isValid);
+      when l_keyword = 'APPCNET';
+        l_appcNet = ToUpper(l_value);
+      other;
+        l_otherType = *on;
+    endsl;
+    if not l_isValid;
+      l_hasProblem = *on;
+    endif;
+  endfor;
+
+  if l_otherType;
+    ReviewLine(i_lineNo:i_text
+               :'SESSION for a communications type other than APPC is not converted');
+    return;
+  endif;
+  if l_hasProblem or l_symbolic = '' or l_location = ''
+     or (l_appcNet <> '' and l_appcNet <> 'YES' and l_appcNet <> 'NO');
+    ReviewLine(i_lineNo:i_text
+               :'SESSION operands not understood (SYMID, LOCATION, GROUP, APPCNET)');
+    return;
+  endif;
+  if not IsValidName(l_location:10) or (l_group <> '' and not IsValidName(l_group:10))
+     or (SafeSubstr(l_symbolic:1:1) <> '&' and %len(l_symbolic) <> 2);
+    ReviewLine(i_lineNo:i_text
+               :'SESSION SYMID (2 characters), LOCATION or GROUP is not valid');
+    return;
+  endif;
+
+  l_command = 'OVRICFDEVE PGMDEV(' + l_symbolic + ') RMTLOCNAME(' + l_location + ')';
+  if l_group <> '';
+    l_command += ' MODE(' + l_group + ')';
+  endif;
+  AddBody(l_command);
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+          :'SESSION as OVRICFDEVE; PGMDEV(digit first) and override end to test');
+end-proc;
+
+// ------------------------------------------------------------------
+// MEMBER USER1-m1,USER2-m2,LIBRARY-lib: the message members of the S/36
+// environment are message files (*MSGF) on the AS/400 system, but only the
+// // * message statement reads them, and that is not converted yet.
+dcl-proc ConvertMember;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  ReviewLine(i_lineNo:i_text
+             :'MEMBER selects message files (*MSGF); needs message statements (OCL-11)');
 end-proc;
 
 // ------------------------------------------------------------------
@@ -3257,7 +3468,14 @@ dcl-proc ProcessStatement;
       ConvertNohalt(i_lineNo:i_text:l_operands);
     when l_keyword = 'CANCEL';
       ConvertCancel(i_lineNo:i_text:l_operands);
+    when l_keyword = 'LIBRARY';
+      ConvertLibrary(i_lineNo:i_text:l_operands);
+    when l_keyword = 'SESSION';
+      ConvertSession(i_lineNo:i_text:l_operands);
+    when l_keyword = 'MEMBER';
+      ConvertMember(i_lineNo:i_text:l_operands);
     when l_keyword = 'RETURN' and %len(l_operands) = 0;
+      AddCurLibExit();
       AddBody('DLCOBJ OBJ((' + C_MARKLIB + '/' + g_procName + ' *DTAARA *SHRRD))');
       AddBody('MONMSG MSGID(CPF0000)');
       AddBody('RETURN');
@@ -3599,6 +3817,11 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endif;
+  if g_libMode = 1;
+    if WriteCl('DCL VAR(&OLDCURLIB) TYPE(*CHAR) LEN(10)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
   if g_useDate;
     if WriteCl('DCL VAR(&DATE) TYPE(*CHAR) LEN(6)':o_msgId:o_msgData) <> 0;
       return 1;
@@ -3641,6 +3864,16 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endif;
+  if g_libMode = 1;
+    // Keep the current library of the caller; *NONE goes back as *CRTDFT.
+    if WriteCl('RTVJOBA CURLIB(&OLDCURLIB)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+    if WriteCl('IF COND(&OLDCURLIB *EQ ''*NONE'') THEN(CHGVAR VAR(&OLDCURLIB)'
+               + ' VALUE(''*CRTDFT''))':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
   if g_useDate;
     if WriteCl('RTVSYSVAL SYSVAL(QDATE) RTNVAR(&DATE)':o_msgId:o_msgData) <> 0;
       return 1;
@@ -3667,6 +3900,7 @@ dcl-proc WriteProgram;
     return 1;
   endif;
 
+  AddCurLibExit();
   for l_index = 1 to g_bodyCnt;
     if WriteCl(g_body(l_index):o_msgId:o_msgData) <> 0;
       return 1;
@@ -3742,6 +3976,8 @@ dcl-proc OclConvert export;
   g_dataf1Count = 0;
   g_useFileSize = *off;
   g_usePause = *off;
+  g_libMode = 0;
+  g_sessionLib = '';
   g_curLineNo = 0;
   g_curText = '';
   g_width = TargetWidthFor(i_target);
