@@ -20,7 +20,7 @@ the same commit. Status values: Planned, In progress, Done.
 | DSP-01 | IACNVDSPF | H (help) specs | Done (tested) |
 | DSP-02 | IACNVDSPF | Message fields, array fields, edit codes | In progress (message fields written as MSGID fields; edit codes written as EDTCDE, needs a compile and test; array fields are WSU only, not supported on the AS/400 and not converted) |
 | DSP-03 | IACNVDSPF | Output indicators on input/output fields | In progress (written as two definitions of the field, needs a compile and test: DDS may not allow one name with usage B and I) |
-| DSP-04 | IACNVDSPF | Confirm assumptions: CFnn(nn) command keys, INDARA and INVITE added, OVRDTA/OVRATR override keywords | Planned |
+| DSP-04 | IACNVDSPF | Confirm assumptions: CFnn(nn) command keys, INDARA and INVITE added, OVRDTA/OVRATR override keywords | Done (checked against the manuals, see `docs/DSPF-MAPPING.md`; open: `CFnn(nn)` response indicator, `CF` against `CA`, `PUTOVR` and `ERASEINP` behaviour need a compile or display test) |
 | DSP-05 | IACNVDSPF | Check the layout against a real QS36SRC DSPF36 member (needs a sample from the user) | Planned |
 | FREE-01 | IACNVFREE | RPG to fully free format, based on the S/36-compatible RPG II guide (SC09-1818) | Planned |
 | FREE-02 | IACNVFREE | Evaluate CVTRPGSRC as stage 1 | Planned |

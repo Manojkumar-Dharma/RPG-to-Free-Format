@@ -197,6 +197,21 @@ Not valid entries (Y or N in 44-45, a corner without the other, a row over 27, a
 
 Each line is copied unchanged and reported C. One report line (A) says the member should be compiled with `CRTDSPF` to confirm. Records longer than 80 columns are reported R.
 
+## Assumptions checked (DSP-04)
+
+Each assumption above that is marked A was compared with SC41-4730 (page numbers of the V3R6 book) and the IBM i DDS reference for display files. Status: Confirmed (documented), Open (not in the manuals, needs a compile, a display test or a real S/36 program).
+
+| Assumption | Evidence | Status |
+|---|---|---|
+| `INDARA` on every file | SC41-4730 chapter 14 (14-22): the System/36 environment supports only display files with a separate indicator area, and `INDARA` satisfies that | Confirmed |
+| `INVITE` on every format | Same page: input must be invited after a write for RUF, and to read from a multiple-device file; the environment's RUF supports only display files with `INVITE` | Confirmed |
+| Key mask digits and letters | Appendix B (B-7, B-8): function keys 1 to 6; command keys A to L = 1 to 12, M and N = 13 and 14, P to Y = 15 to 24 (no O). Matches the tables above | Confirmed |
+| Function key 2 = `ROLLUP`, 3 = `ROLLDOWN` | IBM DDS: `ROLLUP` is the same as `PAGEDOWN`, `ROLLDOWN` the same as `PAGEUP`; without a response indicator input data is returned | Confirmed |
+| Command keys as `CFnn`, not `CAnn` | IBM DDS: `CF` returns the changed data, `CA` does not. SC41-4730 only says an enabled command key must be handled by the program and gives no DDS | Open: `CF` is right if S/36 command keys return the screen data, which the manuals in this repository do not state |
+| Response indicator = key number, `CFnn(nn)` | Not in the manuals. With `INDARA` it turns on `*INnn`, the same indicators an S/36 program uses as output conditions, so a program that uses indicator 05 for a field and also enables command key 5 would see both | Open: decide with a real program; the alternative is `CFnn` without an indicator (data returned, key found from the AID byte) |
+| Override as `PUTOVR` with `OVRDTA` and `OVRATR` | SC41-4730 (14-13): override transmits the conditional output fields (output indicator on) and retransmits the attributes controlled by indicators. This is what `PUTOVR` with `OVRDTA` and `OVRATR` do | Confirmed in intent. Open: `PUTOVR` conditioned by the S indicator needs a compile (the IBM page for it could not be read) |
+| Erase input as `ERASEINP` with `OVERLAY` | SC41-4730 (14-12): the operation blanks the unprotected input and input/output fields and invites input. IBM DDS: `ERASEINP` needs `OVERLAY`, and does not erase the fields of the record being written | Open: test on a display that writing the same format again with the indicator on blanks the input fields |
+
 ## Not converted yet
 
 Array fields (WSU only: the manual shows only the column labels elements per row or column, fill direction, line skip factor, horizontal positions and space factor, with no entry values). Edit codes are written as EDTCDE (see above) and output indicators on input/output fields as two definitions of the field (see the kind-of-record table).
