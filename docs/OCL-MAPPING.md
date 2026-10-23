@@ -156,6 +156,25 @@ files are filled with blank records by INZPFM (the guide says a new direct file
 must be initialised). A key length, other retention values or more operands
 are listed and the statement is R.
 
+## WAIT, PAUSE, NOHALT and CANCEL
+
+Evidence: SC41-4731, chapter 5 ("WAIT OCL Statement", "NOHALT OCL Statement", "CANCEL OCL Statement"), chapter 3 ("PAUSE Statement", "CANCEL Statement") and chapter 4 ("NOHALT Procedure", "RESPONSE Procedure"). Sample: `samples/WAITPAUS.ocl`. None of this has been compiled or run on a system yet.
+
+| OCL | CLLE output | Status | Notes |
+|---|---|---|---|
+| `// WAIT TIME-hhmmss` | `DLYJOB RSMTIME(hhmmss)` | A | `240000` is written as `000000`. The reference says a time that has already passed means the next day; `RSMTIME` is expected to behave the same (to test). |
+| `// WAIT INTERVAL-hhmmss` | `DLYJOB DLY(seconds)` | C | hours x 3600 + minutes x 60 + seconds, at most 86400. |
+| `// WAIT INTERVAL-000000` | comment only | A | No delay. |
+| `// WAIT` with another keyword, a value that is not 6 digits, hh above 24, mm or ss above 59, or more than `240000` | comment | R | |
+| `// PAUSE 'text'` | `SNDUSRMSG MSG('text') VALUES('0') MSGTYPE(*INQ) TOUSR(*REQUESTER) MSGRPY(&PAUSERPY)` | A | The reference sends the message to the display station of an interactive job and to the console for a job from the job queue; `TOUSR(*REQUESTER)` is meant to do the same. Only a reply of `0` continues. `&PAUSERPY` is declared `CHAR(1)`. Not tested. |
+| `// PAUSE` | same with the text `PAUSE -- when ready, enter 0 to continue` | A | The default text of the reference. |
+| `// PAUSE` text without apostrophes, an apostrophe that is not doubled, text over 500 characters, or a `?` in the text | comment | R | CL cannot put a variable inside a quoted text; the S/36 display shows only the first 68 characters, the CL message shows all of it. |
+| `// NOHALT 0[,JOB]` | `CHGJOB INQMSGRPY(*RQD)` | A | Also accepted without `//` (the NOHALT procedure has the same operands). |
+| `// NOHALT 1[,JOB]` to `4` | `CHGJOB INQMSGRPY(*DFT)` | A | The reference says OS/400 does not use the severity level, only the reply (job basis for the job message queue), so levels 1 to 4 are not told apart. JOB is assumed inside a procedure. |
+| `// NOHALT n,SESSION` or `,SYSTEM` | comment | R | The level is meant for later jobs or other display stations, which a CL program cannot set. |
+| `// CANCEL` | `DLCOBJ` of the marker lock, `RETURN` | A | The reference cancels the procedure and treats the job end as abnormal, returning to the keyboard. Written like `// RETURN`, so a called program returns to its caller only; the abnormal end is not reproduced. `// IFF DATAF1-FILEA CANCEL` works through the usual condition handling. |
+| `// CANCEL PRT,...` | comment | R | Cancels spool file entries (printer ID, `ALL`, `FORMS`, `USER`). Not converted yet: the two-character S/36 printer ID has no known AS/400 device name, and the `*JOBCTL` scope needs a decision (OCL-10). |
+
 ## Procedure calls
 
 Evidence: SC41-4730 chapter 16 ("Calling Procedures", "Calling a Procedure from Another Procedure") and SC41-4731 chapter 2. A procedure is called with `name[,library] data`, `// name[,library] data` or `// INCLUDE name[,library] data` (INCLUDE is not converted yet). The data is a list of positional parameters separated by commas; an omitted parameter keeps its comma (`PROCA PARM1,,PARM3`).
@@ -231,4 +250,4 @@ CL cannot put a variable inside a word or a quoted text. Where OCL has an expres
 
 ## Not converted yet
 
-Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `?F'S,name'?`, `WAIT`, `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `NOHALT`, `PAUSE`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, plus `CANCEL`, `SCRATCH`, `INCLUDE`. Each is copied as a comment and reported R.
+Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `ATTR`, `ALLOCATE`, `DEALLOC`, `SESSION`, `MEMBER`, `LIBRARY`, `MRTPROC`, `PROMPT`, `HELP`, `SCRATCH`, `INCLUDE`, and `CANCEL PRT,...` (spool file entries). Each is copied as a comment and reported R.

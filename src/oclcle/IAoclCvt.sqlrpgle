@@ -3,7 +3,8 @@
 //
 // Converted in v1 (see docs/OCL-MAPPING.md for the rules and what is assumed):
 //   comment lines, LOAD + RUN, FILE, LOCAL, TAG, GOTO, RETURN,
-//   substitution expressions ?n?, ?USER?, ?WS?, procedure calls
+//   substitution expressions ?n?, ?USER?, ?WS?, procedure calls,
+//   WAIT, PAUSE, NOHALT, CANCEL (without operands)
 // Everything else is written as a CL comment and reported as REVIEW.
 // The converted program is collected first, because the PGM statement and
 // the DCLs depend on which substitution expressions were used.
@@ -86,6 +87,7 @@ dcl-s g_dataf1Count int(10);     // DATAF1- flags: &D1, &D2, ...
 dcl-s g_activeCount int(10);     // ACTIVE- flags: &A1, &A2, ...
 dcl-s g_procName varchar(10);    // OCL procedure (source member) name
 dcl-s g_useFileSize ind;         // &FSN and &FSD work variables are needed
+dcl-s g_usePause ind;            // &PAUSERPY reply variable is needed
 dcl-s g_curLineNo int(10);       // line being converted (for report items)
 dcl-s g_curText varchar(512);
 
@@ -2972,6 +2974,201 @@ dcl-proc ConvertProcedureCall;
 end-proc;
 
 // ------------------------------------------------------------------
+// WAIT TIME-hhmmss or WAIT INTERVAL-hhmmss (SC41-4731, chapter 5).
+// TIME becomes DLYJOB RSMTIME(hhmmss), INTERVAL becomes DLYJOB DLY(seconds).
+dcl-proc ConvertWait;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_operand varchar(512);
+  dcl-s l_keyword varchar(20);
+  dcl-s l_value varchar(20);
+  dcl-s l_dashPos int(10);
+  dcl-s l_hours int(10);
+  dcl-s l_minutes int(10);
+  dcl-s l_seconds int(10);
+  dcl-s l_total int(10);
+
+  l_operand = ToUpper(%trim(i_operands));
+  l_dashPos = %scan('-':l_operand);
+  if l_dashPos < 2;
+    ReviewLine(i_lineNo:i_text:'WAIT needs TIME-hhmmss or INTERVAL-hhmmss');
+    return;
+  endif;
+  l_keyword = SafeSubstr(l_operand:1:l_dashPos - 1);
+  l_value = SafeSubstrToEnd(l_operand:l_dashPos + 1);
+  if (l_keyword <> 'TIME' and l_keyword <> 'INTERVAL')
+     or %len(l_value) <> 6 or %check('0123456789':l_value) > 0;
+    ReviewLine(i_lineNo:i_text:'WAIT needs TIME-hhmmss or INTERVAL-hhmmss (6 digits)');
+    return;
+  endif;
+
+  l_hours = %int(SafeSubstr(l_value:1:2));
+  l_minutes = %int(SafeSubstr(l_value:3:2));
+  l_seconds = %int(SafeSubstr(l_value:5:2));
+  if l_hours > 24 or l_minutes > 59 or l_seconds > 59
+     or (l_hours = 24 and (l_minutes > 0 or l_seconds > 0));
+    ReviewLine(i_lineNo:i_text
+               :'WAIT value out of range (hh 00-24, mm and ss 00-59, 240000 at most)');
+    return;
+  endif;
+
+  if l_keyword = 'TIME';
+    // 240000 and 000000 are the same time of day.
+    if l_hours = 24;
+      l_value = '000000';
+    endif;
+    AddBody('DLYJOB RSMTIME(' + l_value + ')');
+    RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+            :'WAIT TIME as DLYJOB RSMTIME; time already passed means next day (to test)');
+  else;
+    l_total = l_hours * 3600 + l_minutes * 60 + l_seconds;
+    if l_total = 0;
+      AddComment('OCL: ' + %trim(i_text) + ' (no wait)');
+      RptItem(C_STS_ASSUMPTION:i_lineNo:i_text:'WAIT INTERVAL of zero: no delay written');
+      return;
+    endif;
+    AddBody('DLYJOB DLY(' + %trim(%char(l_total)) + ')');
+    RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// PAUSE ['message text'] (SC41-4731, chapter 3). The operator replies 0 to
+// continue. TOUSR(*REQUESTER) sends to the display station of an interactive
+// job and to the system operator for a batch job, as the reference describes.
+dcl-proc ConvertPause;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_message varchar(512);
+  dcl-s l_index int(10);
+  dcl-s l_quotes int(10) inz(0);
+  dcl-s l_inner varchar(512);
+
+  l_message = %trim(i_operands);
+  if %len(l_message) = 0;
+    l_inner = 'PAUSE -- when ready, enter 0 to continue';
+  else;
+    if %len(l_message) < 2 or SafeSubstr(l_message:1:1) <> C_QUOTE
+       or SafeSubstr(l_message:%len(l_message):1) <> C_QUOTE;
+      ReviewLine(i_lineNo:i_text:'PAUSE message text must be inside apostrophes');
+      return;
+    endif;
+    l_inner = SafeSubstr(l_message:2:%len(l_message) - 2);
+    // Inside the text an apostrophe must be doubled: the quotes come in pairs.
+    for l_index = 1 to %len(l_inner);
+      if SafeSubstr(l_inner:l_index:1) = C_QUOTE;
+        l_quotes += 1;
+      endif;
+    endfor;
+    if %rem(l_quotes:2) <> 0;
+      ReviewLine(i_lineNo:i_text
+                 :'PAUSE message text has an apostrophe that is not doubled');
+      return;
+    endif;
+    if %scan('?':l_inner) > 0;
+      ReviewLine(i_lineNo:i_text
+                 :'PAUSE message text with a substitution expression is not converted');
+      return;
+    endif;
+    if %len(l_inner) > 500;
+      ReviewLine(i_lineNo:i_text:'PAUSE message text is longer than 500 characters');
+      return;
+    endif;
+  endif;
+
+  g_usePause = *on;
+  AddBody('SNDUSRMSG MSG(' + C_QUOTE + l_inner + C_QUOTE + ') VALUES(' + C_QUOTE
+          + '0' + C_QUOTE + ') MSGTYPE(*INQ) TOUSR(*REQUESTER) MSGRPY(&PAUSERPY)');
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+          :'PAUSE as an inquiry message, reply 0 continues (SNDUSRMSG not tested yet)');
+end-proc;
+
+// ------------------------------------------------------------------
+// NOHALT level[,JOB|SESSION|SYSTEM] (SC41-4731, chapter 5, and the RESPONSE
+// procedure). The reference says OS/400 does not use the severity level; the
+// reply is chosen per job. Level 0 asks for a reply, levels 1 to 4 use the
+// default reply. Inside a procedure JOB is assumed.
+dcl-proc ConvertNohalt;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_operand varchar(512);
+  dcl-s l_level varchar(512);
+  dcl-s l_scope varchar(512);
+  dcl-s l_commaPos int(10);
+
+  l_operand = ToUpper(%trim(i_operands));
+  l_commaPos = %scan(',':l_operand);
+  if l_commaPos = 0;
+    l_level = l_operand;
+    l_scope = 'JOB';
+  else;
+    l_level = SafeSubstr(l_operand:1:l_commaPos - 1);
+    l_scope = SafeSubstrToEnd(l_operand:l_commaPos + 1);
+    if %len(l_scope) = 0;
+      l_scope = 'JOB';
+    endif;
+  endif;
+
+  if %len(l_level) <> 1 or %check('01234':l_level) > 0;
+    ReviewLine(i_lineNo:i_text:'NOHALT severity level must be 0, 1, 2, 3 or 4');
+    return;
+  endif;
+  if l_scope = 'SESSION' or l_scope = 'SYSTEM';
+    ReviewLine(i_lineNo:i_text
+               :'NOHALT ' + l_scope
+                + ' (level for later jobs) cannot be set from a CL program');
+    return;
+  endif;
+  if l_scope <> 'JOB';
+    ReviewLine(i_lineNo:i_text:'NOHALT second operand must be JOB, SESSION or SYSTEM');
+    return;
+  endif;
+
+  if l_level = '0';
+    AddBody('CHGJOB INQMSGRPY(*RQD)');
+  else;
+    AddBody('CHGJOB INQMSGRPY(*DFT)');
+  endif;
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+          :'NOHALT 1 to 4 all as default reply (the severity level is not kept)');
+end-proc;
+
+// ------------------------------------------------------------------
+// CANCEL without operands (SC41-4731, chapter 3): cancels the procedure.
+// CANCEL PRT,... (chapter 5) cancels spool file entries and is not converted.
+dcl-proc ConvertCancel;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  if %len(%trim(i_operands)) > 0;
+    ReviewLine(i_lineNo:i_text
+               :'CANCEL of spool file entries (PRT) is not converted in this version');
+    return;
+  endif;
+
+  AddBody('DLCOBJ OBJ((' + C_MARKLIB + '/' + g_procName + ' *DTAARA *SHRRD))');
+  AddBody('MONMSG MSGID(CPF0000)');
+  AddBody('RETURN');
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+          :'CANCEL written as RETURN; abnormal end, return to keyboard not reproduced');
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc ProcessStatement;
   dcl-pi *n;
     i_lineNo int(10) const;
@@ -3052,6 +3249,14 @@ dcl-proc ProcessStatement;
       ConvertTagGoto(i_lineNo:i_text:*off:l_operands);
     when l_keyword = 'SWITCH';
       ConvertSwitch(i_lineNo:i_text:l_operands);
+    when l_keyword = 'WAIT';
+      ConvertWait(i_lineNo:i_text:l_operands);
+    when l_keyword = 'PAUSE';
+      ConvertPause(i_lineNo:i_text:l_operands);
+    when l_keyword = 'NOHALT';
+      ConvertNohalt(i_lineNo:i_text:l_operands);
+    when l_keyword = 'CANCEL';
+      ConvertCancel(i_lineNo:i_text:l_operands);
     when l_keyword = 'RETURN' and %len(l_operands) = 0;
       AddBody('DLCOBJ OBJ((' + C_MARKLIB + '/' + g_procName + ' *DTAARA *SHRRD))');
       AddBody('MONMSG MSGID(CPF0000)');
@@ -3127,7 +3332,7 @@ dcl-proc PassThroughClLine;
   endif;
   // Without a keyword in parentheses the line is a procedure call.
   if %scan('(':i_text) = 0 and ClassifyProcedureName(l_command) <> 'O'
-     and l_command <> 'BLDFILE';
+     and l_command <> 'BLDFILE' and l_command <> 'NOHALT';
     if ClassifyProcedureName(l_command) = 'I';
       ReviewLine(i_lineNo:i_text:'IBM-supplied procedure ' + l_command
                  + ' is not converted');
@@ -3148,6 +3353,15 @@ dcl-proc PassThroughClLine;
      or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ':SafeSubstr(l_command:1:1)) > 0
      or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$':l_command) > 0;
     ReviewLine(i_lineNo:i_text:'Line is not an OCL statement or a command');
+    return;
+  endif;
+
+  if l_command = 'NOHALT' and l_blankPos > 0 and %scan('(':i_text) = 0;
+    // The NOHALT procedure takes the same operands as the OCL statement.
+    l_operands = %trim(SafeSubstrToEnd(i_text:l_blankPos + 1));
+    l_tail = SplitStatementTail(l_operands);
+    ConvertNohalt(i_lineNo:i_text:l_operands);
+    AddComment(l_tail);
     return;
   endif;
 
@@ -3380,6 +3594,11 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endfor;
+  if g_usePause;
+    if WriteCl('DCL VAR(&PAUSERPY) TYPE(*CHAR) LEN(1)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
   if g_useDate;
     if WriteCl('DCL VAR(&DATE) TYPE(*CHAR) LEN(6)':o_msgId:o_msgData) <> 0;
       return 1;
@@ -3522,6 +3741,7 @@ dcl-proc OclConvert export;
   g_procName = ToUpper(%trim(i_source.mbr));
   g_dataf1Count = 0;
   g_useFileSize = *off;
+  g_usePause = *off;
   g_curLineNo = 0;
   g_curText = '';
   g_width = TargetWidthFor(i_target);

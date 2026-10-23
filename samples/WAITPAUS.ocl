@@ -1,0 +1,25 @@
+* WAIT, PAUSE, NOHALT and CANCEL (OCL-04)
+// NOHALT 3
+// NOHALT 0,JOB
+// NOHALT 2,SESSION
+// NOHALT 4,SYSTEM
+NOHALT 1,JOB
+// WAIT TIME-210000
+// WAIT TIME-240000
+// WAIT INTERVAL-000130
+// WAIT INTERVAL-240000
+// WAIT INTERVAL-000000
+// WAIT TIME-250000
+// WAIT SOON
+// LOAD PAYROLL
+// FILE NAME-EMPLOY
+// RUN
+// PAUSE 'Payroll program is complete'
+// PAUSE 'It''s time to change the forms'
+// PAUSE
+// PAUSE Payroll done
+// PAUSE 'Printer ?1? is ready'
+// IFF DATAF1-FILEA CANCEL
+// IF SWITCH1-1 PAUSE 'Check the output, then reply 0'
+// CANCEL
+// CANCEL PRT,P2
