@@ -1,0 +1,22 @@
+* Message statements, MEMBER and ?Mmic? (OCL-11)
+// * 'PAYROLL Procedure Running'
+// * 'It''s time to change the forms'
+// * 'Printer ?1? is ready'
+// * 0005
+// MEMBER USER1-MESSAGES,LIBRARY-COMMLIB,USER2-MSGHELP
+// * 0005
+// IF SWITCH1-1 * 'Check the output'
+// * '?M0014? was used'
+// * '?M'0014,10,8'? WAS USED'
+// ** 'Insert the next diskette'
+// ** 0006
+// * 'Is it done?'
+// * 12
+// * ?1?
+// FILE NAME-?M0015?
+// LOAD PAYROLL
+// RUN
+// PAUSE 'Printer ?1? is ready'
+// IF SWITCH2-1 MEMBER USER1-OTHER
+// MEMBER USER1-0
+// * 0005

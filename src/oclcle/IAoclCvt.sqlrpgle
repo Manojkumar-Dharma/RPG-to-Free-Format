@@ -22,6 +22,7 @@ dcl-c C_CALLPARMLEN 10;            // length every converted program declares
 dcl-c C_ALLSCOPE '*LIBL';          // where DATAF1-'name,ALL' looks for files
 dcl-c C_FDINITFLD 'PHRCDC';   // DSPFD initial records (unverified)
 dcl-c C_MARKLIB 'QGPL';          // library of the ACTIVE- marker data areas
+dcl-c C_MSGPREFIX 'USR';         // message id prefix of CRTS36MSGF (assumed)
 dcl-c C_MAXACTIVE 10;
 dcl-c C_DFTWIDTH 80;             // line width assumed when the target width is unknown
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
@@ -90,6 +91,12 @@ dcl-s g_useFileSize ind;         // &FSN and &FSD work variables are needed
 dcl-s g_usePause ind;            // &PAUSERPY reply variable is needed
 dcl-s g_libMode int(10);         // LIBRARY: 0 none, 1 SESSION-NO, 2 SESSION-YES
 dcl-s g_sessionLib varchar(60);  // library set at exit by LIBRARY SESSION-YES
+dcl-s g_user1Member varchar(60); // MEMBER USER1: first-level message file
+dcl-s g_user2Member varchar(60); // MEMBER USER2: second-level message file
+dcl-s g_msgLibrary varchar(60);  // MEMBER LIBRARY: library of the message files
+dcl-s g_msgVarCount int(10);     // &Mn variables made for ?Mmic? expressions
+dcl-s g_useMsgText ind;          // &MSGTXT work variable is needed
+dcl-s g_useMsgOut ind;           // &MSGOUT message text variable is needed
 dcl-s g_curLineNo int(10);       // line being converted (for report items)
 dcl-s g_curText varchar(512);
 
@@ -362,7 +369,7 @@ end-proc;
 // ------------------------------------------------------------------
 // Maps the text inside ?...? to a CL variable and its length. Returns ''
 // when the expression is not supported. Supported: ?n? (1-40), ?USER?,
-// ?WS?, ?DATE?, ?L'p,n'?, ?F'A,name'?.
+// ?WS?, ?DATE?, ?L'p,n'?, ?F'A,name'?, ?Mmic?, ?M'mic,p,n'?.
 dcl-proc ExpressionVariable;
   dcl-pi *n varchar(20);
     i_token varchar(60) const;
@@ -411,6 +418,12 @@ dcl-proc ExpressionVariable;
   if SafeSubstr(l_upperToken:1:2) = 'F''';
     o_length = 8;
     return FileSizeVariable(l_upperToken);
+  endif;
+  if SafeSubstr(l_upperToken:1:1) = 'M' and %len(l_upperToken) > 1
+     and (SafeSubstr(l_upperToken:2:1) = C_QUOTE
+          or %check('0123456789':SafeSubstrToEnd(l_upperToken:2)) = 0);
+    o_length = 75;
+    return MessageMemberVariable(l_upperToken);
   endif;
   return '';
 end-proc;
@@ -3049,45 +3062,21 @@ dcl-proc ConvertPause;
     i_operands varchar(512) const;
   end-pi;
 
-  dcl-s l_message varchar(512);
-  dcl-s l_index int(10);
-  dcl-s l_quotes int(10) inz(0);
-  dcl-s l_inner varchar(512);
+  dcl-s l_value varchar(600);
+  dcl-s l_reason varchar(100);
 
-  l_message = %trim(i_operands);
-  if %len(l_message) = 0;
-    l_inner = 'PAUSE -- when ready, enter 0 to continue';
+  if %len(%trim(i_operands)) = 0;
+    l_value = C_QUOTE + 'PAUSE -- when ready, enter 0 to continue' + C_QUOTE;
   else;
-    if %len(l_message) < 2 or SafeSubstr(l_message:1:1) <> C_QUOTE
-       or SafeSubstr(l_message:%len(l_message):1) <> C_QUOTE;
-      ReviewLine(i_lineNo:i_text:'PAUSE message text must be inside apostrophes');
-      return;
-    endif;
-    l_inner = SafeSubstr(l_message:2:%len(l_message) - 2);
-    // Inside the text an apostrophe must be doubled: the quotes come in pairs.
-    for l_index = 1 to %len(l_inner);
-      if SafeSubstr(l_inner:l_index:1) = C_QUOTE;
-        l_quotes += 1;
-      endif;
-    endfor;
-    if %rem(l_quotes:2) <> 0;
-      ReviewLine(i_lineNo:i_text
-                 :'PAUSE message text has an apostrophe that is not doubled');
-      return;
-    endif;
-    if %scan('?':l_inner) > 0;
-      ReviewLine(i_lineNo:i_text
-                 :'PAUSE message text with a substitution expression is not converted');
-      return;
-    endif;
-    if %len(l_inner) > 500;
-      ReviewLine(i_lineNo:i_text:'PAUSE message text is longer than 500 characters');
+    l_value = MessageTextValue(i_operands:500:l_reason);
+    if l_reason <> '';
+      ReviewLine(i_lineNo:i_text:l_reason);
       return;
     endif;
   endif;
 
   g_usePause = *on;
-  AddBody('SNDUSRMSG MSG(' + C_QUOTE + l_inner + C_QUOTE + ') VALUES(' + C_QUOTE
+  AddBody('SNDUSRMSG MSG(' + l_value + ') VALUES(' + C_QUOTE
           + '0' + C_QUOTE + ') MSGTYPE(*INQ) TOUSR(*REQUESTER) MSGRPY(&PAUSERPY)');
   RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
           :'PAUSE as an inquiry message, reply 0 continues (SNDUSRMSG not tested yet)');
@@ -3365,9 +3354,224 @@ dcl-proc ConvertSession;
 end-proc;
 
 // ------------------------------------------------------------------
-// MEMBER USER1-m1,USER2-m2,LIBRARY-lib: the message members of the S/36
-// environment are message files (*MSGF) on the AS/400 system, but only the
-// // * message statement reads them, and that is not converted yet.
+// ?Mmic? and ?M'mic,position,length'? (SC41-4731, chapter 3): text of a
+// message in the current first-level (USER1) message member, a message file
+// on the AS/400 system. RTVMSG fills a work variable, &Mn gets the whole text
+// or the part asked for. i_token is the upper-case text between the question
+// marks. Returns '' when it cannot be converted (no MEMBER USER1 before it).
+dcl-proc MessageMemberVariable;
+  dcl-pi *n varchar(20);
+    i_token varchar(60) const;
+  end-pi;
+
+  dcl-s l_rest varchar(60);
+  dcl-s l_inner varchar(60);
+  dcl-s l_mic varchar(60);
+  dcl-s l_first int(10);
+  dcl-s l_second int(10);
+  dcl-s l_position int(10) inz(0);
+  dcl-s l_length int(10) inz(0);
+  dcl-s l_variable varchar(20);
+
+  l_rest = SafeSubstrToEnd(i_token:2);
+  if %len(l_rest) = 0 or g_user1Member = '';
+    return '';
+  endif;
+  if SafeSubstr(l_rest:1:1) = C_QUOTE;
+    if %len(l_rest) < 9 or SafeSubstr(l_rest:%len(l_rest):1) <> C_QUOTE;
+      return '';
+    endif;
+    l_inner = SafeSubstr(l_rest:2:%len(l_rest) - 2);
+    l_first = %scan(',':l_inner);
+    l_second = %scan(',':l_inner:l_first + 1);
+    if l_first <> 5 or l_second = 0;
+      return '';
+    endif;
+    l_mic = SafeSubstr(l_inner:1:4);
+    if %check('0123456789':SafeSubstr(l_inner:6:l_second - 6)) > 0
+       or %check('0123456789':SafeSubstrToEnd(l_inner:l_second + 1)) > 0
+       or l_second = 6 or l_second = %len(l_inner);
+      return '';
+    endif;
+    l_position = %int(SafeSubstr(l_inner:6:l_second - 6));
+    l_length = %int(SafeSubstrToEnd(l_inner:l_second + 1));
+    if l_position < 1 or l_length < 1 or l_position > 75 or l_position + l_length > 76;
+      return '';
+    endif;
+  else;
+    l_mic = l_rest;
+  endif;
+  if %len(l_mic) <> 4 or %check('0123456789':l_mic) > 0;
+    return '';
+  endif;
+
+  g_useMsgText = *on;
+  g_msgVarCount += 1;
+  l_variable = '&M' + %trim(%char(g_msgVarCount));
+  AddBody('RTVMSG MSGID(' + C_MSGPREFIX + l_mic + ') MSGF(' + MessageFileName()
+          + ') MSG(&MSGTXT)');
+  AddBody('MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(&MSGTXT) VALUE(' + C_QUOTE + ' '
+          + C_QUOTE + '))');
+  if l_position > 0;
+    AddBody('CHGVAR VAR(' + l_variable + ') VALUE(%SST(&MSGTXT '
+            + %trim(%char(l_position)) + ' ' + %trim(%char(l_length)) + '))');
+  else;
+    AddBody('CHGVAR VAR(' + l_variable + ') VALUE(&MSGTXT)');
+  endif;
+  RptItem(C_STS_ASSUMPTION:g_curLineNo:g_curText
+          :'Message ' + C_MSGPREFIX + l_mic + ' read with RTVMSG from the USER1 '
+          + 'message file; prefix ' + C_MSGPREFIX + ' assumed (to test)');
+  return l_variable;
+end-proc;
+
+// ------------------------------------------------------------------
+// The USER1 message file as MSGF operand: library/name, or the name alone
+// when the library list is searched.
+dcl-proc MessageFileName;
+  dcl-pi *n varchar(60);
+  end-pi;
+
+  if g_msgLibrary <> '';
+    return g_msgLibrary + '/' + g_user1Member;
+  endif;
+  return g_user1Member;
+end-proc;
+
+// ------------------------------------------------------------------
+// The message text of PAUSE, // * and // ** statements: inside apostrophes,
+// an apostrophe in the text doubled, ?...? expressions allowed. Returns the
+// CL value: a quoted text, or &MSGOUT after a CHGVAR (written before the
+// statement) when the text holds expressions. o_reason is empty when fine.
+// An expression that holds apostrophes, such as ?M'0014,1,8'?, is not read as
+// text.
+dcl-proc MessageTextValue;
+  dcl-pi *n varchar(600);
+    i_operand varchar(512) const;
+    i_maxLength int(10) const;
+    o_reason varchar(100);
+  end-pi;
+
+  dcl-s l_text varchar(512);
+  dcl-s l_inner varchar(512);
+  dcl-s l_rest varchar(512);
+  dcl-s l_literal varchar(512);
+  dcl-s l_expr varchar(2000) inz('');
+  dcl-s l_openMark int(10);
+  dcl-s l_closeMark int(10);
+  dcl-s l_variable varchar(20);
+  dcl-s l_variableLength int(10);
+  dcl-s l_index int(10);
+  dcl-s l_quotes int(10);
+  dcl-s l_pieces int(10) inz(0);
+  dcl-s l_lastWasVariable ind inz(*off);
+
+  o_reason = '';
+  l_text = %trim(i_operand);
+  if %len(l_text) < 2 or SafeSubstr(l_text:1:1) <> C_QUOTE
+     or SafeSubstr(l_text:%len(l_text):1) <> C_QUOTE;
+    o_reason = 'Message text must be inside apostrophes';
+    return '';
+  endif;
+  l_inner = SafeSubstr(l_text:2:%len(l_text) - 2);
+  if %len(l_inner) > i_maxLength;
+    o_reason = 'Message text is longer than ' + %trim(%char(i_maxLength))
+               + ' characters';
+    return '';
+  endif;
+
+  if %scan('?':l_inner) = 0;
+    l_quotes = 0;
+    for l_index = 1 to %len(l_inner);
+      if SafeSubstr(l_inner:l_index:1) = C_QUOTE;
+        l_quotes += 1;
+      endif;
+    endfor;
+    if %rem(l_quotes:2) <> 0;
+      o_reason = 'Message text has an apostrophe that is not doubled';
+      return '';
+    endif;
+    return C_QUOTE + l_inner + C_QUOTE;
+  endif;
+
+  l_rest = l_inner;
+  dow %len(l_rest) > 0;
+    l_openMark = %scan('?':l_rest);
+    if l_openMark = 0;
+      l_literal = l_rest;
+      l_rest = '';
+      l_variable = '';
+    else;
+      l_closeMark = %scan('?':l_rest:l_openMark + 1);
+      if l_closeMark = 0;
+        o_reason = 'Message text has a ? that does not close an expression';
+        return '';
+      endif;
+      if l_openMark > 1;
+        l_literal = SafeSubstr(l_rest:1:l_openMark - 1);
+      else;
+        l_literal = '';
+      endif;
+      l_variable = ExpressionVariable(SafeSubstr(l_rest:l_openMark + 1:
+                     l_closeMark - l_openMark - 1):l_variableLength);
+      if l_variable = '';
+        o_reason = 'Expression in the message text is not converted: '
+                   + SafeSubstr(l_rest:l_openMark:l_closeMark - l_openMark + 1);
+        return '';
+      endif;
+      if l_closeMark >= %len(l_rest);
+        l_rest = '';
+      else;
+        l_rest = SafeSubstrToEnd(l_rest:l_closeMark + 1);
+      endif;
+    endif;
+
+    if %len(l_literal) > 0;
+      l_quotes = 0;
+      for l_index = 1 to %len(l_literal);
+        if SafeSubstr(l_literal:l_index:1) = C_QUOTE;
+          l_quotes += 1;
+        endif;
+      endfor;
+      if %rem(l_quotes:2) <> 0;
+        o_reason = 'Message text has an apostrophe that is not doubled';
+        return '';
+      endif;
+      if l_pieces > 0;
+        if l_lastWasVariable;
+          l_expr += ' *TCAT ';
+        else;
+          l_expr += ' *CAT ';
+        endif;
+      endif;
+      l_expr += C_QUOTE + l_literal + C_QUOTE;
+      l_pieces += 1;
+      l_lastWasVariable = *off;
+    endif;
+    if l_variable <> '';
+      if l_pieces > 0;
+        if l_lastWasVariable;
+          l_expr += ' *TCAT ';
+        else;
+          l_expr += ' *CAT ';
+        endif;
+      endif;
+      l_expr += l_variable;
+      l_pieces += 1;
+      l_lastWasVariable = *on;
+    endif;
+  enddo;
+
+  g_useMsgOut = *on;
+  AddBody('CHGVAR VAR(&MSGOUT) VALUE(' + l_expr + ')');
+  return '&MSGOUT';
+end-proc;
+
+// ------------------------------------------------------------------
+// MEMBER USER1-m,USER2-m,LIBRARY-lib,PROGRAM1-m,PROGRAM2-m (SC41-4731,
+// chapter 5). A message member is a message file on the AS/400 system. Only
+// this procedure's // * and // ** statements and ?Mmic? expressions use the
+// names kept here; 0 means no current member. PROGRAM1 and PROGRAM2 are IBM
+// licensed program messages and are accepted but not used.
 dcl-proc ConvertMember;
   dcl-pi *n;
     i_lineNo int(10) const;
@@ -3375,8 +3579,150 @@ dcl-proc ConvertMember;
     i_operands varchar(512) const;
   end-pi;
 
-  ReviewLine(i_lineNo:i_text
-             :'MEMBER selects message files (*MSGF); needs message statements (OCL-11)');
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_itemCount int(10);
+  dcl-s l_itemIndex int(10);
+  dcl-s l_isValid ind;
+  dcl-s l_hasProblem ind inz(*off);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
+  dcl-s l_name varchar(60);
+  dcl-s l_user1 varchar(60);
+  dcl-s l_user2 varchar(60);
+  dcl-s l_library varchar(60);
+  dcl-s l_user1Given ind inz(*off);
+  dcl-s l_user2Given ind inz(*off);
+  dcl-s l_libraryGiven ind inz(*off);
+
+  l_itemCount = SplitItems(i_operands:l_items);
+  if l_itemCount < 1;
+    ReviewLine(i_lineNo:i_text:'MEMBER needs USER1, USER2 or LIBRARY');
+    return;
+  endif;
+
+  for l_itemIndex = 1 to l_itemCount;
+    SplitKeyword(l_items(l_itemIndex):l_keyword:l_value);
+    l_isValid = *on;
+    select;
+      when l_keyword = 'USER1' or l_keyword = 'USER2' or l_keyword = 'LIBRARY';
+        l_name = ConvertOperand(l_value:l_isValid);
+        if l_name <> '0' and not IsValidName(l_name:10);
+          l_isValid = *off;
+        endif;
+        if l_keyword = 'USER1';
+          l_user1 = l_name;
+          l_user1Given = *on;
+        elseif l_keyword = 'USER2';
+          l_user2 = l_name;
+          l_user2Given = *on;
+        else;
+          l_library = l_name;
+          l_libraryGiven = *on;
+        endif;
+      when l_keyword = 'PROGRAM1' or l_keyword = 'PROGRAM2';
+        // IBM licensed program messages: not used here
+      other;
+        l_hasProblem = *on;
+    endsl;
+    if not l_isValid;
+      l_hasProblem = *on;
+    endif;
+  endfor;
+  if l_hasProblem;
+    ReviewLine(i_lineNo:i_text:'MEMBER operands not understood or not valid names');
+    return;
+  endif;
+
+  if l_user1Given;
+    if l_user1 = '0';
+      g_user1Member = '';
+    else;
+      g_user1Member = l_user1;
+    endif;
+  endif;
+  if l_user2Given;
+    if l_user2 = '0';
+      g_user2Member = '';
+    else;
+      g_user2Member = l_user2;
+    endif;
+  endif;
+  if l_libraryGiven;
+    if l_library = '0';
+      g_msgLibrary = '';
+    else;
+      g_msgLibrary = l_library;
+    endif;
+  endif;
+
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+          :'MEMBER kept for the // * statements and ?Mmic? of this procedure; '
+          + 'programs that read the current message member are not changed');
+end-proc;
+
+// ------------------------------------------------------------------
+// // * (informational message) and // ** (system console message), SC41-4731,
+// chapter 3. Text in apostrophes or a 4-digit message id code of the USER1
+// message member. // * goes to the requester (the console for a batch job),
+// // ** to QSYSOPR and waits for the reply 0, like PAUSE.
+dcl-proc ConvertMessage;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+    i_isConsole ind const;
+  end-pi;
+
+  dcl-s l_operand varchar(512);
+  dcl-s l_value varchar(600);
+  dcl-s l_reason varchar(100);
+  dcl-s l_command varchar(700);
+  dcl-s l_note varchar(100);
+
+  l_operand = %trim(i_operands);
+  if %len(l_operand) = 0;
+    ReviewLine(i_lineNo:i_text:'Message statement without a message id or text');
+    return;
+  endif;
+
+  if SafeSubstr(l_operand:1:1) = C_QUOTE;
+    if i_isConsole;
+      l_value = MessageTextValue(l_operand:504:l_reason);
+    else;
+      l_value = MessageTextValue(l_operand:505:l_reason);
+    endif;
+    if l_reason <> '';
+      ReviewLine(i_lineNo:i_text:l_reason);
+      return;
+    endif;
+    l_command = 'SNDUSRMSG MSG(' + l_value + ')';
+    l_note = 'Message text sent with SNDUSRMSG (not tested yet)';
+  else;
+    if %len(l_operand) <> 4 or %check('0123456789':l_operand) > 0;
+      ReviewLine(i_lineNo:i_text
+                 :'Message id code must be 4 digits or text in apostrophes');
+      return;
+    endif;
+    if g_user1Member = '';
+      ReviewLine(i_lineNo:i_text
+                 :'Message id code needs a MEMBER USER1 statement before it');
+      return;
+    endif;
+    l_command = 'SNDUSRMSG MSGID(' + C_MSGPREFIX + l_operand + ') MSGF('
+                + MessageFileName() + ')';
+    l_note = 'Message id ' + C_MSGPREFIX + l_operand + ' assumed (prefix '
+             + C_MSGPREFIX + ' from CRTS36MSGF; not tested yet)';
+  endif;
+
+  if i_isConsole;
+    g_usePause = *on;
+    l_command += ' VALUES(' + C_QUOTE + '0' + C_QUOTE
+                 + ') MSGTYPE(*INQ) TOMSGQ(*SYSOPR) MSGRPY(&PAUSERPY)';
+  else;
+    l_command += ' TOUSR(*REQUESTER)';
+  endif;
+  AddBody(l_command);
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text:l_note);
 end-proc;
 
 // ------------------------------------------------------------------
@@ -3437,7 +3783,7 @@ dcl-proc ProcessStatement;
 
   select;
     when l_cond <> '' and (l_keyword = 'LOAD' or l_keyword = 'RUN' or l_keyword = 'FILE'
-         or l_keyword = 'TAG');
+         or l_keyword = 'TAG' or l_keyword = 'MEMBER');
       ReviewLine(i_lineNo:i_text
                  :'A conditional ' + l_keyword + ' statement is not converted');
     when l_keyword = 'LOAD';
@@ -3474,6 +3820,8 @@ dcl-proc ProcessStatement;
       ConvertSession(i_lineNo:i_text:l_operands);
     when l_keyword = 'MEMBER';
       ConvertMember(i_lineNo:i_text:l_operands);
+    when l_keyword = '*' or l_keyword = '**';
+      ConvertMessage(i_lineNo:i_text:l_operands:l_keyword = '**');
     when l_keyword = 'RETURN' and %len(l_operands) = 0;
       AddCurLibExit();
       AddBody('DLCOBJ OBJ((' + C_MARKLIB + '/' + g_procName + ' *DTAARA *SHRRD))');
@@ -3786,6 +4134,22 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endfor;
+  if g_useMsgText;
+    if WriteCl('DCL VAR(&MSGTXT) TYPE(*CHAR) LEN(132)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
+  for l_index = 1 to g_msgVarCount;
+    if WriteCl('DCL VAR(&M' + %trim(%char(l_index)) + ') TYPE(*CHAR) LEN(75)'
+               :o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endfor;
+  if g_useMsgOut;
+    if WriteCl('DCL VAR(&MSGOUT) TYPE(*CHAR) LEN(512)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
   for l_index = 1 to g_fileSizeCount;
     if WriteCl('DCL VAR(&F' + %trim(%char(l_index)) + ') TYPE(*CHAR) LEN(8)'
                :o_msgId:o_msgData) <> 0;
@@ -3978,6 +4342,12 @@ dcl-proc OclConvert export;
   g_usePause = *off;
   g_libMode = 0;
   g_sessionLib = '';
+  g_user1Member = '';
+  g_user2Member = '';
+  g_msgLibrary = '';
+  g_msgVarCount = 0;
+  g_useMsgText = *off;
+  g_useMsgOut = *off;
   g_curLineNo = 0;
   g_curText = '';
   g_width = TargetWidthFor(i_target);

@@ -168,7 +168,7 @@ Evidence: SC41-4731, chapter 5 ("WAIT OCL Statement", "NOHALT OCL Statement", "C
 | `// WAIT` with another keyword, a value that is not 6 digits, hh above 24, mm or ss above 59, or more than `240000` | comment | R | |
 | `// PAUSE 'text'` | `SNDUSRMSG MSG('text') VALUES('0') MSGTYPE(*INQ) TOUSR(*REQUESTER) MSGRPY(&PAUSERPY)` | A | The reference sends the message to the display station of an interactive job and to the console for a job from the job queue; `TOUSR(*REQUESTER)` is meant to do the same. Only a reply of `0` continues. `&PAUSERPY` is declared `CHAR(1)`. Not tested. |
 | `// PAUSE` | same with the text `PAUSE -- when ready, enter 0 to continue` | A | The default text of the reference. |
-| `// PAUSE` text without apostrophes, an apostrophe that is not doubled, text over 500 characters, or a `?` in the text | comment | R | CL cannot put a variable inside a quoted text; the S/36 display shows only the first 68 characters, the CL message shows all of it. |
+| `// PAUSE` text without apostrophes, an apostrophe that is not doubled, text over 500 characters, or an expression that is not converted | comment | R | The S/36 display shows only the first 68 characters, the CL message shows all of it. Text with `?...?` expressions is built into `&MSGOUT` (see OCL-11). |
 | `// NOHALT 0[,JOB]` | `CHGJOB INQMSGRPY(*RQD)` | A | Also accepted without `//` (the NOHALT procedure has the same operands). |
 | `// NOHALT 1[,JOB]` to `4` | `CHGJOB INQMSGRPY(*DFT)` | A | The reference says OS/400 does not use the severity level, only the reply (job basis for the job message queue), so levels 1 to 4 are not told apart. JOB is assumed inside a procedure. |
 | `// NOHALT n,SESSION` or `,SYSTEM` | comment | R | The level is meant for later jobs or other display stations, which a CL program cannot set. |
@@ -187,8 +187,23 @@ Evidence: SC41-4731, chapter 5 ("LIBRARY OCL Statement", "SESSION OCL Statement"
 | `// LIBRARY` with both SESSION-NO and SESSION-YES in one procedure, between LOAD and RUN, a name that is not valid, or other operands | comment | R | |
 | `// SESSION SYMID-id,LOCATION-name[,GROUP-mode][,APPCNET-YES\|NO]` between LOAD and RUN | `OVRICFDEVE PGMDEV(id) RMTLOCNAME(name) [MODE(mode)]` | A | APPC form, mapping from Figure 13-10 (`APPCNET` is checked and ignored). The reference says an OVRICFDEVE run from a CL program applies only while that program runs, so no `DLTOVR` is written (to test). A SYMID that starts with a digit (`1S`) may need quotes. |
 | `// SESSION` for the other communications types (BSCEL, asynchronous, finance, retail, SNUF: `LWSID`, `APPLID`, `PARTNER`, ...), not between LOAD and RUN, or bad operands | comment | R | Figure 13-10 shows the mapping, but the value formats are not known for these types. |
-| `// MEMBER USER1-m,USER2-m,LIBRARY-lib,...` | comment | R | A message member is a `*MSGF` on the AS/400 system, read only by the `// *` message statement and the `?...?` message expressions; those are not converted yet (OCL-11), and there is no CL command that sets a "current message member". |
+| `// MEMBER USER1-m,...` | no CL, see OCL-11 below | A | |
 | `MRTPROC` | procedure call (OCL-02) | A | Not an OCL statement: the IBM guide uses MRTPROC as the name of a sample MRT procedure. A MRT procedure converts like any other procedure; the MRT behaviour (several requesters, `MRTMAX`) belongs to the program and the procedure attributes, not to the source. Taken out of the reserved word list so it is called like any other procedure. |
+
+## Message statements, MEMBER and ?Mmic? (OCL-11)
+
+Evidence: SC41-4731, chapter 3 ("// * (Informational Message) Statement", "// ** (System Console Message) Statement", "?Mmic? or ?M'mic,position,length'? Expression"), chapter 4 ("CREATE Procedure", message member statements) and chapter 5 ("MEMBER OCL Statement"); SC41-4730, chapter 15 ("Message Files and the System/36 Environment"). Sample: `samples/MSGMEM.ocl`. None of this has been compiled or run on a system yet.
+
+A message member is a message file (`*MSGF`) on the AS/400 system, made by `CREATE` or `CRTS36MSGF` from a source member of type MSGF36. Each message becomes a message description; the 4-digit message identification code (MIC) becomes a 7-character message ID, the first 3 characters being a prefix that is `USR` unless it was changed (rules: the prefix is the same for the whole file and is taken from the first message of the file). The converter cannot see the message file, so it assumes `USR` (constant `C_MSGPREFIX` in `IAoclCvt`).
+
+| OCL | CLLE output | Status | Notes |
+|---|---|---|---|
+| `// MEMBER USER1-m[,USER2-m][,LIBRARY-lib]` | no CL line | A | The names are kept while the source is converted. `USER1-0` means no current member. `LIBRARY` stays until another MEMBER statement gives one (the reference does not say whether an omitted LIBRARY clears it). `PROGRAM1` and `PROGRAM2` (IBM licensed program messages) are accepted and ignored. Programs that read the current message member on their own are not changed, because CL has no command that sets it. A conditional MEMBER statement, a name that is not valid or other operands are R. |
+| `// * 'text'` | `SNDUSRMSG MSG('text') TOUSR(*REQUESTER)` | A | The message goes to the display station that submitted the job, or to the system console for a job from the job queue (as the reference says); `TOUSR(*REQUESTER)` is meant to do the same. `INFOMSG NO` (which hides `// *` messages) is not converted. Text up to 505 characters. |
+| `// * mic` | `SNDUSRMSG MSGID(USRmic) MSGF([lib/]file) TOUSR(*REQUESTER)` | A | The file is the current USER1 member. R when no `MEMBER USER1` came before it or the code is not 4 digits. |
+| `// ** 'text'` or `// ** mic` | `SNDUSRMSG ... VALUES('0') MSGTYPE(*INQ) TOMSGQ(*SYSOPR) MSGRPY(&PAUSERPY)` | A | QSYSOPR, the job waits for the reply 0, like PAUSE. Text up to 504 characters. |
+| Message text with `?...?` expressions (also in `PAUSE`) | `CHGVAR VAR(&MSGOUT) VALUE('text ' *CAT &P1 *TCAT ' more')`, `MSG(&MSGOUT)` | A | `&MSGOUT` is `CHAR(512)`. Trailing blanks of an expression are removed (`*TCAT`), blanks of the text are kept (`*CAT`). A text with a `?` that is not an expression, or an expression that cannot be converted, is R. |
+| `?Mmic?`, `?M'mic,position,length'?` | `RTVMSG MSGID(USRmic) MSGF(file) MSG(&MSGTXT)`, then `CHGVAR VAR(&Mn) VALUE(%SST(&MSGTXT pos len))` | A | Written before the statement that uses it. `&Mn` is `CHAR(75)` and `&MSGTXT` `CHAR(132)`; a missing message gives blanks (`MONMSG`). Position 1 to 75, position + length at most 76. Needs a `MEMBER USER1` before it; without one the expression is not converted and the statement is R. |
 
 ## Procedure calls
 
@@ -235,6 +250,7 @@ Evidence: SC41-4731, chapter 3. `?n?` is the nth positional parameter of the pro
 | `?DATE?` | `&DATE` | `RTVSYSVAL SYSVAL(QDATE) RTNVAR(&DATE)`. The S/36 date follows the session date format, QDATE follows the system format (A in practice, not reported yet). |
 | `?L'p,n'?` | `&Lp_n` | `RTVDTAARA DTAARA(*LDA (p n)) RTNVAR(&Lp_n)` is written right before the statement that uses it. |
 | `?F'A,name'?` | `&Fn`, 8 characters with leading zeros | A | The actual number of data records. See below. |
+| `?Mmic?`, `?M'mic,p,n'?` | `&Mn`, 75 characters | A | Text of a message of the USER1 message file, read with `RTVMSG`. See "Message statements, MEMBER and ?Mmic?". |
 | `?n'value'?`, `?F'T,name'?`, `?F'A,name,date'?`, `?nT'..'?` and the other forms | not converted | The statement is copied as a comment (R). |
 
 `?F'A,name'?` (evidence: SC41-4731, chapter 3, "?F'A,name'? (Actual File Size) Expression"): the result is 8 digits with leading zeros, 00000000 when the file does not exist, has no member or is locked, and 16777215 at most. For each use the converter writes, before the statement:
@@ -265,4 +281,4 @@ CL cannot put a variable inside a word or a quoted text. Where OCL has an expres
 
 ## Not converted yet
 
-Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `ATTR`, `ALLOCATE`, `DEALLOC`, `PROMPT`, `HELP`, `SCRATCH`, `INCLUDE`, `MEMBER`, `SESSION` for communications types other than APPC, and `CANCEL PRT,...` (spool file entries). Each is copied as a comment and reported R.
+Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `ATTR`, `ALLOCATE`, `DEALLOC`, `PROMPT`, `HELP`, `SCRATCH`, `INCLUDE`, `SESSION` for communications types other than APPC, and `CANCEL PRT,...` (spool file entries). Each is copied as a comment and reported R.
