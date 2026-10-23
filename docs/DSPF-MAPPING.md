@@ -48,8 +48,8 @@ A `D` record before the first `S` is reported R and skipped.
 | 25-26 sound alarm | Y: `ALARM`; indicator: `ALARM` conditioned by it |
 | 27, 28, 64-79 keys | See keys below |
 | 29-30 blink cursor | Y or indicator: `BLINK` |
-| 31-32 erase input | Y or indicator: `ERASEINP` |
-| 33-34 override | Y or indicator: `OVERRIDE`; see override below (A) |
+| 31-32 erase input | Y or indicator: `ERASEINP`, with `OVERLAY` added on the format because DDS requires it (CPD7567, CPD8111) (A) |
+| 33-34 override | Y or indicator: `PUTOVR` (conditioned by the indicator). DDS has no `OVERRIDE` keyword (CPD7484); see override below (A) |
 | 35-36 suppress input | Y or indicator: `LOCK` |
 | 37-38 null fill | No effect (the manual says the same) |
 | 39 132 columns | Only the file-level `DSPSIZ` changes (A) |
@@ -100,7 +100,7 @@ Field names are kept when valid and unique in the format. Otherwise they become 
 
 ### Data types (D column 27)
 
-From the table in SC41-4730 Appendix B: blank and B to A, A to X, M to N, N to M, S to S (length minus 1, 0 decimals), R to I, Z to A, D to D, K to W. The double-byte types E, F, O and X become A. Output-only fields are always A.
+From the table in SC41-4730 Appendix B: blank and B to A, A to X, M to N, N to M, S to S (length minus 1, 0 decimals), R to I, Z to A, D to D, K to W (A when the file is right-to-left, because Katakana is not valid with `CHECK(RLTB)`, CPD7873, A). The double-byte types E, F, O and X become A. Output-only fields are always A.
 
 ### Message fields (column 56 = M)
 
@@ -124,7 +124,7 @@ Column 25 is an edit code on the D specification form, marked WSU only. SC41-473
 
 | Field | Result |
 |---|---|
-| Output only, valid code | Written as numeric with data type `Y` (length as in the D record, 0 decimals: the D specification has no decimal positions) with `EDTCDE(x)` (A). `EDTCDE` is only valid with data type `Y` or blank: with `S` `CRTDSPF` gives CPD7554 |
+| Output only, valid code | Written as numeric with data type `Y` (length as in the D record, 0 decimals: the D specification has no decimal positions) with `EDTCDE(x)` (A). `EDTCDE` is only valid with data type `Y` or blank: with `S` `CRTDSPF` gives CPD7554. Code `Y` is a date edit that needs 3 to 8 digits (CPD7560 otherwise): outside that it is not written, status R |
 | Input/output, data type S, valid code | Written with data type `Y` (digits = D length minus 1) and `EDTCDE(x)` (A) |
 | Input/output, other data types | Not written, status R: `EDTCDE` needs a numeric-only field |
 | Input only | Not written, status R |
@@ -145,7 +145,7 @@ The output length is a guess: if the S/36 field length already includes the edit
 | 49 | `DSPATR(CS)` |
 | 37-38 (input) | `DSPATR(PR)` |
 | 32-33 (input) | `DSPATR(PC)` |
-| 28 | `CHECK(MF)` |
+| 28 | `CHECK(MF)`. DDS does not allow `RZ` or `RB` with it (CPD7621), so they are left out when column 28 is Y (A) |
 | 29 | `CHECK(ME)` |
 | 30 | T: `CHECK(M10)`, E: `CHECK(M11)` |
 | 31 | Z: `CHECK(RZ)`, B: `CHECK(RB)` |
@@ -158,7 +158,7 @@ Each attribute is Y (always) or an indicator. Always-on attributes are joined in
 
 ### Override (S columns 33-34)
 
-When the format uses override: a field with an attribute controlled by an indicator gets `OVRATR`, and a field with an output indicator gets `OVRDTA` conditioned by that indicator (A).
+When the format uses override the record gets `PUTOVR` (conditioned by the S indicator), because `OVRATR` and `OVRDTA` need it (CPD7615). A field with an attribute controlled by an indicator gets `OVRATR`, and a field with an output indicator gets `OVRDTA` conditioned by that indicator (A).
 
 ## H specification: help area
 
@@ -224,23 +224,23 @@ Not in the sample (would stop the compile or needs a program): fields in columns
 | `FKEYMIX` | Function keys `Y` mask `5`, command keys blank | `HELP` and all `CFnn` |
 | `FSTARTV`, `FSTARTN`, `FCLR10` | Start line and lines to clear | `SLNO(*VAR) CLRL(*ALL)`; `SLNO(5) CLRL(*NO)`; `CLRL(10)` |
 | `FOPTY` | Lowercase Y, return input N, alarm, blink, erase, lock Y | `ALARM BLINK ERASEINP LOCK`, no `RTNDTA`; `LCFLD` has `LOWER`, `NOLC` and numeric `NUMLC` do not |
-| `FOPTI` | Alarm 31, blink 32, erase 33, override 34, lock 35 | Each keyword conditioned by its indicator; A for override |
+| `FOPTI` | Alarm 31, blink 32, erase 33, override 34, lock 35 | Each keyword conditioned by its indicator, `OVERLAY` before `ERASEINP(33)`, `PUTOVR` conditioned by 34; A |
 | `1BADFMT` | Name not valid in DDS | `FMTn` with `ALTNAME('1BADFMT')`, A |
 | `F132` | Column 39 `Y` | `DSPSIZ(24 80 *DS3 27 132 *DS4)`, A |
 | `FBADS` | Start line 0, alarm `Q` | R; the format is still written |
 | `FCONST` | Constants: N, blank and Y output, no text, continued, apostrophe, `C`, input with text | Constants (Y output reported once); no text skipped (A); continued text joined; `''` doubled; input text ignored (A) |
 | `FOUT` | Output fields, indicators, names | `OUTY` output; `OUTI` conditioned by 41; `OUTIC` conditioned by 42 plus a constant under N42; `OUTN` skipped; blank, duplicate and invalid names become `FLDn` (A); `LONGNAME` and `OUT$#@_1` kept |
 | `FINPUT` | Input, input/output, output indicator on input, length 1 signed | `I`, `I`, `B`; `ININD` is `B` and R (indicator dropped); `INS1` R (needs length 2) |
-| `FTYPES` | Data types A B M N S R Z D K E F O X blank | DDS types `X A N M S I A D W A A A A A` (`S` length minus 1) |
+| `FTYPES` | Data types A B M N S R Z D K E F O X blank | DDS types `X A N M S I A D A A A A A A` (`S` length minus 1). `K` is `A` here because the first S record is right-to-left; without it `K` is `W` |
 | `FBADD` | No length, no line, no column, output `Q` | R each, not written |
 | `FATTR` | HI BL ND RI UL CS, indicators, PR, PC, combinations | `DSPATR(...)` per attribute, indicator forms conditioned; `IALL` has `DSPATR(HI BL RI UL CS)` and `PR` conditioned by 56 |
 | `FATTRPC` | Position cursor `Y` | `DSPATR(PC)` on `IPC` |
-| `FCHECK` | MF ME M10 M11 RZ RB FE AB DUP LOWER | `CHECK(...)` per field; `CKAB10` has `M10 AB`; `CKABONLY` has no `AB`, A; `CKNUMLOW` has no `LOWER`; `CKOUT` (output) gets no checks |
-| `FOVER` | Override (S 33-34) | `OVERRIDE(34)`, `OVRATR` on `OVIN`/`OVBOTH`, `OVRDTA` conditioned by 37 on `OVOUT`, A |
+| `FCHECK` | MF ME M10 M11 RZ RB FE AB DUP LOWER | `CHECK(...)` per field; `CKAB10` has `M10 AB`; `CKABONLY` has no `AB`, A; `CKALL` (MF with RZ) has no `RZ`, A; `CKNUMLOW` has no `LOWER`; `CKOUT` (output) gets no checks |
+| `FOVER` | Override (S 33-34) | `PUTOVR` conditioned by 34, `OVRATR` on `OVIN`/`OVBOTH`, `OVRDTA` conditioned by 37 on `OVOUT`, A |
 | `FHELP` | 18 H records | 6 valid: `HLPARA` lines with `HLPRCD`/`HLPDOC` (see H table above); the 12 not valid ones R as comments; `1BADFMT` becomes `HLPRCD(FMTn)` |
 | `ORDHLP01`, `ORDHLP03`, `ORDHLP05` | Help formats | `HLPSEQ(ORDHLP 1)`, `(ORDHLP 3)`, `(ORDHLP 5)`, A |
 | `FMSG` | Message fields | `MSG1` to `MSG9` output fields with `MSGID(USRnnnn file)` (member `U2`, `P1`, `P2`, `M1`, `M2` noted, A; `B001` becomes `USZB001`); `ERRMSG` under 44 plus `MSG10` under N44; `PGMMSG`, `BADMIC`, `MSGIN`, `MSGOUTN` kept as fields, R |
-| `EDTOUT`, `EDTBOTH` | All 24 edit codes (1-4, A-D, J-Q, X-Z, 5-9) | `EO`/`EB` plus the code, data type `Y`, `EDTCDE(code)`, A |
+| `EDTOUT`, `EDTBOTH` | All 24 edit codes (1-4, A-D, J-Q, X-Z, 5-9) | `EO`/`EB` plus the code, data type `Y`, `EDTCDE(code)`, A. `EO` fields are 7 long: code `Y` needs 3 to 8 digits |
 | `EDTMISC` | Lowercase codes, W E 0 -, input only, other data types, constant | `EDTCDE(J)`, `EDTCDE(Z)`; the others written without `EDTCDE`, R |
 | `FDDS` | `*DDS` line, comment, blank | `*DDS` line copied as a DDS line; comment kept; blank skipped |
 

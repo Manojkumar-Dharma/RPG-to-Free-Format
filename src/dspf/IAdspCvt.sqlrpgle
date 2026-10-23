@@ -29,6 +29,8 @@ dcl-s g_formatOpen ind;
 dcl-s g_fmtName varchar(10);
 dcl-s g_override ind;              // the open format uses override
 dcl-s g_lowerDft ind;              // S-spec column 21 = Y for the open format
+dcl-s g_rightToLeft ind;           // file level CHECK(RLTB) was written
+dcl-s g_rzRbDropped ind;           // CHECK(RZ/RB) left out because MF is on the field
 dcl-s g_formatCount int(10);
 dcl-s g_generatedFieldNo int(10);
 dcl-s g_outputConstReported ind;   // the Y-output constant assumption is in the report
@@ -538,15 +540,26 @@ dcl-proc ConvertDisplayControl;
   endif;
   l_spec = ParseIndicatorSpec(ColumnText(i_record:31:32));
   if l_spec <> 'N' and l_spec <> '?';
+    // DDS: OVERLAY must be specified whenever ERASEINP is (CPD7567, CPD8111).
+    AddKeywordLine('':'OVERLAY');
     AddKeywordLine(IndicatorNumber(l_spec):'ERASEINP');
+    if l_status = C_STS_CONVERTED;
+      l_status = C_STS_ASSUMPTION;
+      l_reason = 'Erase input: OVERLAY added (DDS requires it with ERASEINP);'
+              + ' the display is no longer cleared before the format is shown';
+    endif;
   endif;
   l_spec = ParseIndicatorSpec(ColumnText(i_record:33:34));
   g_override = (l_spec <> 'N' and l_spec <> '?');
   if g_override;
-    AddKeywordLine(IndicatorNumber(l_spec):'OVERRIDE');
+    // DDS has no OVERRIDE keyword (CPD7484). The record is written with PUTOVR
+    // while the indicator is on; OVRDTA and OVRATR on the fields need it
+    // (CPD7615).
+    AddKeywordLine(IndicatorNumber(l_spec):'PUTOVR');
     if l_status = C_STS_CONVERTED;
       l_status = C_STS_ASSUMPTION;
-      l_reason = 'Override: OVRDTA/OVRATR added on fields; check the behaviour';
+      l_reason = 'Override: PUTOVR written, OVRDTA/OVRATR added on fields;'
+              + ' check the behaviour';
     endif;
   endif;
   l_spec = ParseIndicatorSpec(ColumnText(i_record:35:36));
@@ -659,6 +672,7 @@ dcl-proc CollectInput;
   dcl-s l_checks varchar(30);
   dcl-s l_char char(1);
 
+  g_rzRbDropped = *off;
   l_checks = '';
   if %subst(i_record:29:1) = 'Y';
     l_checks += ' ME';
@@ -673,10 +687,15 @@ dcl-proc CollectInput;
     l_checks += ' M11';
   endif;
   l_char = %subst(i_record:31:1);
-  if l_char = 'Z';
-    l_checks += ' RZ';
-  elseif l_char = 'B';
-    l_checks += ' RB';
+  if l_char = 'Z' or l_char = 'B';
+    // DDS: CHECK(MF) cannot be specified with RB or RZ (CPD7621).
+    if %subst(i_record:28:1) = 'Y';
+      g_rzRbDropped = *on;
+    elseif l_char = 'Z';
+      l_checks += ' RZ';
+    else;
+      l_checks += ' RB';
+    endif;
   endif;
   if %subst(i_record:35:1) = 'Y';
     l_checks += ' FE';
@@ -725,6 +744,10 @@ dcl-proc DdsType;
     when i_dataType = 'D';
       return 'D';
     when i_dataType = 'K';
+      // Katakana (W) is not valid in a right-to-left file (CPD7873).
+      if g_rightToLeft;
+        return 'A';
+      endif;
       return 'W';
   endsl;
   return 'A';                       // blank, B, Z and the double-byte types
@@ -884,6 +907,7 @@ dcl-proc ConvertFieldDefinition;
   dcl-s l_member varchar(2) inz('');
   dcl-s l_editCode char(1) inz(' ');
   dcl-s l_editOk ind inz(*off);
+  dcl-s l_editDigits int(10) inz(0);
   dcl-s l_editNote varchar(120) inz('');
 
   l_record = g_sourceLines(io_index);
@@ -987,6 +1011,11 @@ dcl-proc ConvertFieldDefinition;
   l_ddsType = 'A';
   if l_isInput;
     l_ddsType = DdsType(l_dataType);
+    if l_dataType = 'K' and l_ddsType = 'A';
+      l_status = C_STS_ASSUMPTION;
+      l_reason = 'Katakana (K) is not valid with right-to-left (CHECK(RLTB));'
+              + ' written as A';
+    endif;
   endif;
 
   // Edit code (column 25): EDTCDE is only valid on output-capable numeric
@@ -994,11 +1023,19 @@ dcl-proc ConvertFieldDefinition;
   // decimal positions). An input/output field must be signed numeric (data type
   // S) in the source.
   l_editCode = %xlate(C_LOWER:C_UPPER:%subst(l_record:25:1));
+  l_editDigits = l_length;
+  if l_isInput;
+    l_editDigits -= 1;
+  endif;
   if l_editCode <> ' ' and l_ctype <> 'M';
     select;
       when %scan(l_editCode:C_EDTCDES) = 0;
         l_editNote = 'Edit code ' + l_editCode + ' (column 25) is not a DDS'
                    + ' edit code; not written';
+      // EDTCDE(Y) is a date edit: 3 to 6 or 8 digits, and 7 with two leading
+      // zeros suppressed (CPD7560 otherwise).
+      when l_editCode = 'Y' and (l_editDigits < 3 or l_editDigits > 8);
+        l_editNote = 'Edit code Y (column 25) needs 3 to 8 digits; not written';
       when l_isInput and l_outputSpec = 'N';
         l_editNote = 'Edit code ' + l_editCode + ' (column 25) is on an'
                    + ' input-only field; not written';
@@ -1122,6 +1159,10 @@ dcl-proc ConvertFieldDefinition;
       l_reason = 'CHECK(AB) left out: DDS needs another validity checking'
               + ' keyword with it';
     endif;
+    if g_rzRbDropped and l_status = C_STS_CONVERTED;
+      l_status = C_STS_ASSUMPTION;
+      l_reason = 'CHECK(RZ/RB) left out: DDS does not allow it with CHECK(MF)';
+    endif;
   endif;
   if l_editOk;
     CollectKeyword('':'EDTCDE(' + l_editCode + ')');
@@ -1188,6 +1229,7 @@ dcl-proc AddFileLevelKeywords;
     AddKeywordLine('':'DSPSIZ(24 80 *DS3)');
   endif;
   AddKeywordLine('':'INDARA');
+  g_rightToLeft = l_rightToLeft;
   if l_rightToLeft;
     AddKeywordLine('':'CHECK(RLTB)');
   endif;
