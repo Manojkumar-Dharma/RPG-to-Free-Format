@@ -729,6 +729,7 @@ dcl-proc ConvertRun;
   end-pi;
 
   dcl-s l_call varchar(200);
+  dcl-s l_note varchar(200);
 
   g_afterRun = *on;
   if not g_pendLoad;
@@ -768,6 +769,24 @@ dcl-proc ConvertRun;
     other;
       RptItem(C_STS_CONVERTED:g_loadLine:g_loadText:'');
   endsl;
+
+  // A MEMBER statement is kept for this procedure's messages only; the called
+  // program may read the current message member itself (see OCL-11).
+  if g_user1Member <> '' or g_user2Member <> '';
+    l_note = 'MEMBER ';
+    if g_user1Member <> '';
+      l_note += 'USER1-' + g_user1Member;
+    endif;
+    if g_user2Member <> '';
+      if g_user1Member <> '';
+        l_note += ',';
+      endif;
+      l_note += 'USER2-' + g_user2Member;
+    endif;
+    l_note += ' is current; ' + g_loadName
+              + ' may read it, CL cannot set it (check the program)';
+    RptItem(C_STS_ASSUMPTION:i_lineNo:i_text:l_note);
+  endif;
 end-proc;
 
 // ------------------------------------------------------------------
