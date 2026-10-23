@@ -22,12 +22,13 @@ the same commit. Status values: Planned, In progress, Done.
 | DSP-03 | IACNVDSPF | Output indicators on input/output fields | In progress (written as two definitions of the field, needs a compile and test: DDS may not allow one name with usage B and I) |
 | DSP-04 | IACNVDSPF | Confirm assumptions: CFnn(nn) command keys, INDARA and INVITE added, OVRDTA/OVRATR override keywords | Done (checked against the manuals, see `docs/DSPF-MAPPING.md`; open: `CFnn(nn)` response indicator, `CF` against `CA`, `PUTOVR` and `ERASEINP` behaviour need a compile or display test) |
 | DSP-05 | IACNVDSPF | Check the layout against a real QS36SRC DSPF36 member (needs a sample from the user) | Planned |
+| DSP-06 | IACNVDSPF | Subfile candidates: detect repeated continuous rows of the same D specifications and report them (status R, output unchanged); subfile DDS (`SFL`, `SFLCTL`) only once a real example shows how the program was changed | Planned (waiting for a DSPF36 member that was converted to a subfile, from the user) |
 | FREE-01 | IACNVFREE | RPG to fully free format, based on the S/36-compatible RPG II guide (SC09-1818) | Planned |
 | FREE-02 | IACNVFREE | Evaluate CVTRPGSRC as stage 1 | Planned |
 
 ## Notes
 
-- OCL-01 to OCL-07, OCL-09 and OCL-10 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-05 add to
+- OCL-01 to OCL-07, OCL-09 and OCL-10 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
