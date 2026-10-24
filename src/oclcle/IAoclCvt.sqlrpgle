@@ -3185,8 +3185,78 @@ dcl-proc ConvertNohalt;
 end-proc;
 
 // ------------------------------------------------------------------
+// CANCEL PRT|P,printer id | ALL | FORMS,number | USER,id (SC41-4731, chapter
+// 5): cancels spool file entries.
+//   printer id  -> CLROUTQ OUTQ(id): the output queue is taken to have the
+//                  name of the 2-character printer ID (assumed)
+//   ALL         -> DLTSPLF FILE(*SELECT) SELECT(*CURRENT *ALL *ALL *ALL); the
+//                  reference also cancels the entries of all printers when the
+//                  user has *JOBCTL, which is not reproduced (own entries only)
+//   FORMS,n     -> DLTSPLF ... SELECT(*CURRENT *ALL n *ALL), form type = forms
+//                  number (assumed)
+//   USER,id     -> DLTSPLF ... SELECT(id *ALL *ALL *ALL)
+// The system checks the authority (*JOBCTL or *SPLCTL) when the command runs;
+// a failure is ignored (MONMSG CPF0000), as the S/36 statement carries on.
+dcl-proc ConvertCancelPrt;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_itemCount int(10);
+  dcl-s l_word varchar(60);
+  dcl-s l_second varchar(60);
+  dcl-s l_third varchar(60);
+  dcl-s l_select varchar(120);
+  dcl-s l_note varchar(200);
+
+  l_itemCount = SplitItems(i_operands:l_items);
+  if l_itemCount < 2 or l_itemCount > 3;
+    ReviewLine(i_lineNo:i_text:'CANCEL needs PRT,printer id | ALL | FORMS,n | USER,id');
+    return;
+  endif;
+  l_word = ToUpper(%trim(l_items(1)));
+  l_second = ToUpper(%trim(l_items(2)));
+  l_third = '';
+  if l_itemCount = 3;
+    l_third = ToUpper(%trim(l_items(3)));
+  endif;
+  if l_word <> 'PRT' and l_word <> 'P';
+    ReviewLine(i_lineNo:i_text:'CANCEL operand not understood: ' + l_items(1));
+    return;
+  endif;
+
+  select;
+    when l_itemCount = 2 and l_second = 'ALL';
+      AddBody('DLTSPLF FILE(*SELECT) SELECT(*CURRENT *ALL *ALL *ALL)');
+      l_note = 'All entries of the user only; the reference also cancels all'
+             + ' printers with *JOBCTL authority (not reproduced)';
+    when l_itemCount = 3 and l_second = 'FORMS'
+         and IsValidName(l_third:10) and %len(l_third) <= 4;
+      AddBody('DLTSPLF FILE(*SELECT) SELECT(*CURRENT *ALL ' + l_third + ' *ALL)');
+      l_note = 'Forms number ' + l_third + ' used as the form type; own entries'
+             + ' only (the reference cancels all printers with *JOBCTL authority)';
+    when l_itemCount = 3 and l_second = 'USER' and IsValidName(l_third:10);
+      AddBody('DLTSPLF FILE(*SELECT) SELECT(' + l_third + ' *ALL *ALL *ALL)');
+      l_note = 'Needs *SPLCTL or *JOBCTL authority for another user';
+    when l_itemCount = 2 and %len(l_second) = 2 and IsValidName(l_second:2);
+      AddBody('CLROUTQ OUTQ(' + l_second + ')');
+      l_note = 'Printer ID ' + l_second + ' taken as the name of an output queue'
+             + ' (not known); needs *JOBCTL authority';
+    other;
+      ReviewLine(i_lineNo:i_text
+                 :'CANCEL needs PRT,printer id | ALL | FORMS,n | USER,id');
+      return;
+  endsl;
+  AddBody('MONMSG MSGID(CPF0000)');
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text:l_note);
+end-proc;
+
+// ------------------------------------------------------------------
 // CANCEL without operands (SC41-4731, chapter 3): cancels the procedure.
-// CANCEL PRT,... (chapter 5) cancels spool file entries and is not converted.
+// CANCEL PRT,... (chapter 5) cancels spool file entries (ConvertCancelPrt).
 dcl-proc ConvertCancel;
   dcl-pi *n;
     i_lineNo int(10) const;
@@ -3195,8 +3265,7 @@ dcl-proc ConvertCancel;
   end-pi;
 
   if %len(%trim(i_operands)) > 0;
-    ReviewLine(i_lineNo:i_text
-               :'CANCEL of spool file entries (PRT) is not converted in this version');
+    ConvertCancelPrt(i_lineNo:i_text:i_operands);
     return;
   endif;
 

@@ -16,7 +16,7 @@ the same commit. Status values: Planned, In progress, Done.
 | OCL-06 | IAOCLTOCLE | SESSION, MEMBER, LIBRARY, MRTPROC | In progress (LIBRARY, SESSION for APPC and MRTPROC calls written, need a compile and test; MEMBER is part of OCL-11; MRTPROC is a sample procedure name, not a statement) |
 | OCL-07 | IAOCLTOCLE | PROMPT, HELP, INCLUDE | In progress (INCLUDE written as a procedure call, needs a compile and test; PROMPT and HELP reported R; PROMPT conversion waits for a DSPF sample) |
 | OCL-08 | IAOCLTOCLE | Explicit SRCCCSID for IFS input (common reader, so it also serves IACNVDSPF) | In progress (written, needs a compile and test) |
-| OCL-10 | IAOCLTOCLE | `// CANCEL PRT,...` (spool file entries): printer ID mapping and `*JOBCTL` scope to decide | Planned |
+| OCL-10 | IAOCLTOCLE | `// CANCEL PRT,...` (spool file entries) | In progress (written, needs a compile and test; printer ID taken as an output queue name, own entries only for ALL and FORMS) |
 | OCL-11 | IAOCLTOCLE | `// *` and `// **` message statements, MEMBER, `?Mmic?` expressions | In progress (written, needs a compile and test; the message ID prefix `USR` is assumed, check against a real message file) |
 | DSP-01 | IACNVDSPF | H (help) specs | Done (tested) |
 | DSP-02 | IACNVDSPF | Message fields, array fields, edit codes | In progress (message fields written as MSGID fields; edit codes written as EDTCDE, needs a compile and test; array fields are WSU only, not supported on the AS/400 and not converted) |

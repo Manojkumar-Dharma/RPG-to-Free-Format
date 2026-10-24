@@ -173,7 +173,10 @@ Evidence: SC41-4731, chapter 5 ("WAIT OCL Statement", "NOHALT OCL Statement", "C
 | `// NOHALT 1[,JOB]` to `4` | `CHGJOB INQMSGRPY(*DFT)` | A | The reference says OS/400 does not use the severity level, only the reply (job basis for the job message queue), so levels 1 to 4 are not told apart. JOB is assumed inside a procedure. |
 | `// NOHALT n,SESSION` or `,SYSTEM` | comment | R | The level is meant for later jobs or other display stations, which a CL program cannot set. |
 | `// CANCEL` | `DLCOBJ` of the marker lock, `RETURN` | A | The reference cancels the procedure and treats the job end as abnormal, returning to the keyboard. Written like `// RETURN`, so a called program returns to its caller only; the abnormal end is not reproduced. `// IFF DATAF1-FILEA CANCEL` works through the usual condition handling. |
-| `// CANCEL PRT,...` | comment | R | Cancels spool file entries (printer ID, `ALL`, `FORMS`, `USER`). Not converted yet: the two-character S/36 printer ID has no known AS/400 device name, and the `*JOBCTL` scope needs a decision (OCL-10). |
+| `// CANCEL PRT,id` (or `P,id`) | `CLROUTQ OUTQ(id)`, `MONMSG CPF0000` | A | Cancels all entries of the printer. The 2-character printer ID is taken as the output queue name (assumed). Needs *JOBCTL, as on S/36. |
+| `// CANCEL PRT,ALL` | `DLTSPLF FILE(*SELECT) SELECT(*CURRENT *ALL *ALL *ALL)`, `MONMSG CPF0000` | A | Own entries only. The reference also cancels all printers with *JOBCTL authority; not reproduced. |
+| `// CANCEL PRT,FORMS,n` | `DLTSPLF FILE(*SELECT) SELECT(*CURRENT *ALL n *ALL)`, `MONMSG CPF0000` | A | The forms number is taken as the form type (assumed); own entries only. |
+| `// CANCEL PRT,USER,id` | `DLTSPLF FILE(*SELECT) SELECT(id *ALL *ALL *ALL)`, `MONMSG CPF0000` | A | Another user needs *SPLCTL or *JOBCTL authority; a failure is ignored. |
 
 ## LIBRARY, SESSION, MEMBER and MRTPROC
 
@@ -313,4 +316,4 @@ Evidence: SC41-4731 chapter 5 ("INCLUDE OCL Statement", "PROMPT OCL Statement") 
 
 ## Not converted yet
 
-Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `PROMPT`, `HELP`, `SESSION` for communications types other than APPC, and `CANCEL PRT,...` (spool file entries). Each is copied as a comment and reported R.
+Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `PROMPT`, `HELP`, `SESSION` for communications types other than APPC. Each is copied as a comment and reported R.
