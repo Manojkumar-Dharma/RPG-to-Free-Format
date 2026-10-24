@@ -1,6 +1,6 @@
 # RPG II to fully free-form RPG (IACNVFREE)
 
-Status: decisions and evidence for FREE-01 to FREE-07. FREE-03 (control and file description specifications) is written and not compiled or tested yet; the other specifications are kept as comments.
+Status: decisions and evidence for FREE-01 to FREE-07. FREE-03 (control and file description specifications) and FREE-05 (calculation specifications, with the rule tables) are written and not compiled or tested yet; the other specifications are kept as comments.
 The source is System/36-compatible RPG II (member type RPG36); the target is
 `**FREE` RPGLE, written for the V7R3 base release.
 
@@ -117,7 +117,8 @@ Source: SC09-1818 chapter 19. Target: SC09-2508 "Equivalent Free-form Coding for
 | Comment (`*` in column 7) | `//` and the text of columns 8-80 | - (not reported) |
 | `/EJECT`, `/TITLE`, `/SPACE` | kept (valid in free-form) | C |
 | Other directives such as `/COPY` | comment | R |
-| E, L, I, C, O specifications | `// RPG II:` and the line | R (FREE-04 to FREE-06, arrays and tables) |
+| E, L, I, O specifications | `// RPG II:` and the line | R (FREE-04, FREE-06, FREE-07) |
+| C specifications | see "Calculation specifications (C)" | C, A or R |
 | `**` record and the data after it | kept as is | R: arrays are not converted yet |
 
 The output always starts with a `**FREE` line.
@@ -151,10 +152,59 @@ The reasons are worded slightly differently in the report; the statements and st
 | 24 | ` /COPY QRPGSRC,MYCOPY` | `// RPG II:  /COPY QRPGSRC,MYCOPY` | R | directive /COPY is not converted |
 | 25 | `E                    TAB1` | `// RPG II: E                    TAB1` | R | E (extension) specification not converted yet |
 | 26 | `IORDERS      NS 01` | `// RPG II: IORDERS      NS 01` | R | I specification not converted yet (FREE-04) |
-| 27 | `C                     ADD  1         TOTAL` | `// RPG II: C                     ADD  1         TOTAL` | R | C specification not converted yet (FREE-05) |
+| 27 | `C                     ADD  1         TOTAL` | `TOTAL += 1;` | A | the first calculation also reports the cycle note (see the C section) |
 | 28 | `OREPORT1  D` | `// RPG II: OREPORT1  D` | R | O specification not converted yet (FREE-06) |
 | 29 | `mpile-time data` | `** compile-time data` | R | compile-time data kept as is; arrays not converted yet |
 | 30 | `3` | `ABC123` | - | compile-time data, kept |
+
+## Rule tables (rules/*.json, Db2 tables IACNVxxx)
+
+What an operation code, an indicator or a special name becomes is data, not code. The JSON files in `rules/` are the source of truth; `rules/IACNVRULES.sql` creates the Db2 tables and loads them with `JSON_TABLE` (run it again after every change); IACNVFREE reads the tables once at the start (module IAfreeRul). A missing or empty table ends the run with message IAC0104.
+
+| File | Table | Holds |
+|---|---|---|
+| `rpg36-opcodes.json` | IACNVOPC | Every operation code of SC09-1818 chapter 27: kind, whether factor 1, factor 2 and the result field are required (`R`), optional (`O`) or blank (`-`), the test of each resulting indicator column, half adjust allowed, status (C, A, R), the free-form template (`{F1}`, `{F2}`, `{RES}`; a second one when factor 1 is blank), the built-in functions it needs, the reason when not converted, the source |
+| `rpg36-comparisons.json` | IACNVCMP | xx of IFxx, DOWxx, DOUxx, CASxx and its operator |
+| `rpg36-results.json` | IACNVRES | The test a resulting indicator stands for (`+`, `-`, `Z`, `ZB`, `HI`, `LO`, `EQ`, `NR`, `ER`, `EOF`, `BOF`) |
+| `rpg36-indicators.json` | IACNVIND | All indicator names with their free-form name; `cycle` = `Y` (L1 to L9, MR) means the line is reported R |
+| `rpg36-names.json` | IACNVNAM | Figurative constants and special names (`*BLANKS`, `UDATE`, `PAGE`) |
+| `rpg36-bifs.json` | IACNVBIF | Built-in functions the templates use and the release that added each; a function newer than `TARGET_RELEASE` makes the line R |
+| `rpg36-config.json` | IACNVCFG | Settings: `NUMERIC_TYPE`, `INDEX_TYPE`, `INDENT`, `TARGET_RELEASE` and the texts of the half-adjust and cycle notes |
+
+The factor flags come from the table at the top of each operation in chapter 27 (the summary Table 20 prints some of them in shifted columns, so it is not used for them). The structure of the operation (IFxx and END groups, CASxx groups, AN and OR lines, declarations) is code in IAfreeCalc; everything that is only a pattern is in the tables. A new operation that has a template needs no program change.
+
+## Calculation specifications (C) to statements (FREE-05)
+
+Source: SC09-1818 chapter 24 (columns) and chapter 27 (operations). Written for programs **without the RPG cycle**: the calculations are written in the order of the source and run once. The first converted detail line is reported A with that reason; control levels, `MR`, total calculations (`L0` to `L9`, `LR` in columns 7-8) and the files that drive the cycle are R.
+
+| Entry | Result | Status |
+|---|---|---|
+| Columns 9-17 (up to three indicators, `N` = not) | `if *IN01 and not *IN02;` around the statements, closed with `endif;` | C |
+| Lines with `AN` and `OR` in columns 7-8 | one condition: AND lines join with `and`, an OR line starts a group, groups are joined with `or` in parentheses, the indicators of the operation line are ANDed to all | C |
+| `Z-ADD`, `ADD`, `SUB`, `MULT`, `DIV` (`Z-SUB` as `-(x)`) | `r = f1 + f2;` or `r += f2;` when factor 1 is blank (the same for `-=`, `*=`, `/=`); `Z-ADD` is `r = f2;` | C |
+| Half adjust `H` | `eval(h) r = ...;` | A: the S/36 algorithm differs from the AS/400 one (column 53 note in the Guide) |
+| Resulting indicators `+`, `-`, `Z` | after the statement: `*IN10 = (r > 0);` `*IN11 = (r < 0);` `*IN12 = (r = 0);` | C |
+| `COMP` | `*IN10 = (f1 > f2);` `*IN11 = (f1 < f2);` `*IN12 = (f1 = f2);` for the indicators given; at least one is required | C |
+| `SETON`, `SETOF` | `*IN30 = *ON;` for each indicator in columns 54-59 | C |
+| `IFxx` ... `ELSE` ... `END` | `if f1 op f2;` `else;` `endif;`. Conditioning indicators control the whole IF/ELSE group in S/36, so they give an outer `if cond;` with the group inside and two `endif;` | C |
+| `DOWxx` / `DOUxx` ... `END` | `dow` / `dou f1 op f2;` `enddo;`. Conditioning indicators: R | C |
+| `DO` ... `END` | `for idx = start to limit by incr;` `endfor;`. Start and limit default to 1; the increment is factor 2 of the END; without a result field the index `IADOn` is declared | C, A without a result field |
+| `CASxx` ... `END` | `select;` `when f1 op f2;` `exsr name;` ... `other;` (CAS with a blank xx) `endsl;`. Conditioning or resulting indicators: R | C |
+| `BEGSR`, `ENDSR`, `EXSR` | `begsr`, `endsr;`, `exsr` (`*PSSR` and `*INZSR` allowed). `ENDSR` with a return point (factor 2): R | C |
+| `TIME` with a 6-digit result | `r = %dec(%time():*hms);` | A: a 12-digit result also holds the system date: R |
+| `SQRT`, `XFOOT`, `SORTA`, `RETRN` | `%sqrt`, `%xfoot`, `sorta`, `return` | A |
+| Result field with length (49-51) and decimals (52) | `dcl-s name zoned(len:dec);` (`char(len)` when the decimals are blank and the operation is not numeric), written before the first calculation | C. Two different definitions of one field: R |
+| Factors | character literal as is; numeric literal (`+` dropped, `.5` as `0.5`); `*BLANK(S)`, `*ZERO(S)`, `UDATE`, `UMONTH`, `UDAY`, `UYEAR`; array element `ARR,I` as `ARR(I)`; names as typed. `PAGE`, `PAGE1` to `PAGE7`: R (O specifications) | C |
+| Comment (columns 60-74) | `// text` after the first statement | - |
+| `MOVE`, `MOVEL`, `MOVEA`, `MVR`, move zone, bit operations, `TESTZ`, `LOKUP`, `KEY`, `DEFN`, `CALL`, `PARM`, `PLIST`, `EXIT`, `RLABL`, `FORCE`, `FREE`, `SET`, `SHTDN`, `DEBUG` | comment | R, with the reason from the table |
+| `CHAIN`, `READ`, `READE`, `READP`, `SETLL`, `ACQ`, `NEXT`, `POST`, `REL` | comment | R: file operations need the record layout from the I specifications (FREE-04) or the display file (later item) |
+| `EXCPT` | comment | R: converted with the O specifications (FREE-06) |
+| `GOTO`, `TAG` | comment | R: no replacement in free-form |
+| Unknown operation code, wrong factor entries (required missing, blank given), a built-in function newer than the target release | comment | R |
+
+A line that is not converted is kept as `// RPG II: ...`. When it opens a group (IFxx, DO, DOWxx, DOUxx, CASxx) a placeholder group is opened, so that the END of it is reported R too and the converted groups stay in balance. Everything inside such a group is still converted: read the report before using the result.
+
+Fields that are defined by I, E or O specifications or by other lines are not declared (FREE-04, FREE-07); the result will not compile until those are converted. `samples/FREEC.rpg36` has one line for each rule above; the expected result of each line is what this table says (written from the design, not from a run).
 
 ## More mapping tables
 

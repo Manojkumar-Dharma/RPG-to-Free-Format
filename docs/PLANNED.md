@@ -28,7 +28,7 @@ the same commit. Status values: Planned, In progress, Done.
 | FREE-02 | IACNVFREE | Evaluate CVTRPGSRC as stage 1 | Done (answered from the manual: CVTRPGSRC does not convert RPG36 or RPT36, SC09-2507 Table 125; no stage 1 for RPG36) |
 | FREE-03 | IACNVFREE | Command, driver, report; H and F specifications to `ctl-opt` and `dcl-f` (E specifications moved to FREE-07) | In progress (written, needs a compile and test; `samples/FREEHF.rpg36`) |
 | FREE-04 | IACNVFREE | I specifications to D statements (rename or data structure, external or internal) | Planned |
-| FREE-05 | IACNVFREE | C specifications to free-form calculations (Table 124 and the "Free-Form Syntax" lines of SC09-2508); `TAG`, `GOTO`, `CABxx` reported R | Planned |
+| FREE-05 | IACNVFREE | C specifications to free-form calculations, on JSON rule tables loaded into Db2 (`rules/`, `docs/RPG-MAPPING.md`); `TAG`, `GOTO`, `CABxx` reported R; file operations and MOVE wait for the I and E specifications | In progress (written, needs a compile and test; `samples/FREEC.rpg36`; `rules/IACNVRULES.sql` needs JSON_TABLE) |
 | FREE-06 | IACNVFREE | O specifications to an externally described printer file (DDS) and `WRITE`/`EXCEPT` | Planned |
 | FREE-07 | IACNVFREE | E specifications (arrays and tables) to `dcl-s`/`dcl-ds`, compile-time data | Planned |
 

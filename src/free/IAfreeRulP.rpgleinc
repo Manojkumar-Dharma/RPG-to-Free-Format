@@ -1,0 +1,94 @@
+**FREE
+// IAfreeRulP - prototypes and structures of the rule tables of IACNVFREE
+// (module IAfreeRul). The tables are loaded from rules/*.json by
+// rules/IACNVRULES.sql.
+// Include with: /copy qcpysrc,IAfreeRulP (member IAfreeRulP of file QCPYSRC).
+// Target release V7R3.
+
+/if defined(IAFREERULP)
+/eof
+/endif
+/define IAFREERULP
+
+// One row of IACNVOPC (the columns in the order of the table, without SOURCE).
+dcl-ds IAfreeOpc_t qualified template;
+  opcode varchar(10);
+  xx char(1);                    // Y: IFxx, DOWxx, DOUxx, CASxx
+  kind varchar(10);
+  factor1 char(1);               // R required, O optional, - blank
+  factor2 char(1);
+  result char(1);
+  ind1 varchar(4);               // test of columns 54-55 (IACNVRES code)
+  ind2 varchar(4);               // columns 56-57
+  ind3 varchar(4);               // columns 58-59
+  halfAdjust char(1);
+  status char(1);                // C, A or R
+  template varchar(200);
+  templateNoF1 varchar(200);
+  bifs varchar(100);
+  reason varchar(200);
+end-ds;
+
+// One row of IACNVIND.
+dcl-ds IAfreeInd_t qualified template;
+  name char(2);
+  class varchar(12);
+  freeForm varchar(10);
+  cycle char(1);                 // Y: belongs to the RPG cycle
+  reason varchar(100);
+end-ds;
+
+// One row of IACNVNAM.
+dcl-ds IAfreeNam_t qualified template;
+  name varchar(10);
+  freeForm varchar(10);
+  kind varchar(10);
+  status char(1);
+  reason varchar(100);
+end-ds;
+
+// Reads all rule tables. Returns 0, or 1 with message IAC0104.
+dcl-pr RulLoad int(10);
+  o_msgId char(7);
+  o_msgData char(256);
+end-pr;
+
+// Finds an operation code (the name is trimmed, any case). IFGT, DOWEQ,
+// DOULT and CASNE are found as IF, DOW, DOU and CAS, and o_xx is the xx;
+// CAS alone is found with o_xx blank.
+dcl-pr RulOpcode ind;
+  i_name varchar(10) const;
+  o_rule likeds(IAfreeOpc_t);
+  o_xx char(2);
+end-pr;
+
+// The comparison operator of an xx (GT, LT, EQ, NE, GE, LE), or ''.
+dcl-pr RulComparison varchar(2);
+  i_xx char(2) const;
+end-pr;
+
+// The test a resulting-indicator code stands for, or ''.
+dcl-pr RulResultTest varchar(100);
+  i_code varchar(4) const;
+end-pr;
+
+dcl-pr RulIndicator ind;
+  i_name char(2) const;
+  o_rule likeds(IAfreeInd_t);
+end-pr;
+
+dcl-pr RulName ind;
+  i_name varchar(10) const;
+  o_rule likeds(IAfreeNam_t);
+end-pr;
+
+// The release (V5R1 ...) a built-in function came with, or '' when unknown.
+dcl-pr RulBifSince varchar(4);
+  i_name varchar(20) const;
+end-pr;
+
+// A setting of IACNVCFG, or the default when the key is missing.
+dcl-pr RulConfig varchar(200);
+  i_key varchar(30) const;
+  i_default varchar(200) const;
+end-pr;

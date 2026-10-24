@@ -1,0 +1,57 @@
+[
+ {
+  "code": "+",
+  "test": "{RES} > 0",
+  "source": "SC09-1818 Table 20 and chapter 27"
+ },
+ {
+  "code": "-",
+  "test": "{RES} < 0",
+  "source": "SC09-1818 Table 20 and chapter 27"
+ },
+ {
+  "code": "Z",
+  "test": "{RES} = 0",
+  "source": "SC09-1818 Table 20 and chapter 27"
+ },
+ {
+  "code": "ZB",
+  "test": "{RES} = 0",
+  "source": "SC09-1818 Table 20 and chapter 27"
+ },
+ {
+  "code": "HI",
+  "test": "{F1} > {F2}",
+  "source": "SC09-1818 Table 20 and chapter 27"
+ },
+ {
+  "code": "LO",
+  "test": "{F1} < {F2}",
+  "source": "SC09-1818 Table 20 and chapter 27"
+ },
+ {
+  "code": "EQ",
+  "test": "{F1} = {F2}",
+  "source": "SC09-1818 Table 20 and chapter 27"
+ },
+ {
+  "code": "NR",
+  "test": "not %found({F2})",
+  "source": "SC09-1818 Table 20 and chapter 27"
+ },
+ {
+  "code": "ER",
+  "test": "%error",
+  "source": "SC09-1818 Table 20 and chapter 27"
+ },
+ {
+  "code": "EOF",
+  "test": "%eof({F2})",
+  "source": "SC09-1818 Table 20 and chapter 27"
+ },
+ {
+  "code": "BOF",
+  "test": "%eof({F2})",
+  "source": "SC09-1818 Table 20 and chapter 27"
+ }
+]

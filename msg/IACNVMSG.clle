@@ -104,6 +104,12 @@ CHGVAR     VAR(&ID) VALUE('IAC0103')
 CHGVAR     VAR(&TXT) VALUE('Source type not converted yet: &1.')
 CALLSUBR   SUBR(ADDMSG)
 
+CHGVAR     VAR(&ID) VALUE('IAC0104')
+CHGVAR     VAR(&TXT) VALUE('Rule tables cannot be read: &1. Run ' *TCAT +
+                           'rules/IACNVRULES.sql and put its library on ' *TCAT +
+                           'the library list.')
+CALLSUBR   SUBR(ADDMSG)
+
 /* IAC0100 has three 10-byte data fields */
 RMVMSGD    MSGID(IAC0100) MSGF(&LIB/IACNVMSG)
 MONMSG     MSGID(CPF0000)

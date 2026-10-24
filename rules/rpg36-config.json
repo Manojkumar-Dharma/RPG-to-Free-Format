@@ -1,0 +1,32 @@
+[
+ {
+  "key": "NUMERIC_TYPE",
+  "value": "zoned",
+  "description": "Type of a numeric field defined by the result field of a C specification (S/36 RPG II keeps numbers zoned)"
+ },
+ {
+  "key": "INDEX_TYPE",
+  "value": "int(10)",
+  "description": "Type of the index of a DO operation without a result field"
+ },
+ {
+  "key": "INDENT",
+  "value": "2",
+  "description": "Blanks of indent per nesting level"
+ },
+ {
+  "key": "TARGET_RELEASE",
+  "value": "V7R3",
+  "description": "Built-in functions released later than this are reported R"
+ },
+ {
+  "key": "HALF_ADJUST_NOTE",
+  "value": "The S/36 half-adjust algorithm is not identical to the AS/400 one (SC09-1818, column 53)",
+  "description": "Reason reported with every half-adjusted operation"
+ },
+ {
+  "key": "CYCLE_NOTE",
+  "value": "The RPG cycle is not emulated: calculations are written in the order of the source and run once. Use it only for a program without a primary file",
+  "description": "Reason reported with the first converted detail calculation"
+ }
+]

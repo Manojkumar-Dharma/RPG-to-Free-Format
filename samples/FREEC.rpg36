@@ -1,0 +1,61 @@
+      * Calculation specifications (FREE-05)
+     C                     Z-ADD0         TOTAL   92
+     C           PRICE     MULT QTY       AMOUNT  92H
+     C           TOTAL     ADD  AMOUNT    TOTAL      101112SIGN TEST
+     C                     SUB  DISC      TOTAL
+     C           TOTAL     DIV  3         THIRD   72
+     C                     Z-SUBAMOUNT    NEG     92
+     C           QTY       COMP LIMIT                202122
+     C   20                SETON                     3031
+     C  N20                SETOF                     31
+     C  N20 21             SETON                     LR
+     C           STATE     IFEQ 'NY'
+     C           QTY       IFGT 100
+     C                     EXSR BIGORD
+     C                     ELSE
+     C           QTY       ADD  1         SMALL   50
+     C                     END
+     C                     END
+     C   20      QTY       IFLT 5
+     C                     SETON                     40
+     C                     ELSE
+     C                     SETOF                     40
+     C                     END
+     C           1         DO   10        IDX     30
+     C           SUM       ADD  IDX       SUM     90
+     C                     END  2
+     C                     DO   5
+     C                     END
+     C           CNT       DOWLT9
+     C           CNT       ADD  1         CNT     30
+     C                     END
+     C           CNT       DOUEQ0
+     C           CNT       SUB  1         CNT
+     C                     END
+     C           CODE      CASEQ'A'       DOA
+     C           CODE      CASEQ'B'       DOB
+     C                     CAS            DOOTHER
+     C                     END
+     C   01
+     CAN 02
+     COR 03N04
+     CAN 05      A         ADD  B         C       50
+     C                     TIME           NOW     60
+     C                     XFOOTARR       SUMARR  92
+     C                     SQRT AMOUNT    ROOT    92
+     C                     SORTAARR
+     C                     RETRN
+     C                     MOVE A         B
+     C                     GOTO END1
+     C           END1      TAG
+     C           KEY       CHAINCUSTMAS              50
+     CL1         A         ADD  B         C
+     C   L2      A         ADD  B         C
+     C           A         ADD  B         C          10LR
+     C           A         BOGUSB
+     C           BIGORD    BEGSR
+     C           BIGCNT    ADD  1         BIGCNT  50
+     C   99                Z-ADDUDATE     TODAY   60
+     C                     MOVEL*BLANKS   NAME
+     C                     ENDSR
+     CSR                   END

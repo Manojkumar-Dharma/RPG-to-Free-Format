@@ -179,7 +179,7 @@ Build tooling: none for now. The author pulls the repo with Code for IBM i and c
 
 ## 10. VS Code extension (future)
 
-The IFS parameters are the integration point: an extension can upload the open file to a directory, call the command with `SRCIFS`/`TGTIFS`, and read the result back. Keeping mapping rules as data keeps a client-side implementation possible if it is ever wanted.
+The IFS parameters are the integration point: an extension can upload the open file to a directory, call the command with `SRCIFS`/`TGTIFS`, and read the result back. Keeping mapping rules as data keeps a client-side implementation possible if it is ever wanted. IACNVFREE already does this: its operation, indicator, name and setting rules are JSON files in `rules/` loaded into Db2 tables (see `docs/RPG-MAPPING.md`).
 
 ## 11. Open items
 

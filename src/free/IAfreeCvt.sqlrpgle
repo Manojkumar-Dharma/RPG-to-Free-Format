@@ -2,14 +2,18 @@
 // IAfreeCvt - converter RPG36 (System/36-compatible RPG II) to fully
 // free-form RPGLE (IACNVFREE).
 // FREE-03: control (H) and file description (F) specifications, comment
-// lines and the compiler directives /EJECT, /TITLE and /SPACE. Everything
-// else (E, L, I, C, O specifications, compile-time data) is kept as a comment
-// and reported R; those are later items (FREE-04 to FREE-06). The rules are in
+// lines and the compiler directives /EJECT, /TITLE and /SPACE.
+// FREE-05: calculation (C) specifications, converted by module IAfreeCalc with
+// the rule tables read by IAfreeRul (rules/*.json). Everything else (E, L, I,
+// O specifications, compile-time data) is kept as a comment and reported R;
+// those are later items (FREE-04, FREE-06, FREE-07). The rules are in
 // docs/RPG-MAPPING.md. Module of program IACNVFREE. Target release V7R3.
 
 ctl-opt nomain option(*srcstmt:*nodebugio);
 
 /copy qcpysrc,IAcnvSrvP
+/copy qcpysrc,IAfreeRulP
+/copy qcpysrc,IAfreeCalcP
 
 dcl-c C_MAXSRC 20000;
 dcl-c C_MAXOUT 40000;
@@ -76,8 +80,14 @@ dcl-proc FreeConvert export;
     return 1;
   endif;
 
+  if RulLoad(o_msgId:o_msgData) <> 0;
+    return 1;
+  endif;
+
   AddOut('**FREE':0);
+  CalcStart();
   ConvertSource();
+  CalcFinish();
   if g_overflow;
     o_msgId = 'IAC0101';
     o_msgData = 'The converted source has more than ' + %char(C_MAXOUT) + ' lines';
@@ -154,13 +164,17 @@ dcl-proc ConvertSource;
           when l_form = 'I';
             l_reason = 'I specification not converted yet (FREE-04)';
           when l_form = 'C';
-            l_reason = 'C specification not converted yet (FREE-05)';
+            l_reason = '';
           when l_form = 'O';
             l_reason = 'O specification not converted yet (FREE-06)';
           other;
             l_reason = 'Unknown specification type in column 6';
         endsl;
-        ReviewSpec(l_lineNo:l_line:l_reason);
+        if l_form = 'C';
+          CalcLine(l_line:l_lineNo);
+        else;
+          ReviewSpec(l_lineNo:l_line:l_reason);
+        endif;
     endsl;
 
     l_index += 1 + l_extra;
@@ -685,7 +699,7 @@ end-proc;
 
 // ------------------------------------------------------------------
 // Keeps a specification as a comment and reports it R.
-dcl-proc ReviewSpec;
+dcl-proc ReviewSpec export;
   dcl-pi *n;
     i_lineNo int(10) const;
     i_line char(100) const;
@@ -697,7 +711,7 @@ dcl-proc ReviewSpec;
 end-proc;
 
 // ------------------------------------------------------------------
-dcl-proc AddOut;
+dcl-proc AddOut export;
   dcl-pi *n;
     i_text varchar(200) const;
     i_lineNo int(10) const;
@@ -806,4 +820,49 @@ dcl-proc IsOverflowIndicator;
     return *off;
   endif;
   return %scan(%subst(i_text:2:1):'ABCDEFGV') > 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// Number of output lines so far (module IAfreeCalc remembers positions).
+dcl-proc OutCount export;
+  dcl-pi *n int(10);
+  end-pi;
+
+  return g_outputCount;
+end-proc;
+
+// ------------------------------------------------------------------
+// Replaces the text of an output line.
+dcl-proc OutSet export;
+  dcl-pi *n;
+    i_index int(10) const;
+    i_text varchar(200) const;
+  end-pi;
+
+  if i_index >= 1 and i_index <= g_outputCount;
+    g_outputLines(i_index) = i_text;
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// Inserts a line after the given one; the later lines move down.
+dcl-proc OutInsertAfter export;
+  dcl-pi *n;
+    i_index int(10) const;
+    i_text varchar(200) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  if g_outputCount >= C_MAXOUT;
+    g_overflow = *on;
+    return;
+  endif;
+  for l_index = g_outputCount downto i_index + 1;
+    g_outputLines(l_index + 1) = g_outputLines(l_index);
+    g_outputLineNos(l_index + 1) = g_outputLineNos(l_index);
+  endfor;
+  g_outputCount += 1;
+  g_outputLines(i_index + 1) = i_text;
+  g_outputLineNos(i_index + 1) = g_outputLineNos(i_index);
 end-proc;

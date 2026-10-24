@@ -1,0 +1,1274 @@
+[
+ {
+  "name": "01",
+  "class": "NUMBERED",
+  "freeForm": "*IN01",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "02",
+  "class": "NUMBERED",
+  "freeForm": "*IN02",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "03",
+  "class": "NUMBERED",
+  "freeForm": "*IN03",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "04",
+  "class": "NUMBERED",
+  "freeForm": "*IN04",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "05",
+  "class": "NUMBERED",
+  "freeForm": "*IN05",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "06",
+  "class": "NUMBERED",
+  "freeForm": "*IN06",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "07",
+  "class": "NUMBERED",
+  "freeForm": "*IN07",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "08",
+  "class": "NUMBERED",
+  "freeForm": "*IN08",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "09",
+  "class": "NUMBERED",
+  "freeForm": "*IN09",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "10",
+  "class": "NUMBERED",
+  "freeForm": "*IN10",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "11",
+  "class": "NUMBERED",
+  "freeForm": "*IN11",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "12",
+  "class": "NUMBERED",
+  "freeForm": "*IN12",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "13",
+  "class": "NUMBERED",
+  "freeForm": "*IN13",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "14",
+  "class": "NUMBERED",
+  "freeForm": "*IN14",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "15",
+  "class": "NUMBERED",
+  "freeForm": "*IN15",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "16",
+  "class": "NUMBERED",
+  "freeForm": "*IN16",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "17",
+  "class": "NUMBERED",
+  "freeForm": "*IN17",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "18",
+  "class": "NUMBERED",
+  "freeForm": "*IN18",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "19",
+  "class": "NUMBERED",
+  "freeForm": "*IN19",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "20",
+  "class": "NUMBERED",
+  "freeForm": "*IN20",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "21",
+  "class": "NUMBERED",
+  "freeForm": "*IN21",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "22",
+  "class": "NUMBERED",
+  "freeForm": "*IN22",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "23",
+  "class": "NUMBERED",
+  "freeForm": "*IN23",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "24",
+  "class": "NUMBERED",
+  "freeForm": "*IN24",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "25",
+  "class": "NUMBERED",
+  "freeForm": "*IN25",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "26",
+  "class": "NUMBERED",
+  "freeForm": "*IN26",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "27",
+  "class": "NUMBERED",
+  "freeForm": "*IN27",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "28",
+  "class": "NUMBERED",
+  "freeForm": "*IN28",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "29",
+  "class": "NUMBERED",
+  "freeForm": "*IN29",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "30",
+  "class": "NUMBERED",
+  "freeForm": "*IN30",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "31",
+  "class": "NUMBERED",
+  "freeForm": "*IN31",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "32",
+  "class": "NUMBERED",
+  "freeForm": "*IN32",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "33",
+  "class": "NUMBERED",
+  "freeForm": "*IN33",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "34",
+  "class": "NUMBERED",
+  "freeForm": "*IN34",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "35",
+  "class": "NUMBERED",
+  "freeForm": "*IN35",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "36",
+  "class": "NUMBERED",
+  "freeForm": "*IN36",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "37",
+  "class": "NUMBERED",
+  "freeForm": "*IN37",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "38",
+  "class": "NUMBERED",
+  "freeForm": "*IN38",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "39",
+  "class": "NUMBERED",
+  "freeForm": "*IN39",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "40",
+  "class": "NUMBERED",
+  "freeForm": "*IN40",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "41",
+  "class": "NUMBERED",
+  "freeForm": "*IN41",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "42",
+  "class": "NUMBERED",
+  "freeForm": "*IN42",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "43",
+  "class": "NUMBERED",
+  "freeForm": "*IN43",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "44",
+  "class": "NUMBERED",
+  "freeForm": "*IN44",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "45",
+  "class": "NUMBERED",
+  "freeForm": "*IN45",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "46",
+  "class": "NUMBERED",
+  "freeForm": "*IN46",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "47",
+  "class": "NUMBERED",
+  "freeForm": "*IN47",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "48",
+  "class": "NUMBERED",
+  "freeForm": "*IN48",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "49",
+  "class": "NUMBERED",
+  "freeForm": "*IN49",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "50",
+  "class": "NUMBERED",
+  "freeForm": "*IN50",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "51",
+  "class": "NUMBERED",
+  "freeForm": "*IN51",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "52",
+  "class": "NUMBERED",
+  "freeForm": "*IN52",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "53",
+  "class": "NUMBERED",
+  "freeForm": "*IN53",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "54",
+  "class": "NUMBERED",
+  "freeForm": "*IN54",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "55",
+  "class": "NUMBERED",
+  "freeForm": "*IN55",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "56",
+  "class": "NUMBERED",
+  "freeForm": "*IN56",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "57",
+  "class": "NUMBERED",
+  "freeForm": "*IN57",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "58",
+  "class": "NUMBERED",
+  "freeForm": "*IN58",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "59",
+  "class": "NUMBERED",
+  "freeForm": "*IN59",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "60",
+  "class": "NUMBERED",
+  "freeForm": "*IN60",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "61",
+  "class": "NUMBERED",
+  "freeForm": "*IN61",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "62",
+  "class": "NUMBERED",
+  "freeForm": "*IN62",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "63",
+  "class": "NUMBERED",
+  "freeForm": "*IN63",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "64",
+  "class": "NUMBERED",
+  "freeForm": "*IN64",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "65",
+  "class": "NUMBERED",
+  "freeForm": "*IN65",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "66",
+  "class": "NUMBERED",
+  "freeForm": "*IN66",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "67",
+  "class": "NUMBERED",
+  "freeForm": "*IN67",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "68",
+  "class": "NUMBERED",
+  "freeForm": "*IN68",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "69",
+  "class": "NUMBERED",
+  "freeForm": "*IN69",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "70",
+  "class": "NUMBERED",
+  "freeForm": "*IN70",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "71",
+  "class": "NUMBERED",
+  "freeForm": "*IN71",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "72",
+  "class": "NUMBERED",
+  "freeForm": "*IN72",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "73",
+  "class": "NUMBERED",
+  "freeForm": "*IN73",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "74",
+  "class": "NUMBERED",
+  "freeForm": "*IN74",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "75",
+  "class": "NUMBERED",
+  "freeForm": "*IN75",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "76",
+  "class": "NUMBERED",
+  "freeForm": "*IN76",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "77",
+  "class": "NUMBERED",
+  "freeForm": "*IN77",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "78",
+  "class": "NUMBERED",
+  "freeForm": "*IN78",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "79",
+  "class": "NUMBERED",
+  "freeForm": "*IN79",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "80",
+  "class": "NUMBERED",
+  "freeForm": "*IN80",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "81",
+  "class": "NUMBERED",
+  "freeForm": "*IN81",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "82",
+  "class": "NUMBERED",
+  "freeForm": "*IN82",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "83",
+  "class": "NUMBERED",
+  "freeForm": "*IN83",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "84",
+  "class": "NUMBERED",
+  "freeForm": "*IN84",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "85",
+  "class": "NUMBERED",
+  "freeForm": "*IN85",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "86",
+  "class": "NUMBERED",
+  "freeForm": "*IN86",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "87",
+  "class": "NUMBERED",
+  "freeForm": "*IN87",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "88",
+  "class": "NUMBERED",
+  "freeForm": "*IN88",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "89",
+  "class": "NUMBERED",
+  "freeForm": "*IN89",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "90",
+  "class": "NUMBERED",
+  "freeForm": "*IN90",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "91",
+  "class": "NUMBERED",
+  "freeForm": "*IN91",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "92",
+  "class": "NUMBERED",
+  "freeForm": "*IN92",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "93",
+  "class": "NUMBERED",
+  "freeForm": "*IN93",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "94",
+  "class": "NUMBERED",
+  "freeForm": "*IN94",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "95",
+  "class": "NUMBERED",
+  "freeForm": "*IN95",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "96",
+  "class": "NUMBERED",
+  "freeForm": "*IN96",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "97",
+  "class": "NUMBERED",
+  "freeForm": "*IN97",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "98",
+  "class": "NUMBERED",
+  "freeForm": "*IN98",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "99",
+  "class": "NUMBERED",
+  "freeForm": "*IN99",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KA",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKA",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KB",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKB",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KC",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKC",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KD",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKD",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KE",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKE",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KF",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKF",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KG",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKG",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KH",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKH",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KI",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKI",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KJ",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKJ",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KK",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKK",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KL",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKL",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KM",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKM",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KN",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKN",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KP",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKP",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KQ",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKQ",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KR",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKR",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KS",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKS",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KT",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKT",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KU",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKU",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KV",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKV",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KW",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKW",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KX",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKX",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "KY",
+  "class": "FUNCTIONKEY",
+  "freeForm": "*INKY",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "H1",
+  "class": "HALT",
+  "freeForm": "*INH1",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "H2",
+  "class": "HALT",
+  "freeForm": "*INH2",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "H3",
+  "class": "HALT",
+  "freeForm": "*INH3",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "H4",
+  "class": "HALT",
+  "freeForm": "*INH4",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "H5",
+  "class": "HALT",
+  "freeForm": "*INH5",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "H6",
+  "class": "HALT",
+  "freeForm": "*INH6",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "H7",
+  "class": "HALT",
+  "freeForm": "*INH7",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "H8",
+  "class": "HALT",
+  "freeForm": "*INH8",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "H9",
+  "class": "HALT",
+  "freeForm": "*INH9",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "U1",
+  "class": "EXTERNAL",
+  "freeForm": "*INU1",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "U2",
+  "class": "EXTERNAL",
+  "freeForm": "*INU2",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "U3",
+  "class": "EXTERNAL",
+  "freeForm": "*INU3",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "U4",
+  "class": "EXTERNAL",
+  "freeForm": "*INU4",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "U5",
+  "class": "EXTERNAL",
+  "freeForm": "*INU5",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "U6",
+  "class": "EXTERNAL",
+  "freeForm": "*INU6",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "U7",
+  "class": "EXTERNAL",
+  "freeForm": "*INU7",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "U8",
+  "class": "EXTERNAL",
+  "freeForm": "*INU8",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "OA",
+  "class": "OVERFLOW",
+  "freeForm": "*INOA",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "OB",
+  "class": "OVERFLOW",
+  "freeForm": "*INOB",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "OC",
+  "class": "OVERFLOW",
+  "freeForm": "*INOC",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "OD",
+  "class": "OVERFLOW",
+  "freeForm": "*INOD",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "OE",
+  "class": "OVERFLOW",
+  "freeForm": "*INOE",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "OF",
+  "class": "OVERFLOW",
+  "freeForm": "*INOF",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "OG",
+  "class": "OVERFLOW",
+  "freeForm": "*INOG",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "OV",
+  "class": "OVERFLOW",
+  "freeForm": "*INOV",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "LR",
+  "class": "LASTRECORD",
+  "freeForm": "*INLR",
+  "cycle": "N",
+  "reason": "",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "L1",
+  "class": "CONTROLLEVEL",
+  "freeForm": "*INL1",
+  "cycle": "Y",
+  "reason": "Control level indicator: the RPG cycle is not supported in free-form",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "L2",
+  "class": "CONTROLLEVEL",
+  "freeForm": "*INL2",
+  "cycle": "Y",
+  "reason": "Control level indicator: the RPG cycle is not supported in free-form",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "L3",
+  "class": "CONTROLLEVEL",
+  "freeForm": "*INL3",
+  "cycle": "Y",
+  "reason": "Control level indicator: the RPG cycle is not supported in free-form",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "L4",
+  "class": "CONTROLLEVEL",
+  "freeForm": "*INL4",
+  "cycle": "Y",
+  "reason": "Control level indicator: the RPG cycle is not supported in free-form",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "L5",
+  "class": "CONTROLLEVEL",
+  "freeForm": "*INL5",
+  "cycle": "Y",
+  "reason": "Control level indicator: the RPG cycle is not supported in free-form",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "L6",
+  "class": "CONTROLLEVEL",
+  "freeForm": "*INL6",
+  "cycle": "Y",
+  "reason": "Control level indicator: the RPG cycle is not supported in free-form",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "L7",
+  "class": "CONTROLLEVEL",
+  "freeForm": "*INL7",
+  "cycle": "Y",
+  "reason": "Control level indicator: the RPG cycle is not supported in free-form",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "L8",
+  "class": "CONTROLLEVEL",
+  "freeForm": "*INL8",
+  "cycle": "Y",
+  "reason": "Control level indicator: the RPG cycle is not supported in free-form",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "L9",
+  "class": "CONTROLLEVEL",
+  "freeForm": "*INL9",
+  "cycle": "Y",
+  "reason": "Control level indicator: the RPG cycle is not supported in free-form",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "MR",
+  "class": "MATCHING",
+  "freeForm": "*INMR",
+  "cycle": "Y",
+  "reason": "Matching record indicator: the RPG cycle is not supported in free-form",
+  "source": "SC09-1818 chapter 13 and Table 20"
+ }
+]

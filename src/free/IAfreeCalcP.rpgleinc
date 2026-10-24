@@ -1,0 +1,50 @@
+**FREE
+// IAfreeCalcP - prototypes between the modules of IACNVFREE: the output
+// buffer of IAfreeCvt and the calculation specification converter
+// IAfreeCalc.
+// Include with: /copy qcpysrc,IAfreeCalcP (member IAfreeCalcP of file QCPYSRC).
+// Target release V7R3.
+
+/if defined(IAFREECALCP)
+/eof
+/endif
+/define IAFREECALCP
+
+// ---- IAfreeCalc ------------------------------------------------------
+dcl-pr CalcStart;
+end-pr;
+
+// One C specification line (columns as in the RPG II coding form).
+dcl-pr CalcLine;
+  i_line char(100) const;
+  i_lineNo int(10) const;
+end-pr;
+
+// Writes the declarations of the result fields and closes the open groups.
+dcl-pr CalcFinish;
+end-pr;
+
+// ---- IAfreeCvt (output buffer) --------------------------------------
+dcl-pr AddOut;
+  i_text varchar(200) const;
+  i_lineNo int(10) const;
+end-pr;
+
+dcl-pr ReviewSpec;
+  i_lineNo int(10) const;
+  i_line char(100) const;
+  i_reason varchar(190) const;
+end-pr;
+
+dcl-pr OutCount int(10);
+end-pr;
+
+dcl-pr OutSet;
+  i_index int(10) const;
+  i_text varchar(200) const;
+end-pr;
+
+dcl-pr OutInsertAfter;
+  i_index int(10) const;
+  i_text varchar(200) const;
+end-pr;

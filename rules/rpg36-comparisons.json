@@ -1,0 +1,32 @@
+[
+ {
+  "xx": "GT",
+  "operator": ">",
+  "source": "SC09-1818 chapter 27, Structured Programming Operations"
+ },
+ {
+  "xx": "LT",
+  "operator": "<",
+  "source": "SC09-1818 chapter 27, Structured Programming Operations"
+ },
+ {
+  "xx": "EQ",
+  "operator": "=",
+  "source": "SC09-1818 chapter 27, Structured Programming Operations"
+ },
+ {
+  "xx": "NE",
+  "operator": "<>",
+  "source": "SC09-1818 chapter 27, Structured Programming Operations"
+ },
+ {
+  "xx": "GE",
+  "operator": ">=",
+  "source": "SC09-1818 chapter 27, Structured Programming Operations"
+ },
+ {
+  "xx": "LE",
+  "operator": "<=",
+  "source": "SC09-1818 chapter 27, Structured Programming Operations"
+ }
+]

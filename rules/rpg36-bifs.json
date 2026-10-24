@@ -1,0 +1,51 @@
+[
+ {
+  "name": "%SQRT",
+  "since": "V5R1",
+  "use": "SQRT",
+  "note": "Square root",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%XFOOT",
+  "since": "V5R1",
+  "use": "XFOOT",
+  "note": "Sum of the elements of an array",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%TIME",
+  "since": "V5R1",
+  "use": "TIME",
+  "note": "Current time",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%DEC",
+  "since": "V5R1",
+  "use": "TIME",
+  "note": "Numeric value of a time with a format",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%FOUND",
+  "since": "V5R1",
+  "use": "CHAIN, SETLL",
+  "note": "Record found",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%EOF",
+  "since": "V5R1",
+  "use": "READ, READE, READP",
+  "note": "End of file",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%ERROR",
+  "since": "V5R1",
+  "use": "operations with an (E) extender",
+  "note": "Error",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ }
+]

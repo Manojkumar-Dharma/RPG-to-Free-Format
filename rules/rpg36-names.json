@@ -1,0 +1,130 @@
+[
+ {
+  "name": "*BLANK",
+  "freeForm": "*BLANK",
+  "kind": "FIGURATIVE",
+  "status": "C",
+  "reason": "",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "*BLANKS",
+  "freeForm": "*BLANKS",
+  "kind": "FIGURATIVE",
+  "status": "C",
+  "reason": "",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "*ZERO",
+  "freeForm": "*ZERO",
+  "kind": "FIGURATIVE",
+  "status": "C",
+  "reason": "",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "*ZEROS",
+  "freeForm": "*ZEROS",
+  "kind": "FIGURATIVE",
+  "status": "C",
+  "reason": "",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "UDATE",
+  "freeForm": "UDATE",
+  "kind": "DATE",
+  "status": "C",
+  "reason": "",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "UMONTH",
+  "freeForm": "UMONTH",
+  "kind": "DATE",
+  "status": "C",
+  "reason": "",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "UDAY",
+  "freeForm": "UDAY",
+  "kind": "DATE",
+  "status": "C",
+  "reason": "",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "UYEAR",
+  "freeForm": "UYEAR",
+  "kind": "DATE",
+  "status": "C",
+  "reason": "",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "PAGE",
+  "freeForm": "",
+  "kind": "PAGE",
+  "status": "R",
+  "reason": "Page number field: converted with the O specifications (FREE-06)",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "PAGE1",
+  "freeForm": "",
+  "kind": "PAGE",
+  "status": "R",
+  "reason": "Page number field: converted with the O specifications (FREE-06)",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "PAGE2",
+  "freeForm": "",
+  "kind": "PAGE",
+  "status": "R",
+  "reason": "Page number field: converted with the O specifications (FREE-06)",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "PAGE3",
+  "freeForm": "",
+  "kind": "PAGE",
+  "status": "R",
+  "reason": "Page number field: converted with the O specifications (FREE-06)",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "PAGE4",
+  "freeForm": "",
+  "kind": "PAGE",
+  "status": "R",
+  "reason": "Page number field: converted with the O specifications (FREE-06)",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "PAGE5",
+  "freeForm": "",
+  "kind": "PAGE",
+  "status": "R",
+  "reason": "Page number field: converted with the O specifications (FREE-06)",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "PAGE6",
+  "freeForm": "",
+  "kind": "PAGE",
+  "status": "R",
+  "reason": "Page number field: converted with the O specifications (FREE-06)",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ },
+ {
+  "name": "PAGE7",
+  "freeForm": "",
+  "kind": "PAGE",
+  "status": "R",
+  "reason": "Page number field: converted with the O specifications (FREE-06)",
+  "source": "SC09-1818 chapter 24, columns 18-27"
+ }
+]

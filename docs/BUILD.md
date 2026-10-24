@@ -88,22 +88,44 @@ Without `MSGF` message fields are reported for review and kept as program output
 
 ## 6. IACNVFREE (RPG36 to fully free-form RPGLE)
 
-Uses the same service program IAcnvSrv. Only RPG36 source is converted so far; other source types end with message IAC0103. Run `IACNVMSG` again after pulling this change (it adds IAC0103).
+Uses the same service program IAcnvSrv. Only RPG36 source is converted so far; other source types end with message IAC0103. Run `IACNVMSG` again after pulling this change (it adds IAC0103 and IAC0104).
+
+**Rule tables first.** The conversion rules are in `rules/*.json` and are loaded into Db2 tables (see `docs/RPG-MAPPING.md`). Edit the path in the `SET IARULESDIR` statement of `rules/IACNVRULES.sql` to the `rules/` directory of the repo in the IFS (keep the trailing slash), then:
 
 ```
-CRTSQLRPGI OBJ(MYLIB/IAfreeCvt) SRCSTMF('REPO/src/free/IAfreeCvt.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
-CRTSQLRPGI OBJ(MYLIB/IAcnvFree) SRCSTMF('REPO/src/free/IAcnvFree.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
-CRTPGM PGM(MYLIB/IACNVFREE) MODULE(MYLIB/IAcnvFree MYLIB/IAfreeCvt) BNDSRVPGM(MYLIB/IAcnvSrv) ACTGRP(*NEW)
+RUNSQLSTM SRCSTMF('REPO/rules/IACNVRULES.sql') COMMIT(*NONE) NAMING(*SYS) DFTRDBCOL(MYLIB)
+```
+
+The last statement lists the number of rows of each table (61 operation codes, 6 comparisons, 11 results, 159 indicators, 16 names, 7 built-in functions, 6 settings). Run it again after every change to a JSON file. `JSON_TABLE` needs a recent Db2 group PTF level on IBM i 7.3 (or 7.4 and later); if the statement is rejected, send the message back.
+
+Two more includes go into QCPYSRC, the same way as `IAcnvSrvP` (repeat the copy after every change):
+
+```
+CPYFRMSTMF FROMSTMF('REPO/src/free/IAfreeRulP.rpgleinc')  TOMBR('/QSYS.LIB/MYLIB.LIB/QCPYSRC.FILE/IAfreeRulP.MBR')  MBROPT(*REPLACE)
+CHGPFM FILE(MYLIB/QCPYSRC) MBR(IAfreeRulP) SRCTYPE(RPGLEINC)
+CPYFRMSTMF FROMSTMF('REPO/src/free/IAfreeCalcP.rpgleinc') TOMBR('/QSYS.LIB/MYLIB.LIB/QCPYSRC.FILE/IAfreeCalcP.MBR') MBROPT(*REPLACE)
+CHGPFM FILE(MYLIB/QCPYSRC) MBR(IAfreeCalcP) SRCTYPE(RPGLEINC)
+```
+
+```
+CRTSQLRPGI OBJ(MYLIB/IAfreeRul)  SRCSTMF('REPO/src/free/IAfreeRul.sqlrpgle')  COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTSQLRPGI OBJ(MYLIB/IAfreeCalc) SRCSTMF('REPO/src/free/IAfreeCalc.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTSQLRPGI OBJ(MYLIB/IAfreeCvt)  SRCSTMF('REPO/src/free/IAfreeCvt.sqlrpgle')  COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTSQLRPGI OBJ(MYLIB/IAcnvFree)  SRCSTMF('REPO/src/free/IAcnvFree.sqlrpgle')  COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTPGM PGM(MYLIB/IACNVFREE) MODULE(MYLIB/IAcnvFree MYLIB/IAfreeCvt MYLIB/IAfreeCalc MYLIB/IAfreeRul) BNDSRVPGM(MYLIB/IAcnvSrv) ACTGRP(*NEW)
 CRTCMD CMD(MYLIB/IACNVFREE) PGM(MYLIB/IACNVFREE) SRCSTMF('REPO/src/free/IACNVFREE.cmd')
 ```
 
-First test, with `samples/FREEHF.rpg36` copied into a source file (record length 112 or more) as type RPG36:
+The tables are found through the library list, so `MYLIB` has to be on it when IACNVFREE runs.
+
+First test, with `samples/FREEHF.rpg36` and `samples/FREEC.rpg36` copied into a source file (record length 112 or more) as type RPG36:
 
 ```
 IACNVFREE SRC(MYLIB/QS36SRC FREEHF) SRCTYPE(RPG36) TGT(QRPGLESRC)
+IACNVFREE SRC(MYLIB/QS36SRC FREEC)  SRCTYPE(RPG36) TGT(QRPGLESRC)
 ```
 
-Expected result: the control and file description specifications become `ctl-opt` and `dcl-f` statements; everything else (E, I, C and O specifications, compile-time data) is kept as `// RPG II:` comments and reported R. The expected output for each line of the sample is in `docs/RPG-MAPPING.md`. The target is not meant to compile yet: it is only the declarations part.
+Expected result: the control and file description specifications become `ctl-opt` and `dcl-f` statements, the calculation specifications become statements as described in `docs/RPG-MAPPING.md`, and everything else (E, I and O specifications, compile-time data) is kept as `// RPG II:` comments and reported R. The target is not meant to compile yet: fields from the I and E specifications are not declared.
 
 ## Grouped file and member parameters
 
