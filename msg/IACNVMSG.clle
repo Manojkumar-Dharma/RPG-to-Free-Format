@@ -80,8 +80,8 @@ CHGVAR     VAR(&TXT) VALUE('Name &1 is not valid.')
 CALLSUBR   SUBR(ADDMSG)
 
 CHGVAR     VAR(&ID) VALUE('IAC0017')
-CHGVAR     VAR(&TXT) VALUE('An explicit CCSID for IFS input ' *TCAT + 
-                           ' is not supported yet. Use *DFT.')
+CHGVAR     VAR(&TXT) VALUE('Source CCSID &1 cannot be used to ' *TCAT +
+                           'convert the IFS input to the job CCSID.')
 CALLSUBR   SUBR(ADDMSG)
 
 CHGVAR     VAR(&ID) VALUE('IAC0018')

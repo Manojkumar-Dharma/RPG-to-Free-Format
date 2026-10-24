@@ -35,7 +35,7 @@ All three commands take the same parameters.
 | Input | `SRCIFS` | IFS **directory** (trailing `/` optional) |
 | Input | `SRCMBR` | Source member name. **Mandatory** in both modes |
 | Input | `SRCTYPE` | Source type, must be a valid type. **Mandatory** in both modes |
-| Input | `SRCCCSID` | CCSID for reading, default `*DFT` |
+| Input | `SRCCCSID` | CCSID for reading, default `*DFT`. For an IFS file, `*DFT` uses the CCSID tag of the file; an explicit value ignores the tag and converts the raw bytes from that CCSID to the job CCSID with iconv. Not used for source members |
 | Output | `TGT` (grouped: file, library, member) replaces `TGTLIB`, `TGTFILE`, `TGTMBR`; see BUILD.md. Meaning of the old rows: `TGTLIB` | Output library (`*SRCLIB` allowed) |
 | Output | `TGTFILE` | Output source physical file |
 | Output | `TGTIFS` | IFS output **directory** |

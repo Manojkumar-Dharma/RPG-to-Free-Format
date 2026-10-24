@@ -363,11 +363,8 @@ dcl-proc ValidateIO export;
      or i_parm.srcCcsid > 65535);
     return FailValidation('IAC0013':%char(i_parm.srcCcsid):o_msgId:o_msgData);
   endif;
-  // Explicit input CCSID for stream files needs raw read plus iconv, which
-  // is a later piece of work. *DFT uses the file's own CCSID.
-  if l_source.mode = C_MODE_IFS and i_parm.srcCcsid <> -1;
-    return FailValidation('IAC0017':%char(i_parm.srcCcsid):o_msgId:o_msgData);
-  endif;
+  // An explicit input CCSID for a stream file is applied by the reader (raw
+  // read plus iconv); a CCSID that iconv does not know fails when it is opened.
   if i_parm.tgtCcsid <> -1 and (i_parm.tgtCcsid < 1
      or i_parm.tgtCcsid > 65535);
     return FailValidation('IAC0013':%char(i_parm.tgtCcsid):o_msgId:o_msgData);
