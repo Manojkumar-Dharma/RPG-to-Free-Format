@@ -14,7 +14,7 @@ the same commit. Status values: Planned, In progress, Done.
 | OCL-04 | IAOCLTOCLE | WAIT, PAUSE, NOHALT, CANCEL | In progress (written, needs a compile and test; `CANCEL PRT,...` for spool entries moved to OCL-10) |
 | OCL-05 | IAOCLTOCLE | ATTR, ALLOCATE, DEALLOC, SCRATCH | In progress (written, needs a compile and test; device names and priorities are untested constants) |
 | OCL-06 | IAOCLTOCLE | SESSION, MEMBER, LIBRARY, MRTPROC | In progress (LIBRARY, SESSION for APPC and MRTPROC calls written, need a compile and test; MEMBER is part of OCL-11; MRTPROC is a sample procedure name, not a statement) |
-| OCL-07 | IAOCLTOCLE | PROMPT, HELP, INCLUDE | Planned |
+| OCL-07 | IAOCLTOCLE | PROMPT, HELP, INCLUDE | In progress (INCLUDE written as a procedure call, needs a compile and test; PROMPT and HELP reported R; PROMPT conversion waits for a DSPF sample) |
 | OCL-08 | IAOCLTOCLE | Explicit SRCCCSID for IFS input | Planned |
 | OCL-10 | IAOCLTOCLE | `// CANCEL PRT,...` (spool file entries): printer ID mapping and `*JOBCTL` scope to decide | Planned |
 | OCL-11 | IAOCLTOCLE | `// *` and `// **` message statements, MEMBER, `?Mmic?` expressions | In progress (written, needs a compile and test; the message ID prefix `USR` is assumed, check against a real message file) |

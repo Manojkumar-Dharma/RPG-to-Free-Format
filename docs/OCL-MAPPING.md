@@ -296,6 +296,21 @@ Evidence: SC41-4731 chapter 5 (`ALLOCATE`, `DEALLOC`, `ATTR`), chapter 3 Table 3
 
 Assumptions: WAIT-YES (the default) waits the `ALCOBJ` default of 30 seconds, not the class wait time; `AUTO-YES` (next tape drive) is not converted; `CONTINUE` is accepted for diskette only. `SCRATCH` looks for the file on the library list and ignores a missing file; the reference does not say what S/36 does.
 
+## INCLUDE, PROMPT, HELP (OCL-07)
+
+Evidence: SC41-4731 chapter 5 ("INCLUDE OCL Statement", "PROMPT OCL Statement") and chapter 4 ("HELP Procedure").
+
+| OCL | CLLE output | Status |
+|---|---|---|
+| `// INCLUDE name[,lib] p1,p2,...` | `CALL PGM([lib/]name) PARM(...)`, the same as `// name[,lib] p1,p2,...` | A |
+| `// INCLUDE ... *ALL` | comment | R |
+| `// PROMPT MEMBER-m,FORMAT-f,...` | comment | R |
+| `HELP ...` (the IBM-supplied procedure) | comment | R |
+
+`INCLUDE` puts the OCL of the procedure into the job stream; the converted procedure is a program of the same name, so the call is the same as a normal procedure call (the same A note applies).
+
+`PROMPT` is not converted. It shows a display format and puts the operator input into the procedure parameters (from `START`, `LENGTH` characters each); `?CD?` then holds the key (0000 Enter, 2001 to 2024 CF1 to CF24, 2090 Page Down, 2091 Page Up, 2092 Help, 2093 Record Backspace). A conversion needs the display file made by IACNVDSPF (record format and field names, which are kept only when valid and unique) and the indicators for the keys, so the report line names the record format and the parameter to fill. `&CD` is declared, so the hand-written code can set it. Waiting for a DSPF sample (see DSP-06) before deciding on a `DCLF` and `SNDRCVF` pattern. `HELP` shows the S/36 help menus and has no CL equivalent.
+
 ## Not converted yet
 
-Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `PROMPT`, `HELP`, `INCLUDE`, `SESSION` for communications types other than APPC, and `CANCEL PRT,...` (spool file entries). Each is copied as a comment and reported R.
+Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `PROMPT`, `HELP`, `SESSION` for communications types other than APPC, and `CANCEL PRT,...` (spool file entries). Each is copied as a comment and reported R.

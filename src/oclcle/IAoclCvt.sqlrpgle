@@ -5,7 +5,8 @@
 //   comment lines, LOAD + RUN, FILE, LOCAL, TAG, GOTO, RETURN,
 //   substitution expressions ?n?, ?USER?, ?WS?, procedure calls,
 //   WAIT, PAUSE, NOHALT, CANCEL (without operands), LIBRARY, SESSION (APPC),
-//   ALLOCATE, DEALLOC, ATTR (PRIORITY), SCRATCH (inside a $DELET step)
+//   ALLOCATE, DEALLOC, ATTR (PRIORITY), SCRATCH (inside a $DELET step),
+//   INCLUDE (as a procedure call); PROMPT and HELP are reported R
 // Everything else is written as a CL comment and reported as REVIEW.
 // The converted program is collected first, because the PGM statement and
 // the DCLs depend on which substitution expressions were used.
@@ -4086,6 +4087,93 @@ dcl-proc ConvertScratch;
 end-proc;
 
 // ------------------------------------------------------------------
+// INCLUDE name[,library] [parameters] (SC41-4731, chapter 5): the same call
+// as name[,library] [parameters]; INCLUDE only lets a procedure be called
+// when its name is also an OCL word (INCLUDE FILE FILEA,FILEB). The procedure
+// is taken to be converted to a program of the same name (see
+// ConvertProcedureCall). *ALL (all data to the program) is not converted.
+dcl-proc ConvertInclude;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_blankPos int(10);
+  dcl-s l_target varchar(60);
+  dcl-s l_data varchar(512);
+
+  if %len(%trim(i_operands)) = 0;
+    ReviewLine(i_lineNo:i_text:'INCLUDE needs a procedure name');
+    return;
+  endif;
+  l_blankPos = %scan(' ':i_operands);
+  if l_blankPos = 0;
+    l_target = ToUpper(i_operands);
+    l_data = '';
+  else;
+    l_target = ToUpper(SafeSubstr(i_operands:1:l_blankPos - 1));
+    l_data = %trim(SafeSubstrToEnd(i_operands:l_blankPos + 1));
+  endif;
+  if %scan('*ALL':ToUpper(l_data)) > 0;
+    ReviewLine(i_lineNo:i_text
+               :'INCLUDE with *ALL (all data to the program) is not converted');
+    return;
+  endif;
+  ConvertProcedureCall(i_lineNo:i_text:l_target:l_data);
+end-proc;
+
+// ------------------------------------------------------------------
+// PROMPT MEMBER-m,FORMAT-f[,LIBRARY-l][,START-n][,LENGTH-n|'n,n..']
+// [,PDATA-YES|NO][,UPSI-YES|NO] (SC41-4731, chapter 5). The statement shows a
+// display format and puts the operator input into the procedure parameters;
+// ?CD? then tells the key pressed (0000 Enter, 2001-2024 CF1-24, 2090 Page
+// Down, 2091 Page Up, 2092 Help, 2093 Record Backspace). It needs the display
+// file of the converted format (record format and field names) and the
+// indicators of the key, so it is not converted: the line is kept as a comment
+// and the report says what has to be written by hand.
+dcl-proc ConvertPrompt;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_itemCount int(10);
+  dcl-s l_index int(10);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
+  dcl-s l_member varchar(60) inz('');
+  dcl-s l_format varchar(60) inz('');
+  dcl-s l_start varchar(10) inz('1');
+  dcl-s l_reason varchar(200);
+
+  l_itemCount = SplitItems(i_operands:l_items);
+  for l_index = 1 to l_itemCount;
+    SplitKeyword(l_items(l_index):l_keyword:l_value);
+    select;
+      when l_keyword = 'MEMBER';
+        l_member = ToUpper(l_value);
+      when l_keyword = 'FORMAT';
+        l_format = ToUpper(l_value);
+      when l_keyword = 'START';
+        l_start = l_value;
+    endsl;
+  endfor;
+  if l_member = '' or l_format = '';
+    ReviewLine(i_lineNo:i_text:'PROMPT needs MEMBER- and FORMAT-');
+    return;
+  endif;
+
+  l_reason = 'PROMPT not converted: write a SNDRCVF of record format ' + l_format
+           + ' (display file ' + l_member + ') that fills &P' + l_start
+           + ' onward, and set &CD from the key pressed';
+  ReviewLine(i_lineNo:i_text:l_reason);
+  g_useCd = *on;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc ProcessStatement;
   dcl-pi *n;
     i_lineNo int(10) const;
@@ -4180,6 +4268,10 @@ dcl-proc ProcessStatement;
       ConvertDealloc(i_lineNo:i_text:l_operands);
     when l_keyword = 'ATTR';
       ConvertAttr(i_lineNo:i_text:l_operands);
+    when l_keyword = 'INCLUDE';
+      ConvertInclude(i_lineNo:i_text:l_operands);
+    when l_keyword = 'PROMPT';
+      ConvertPrompt(i_lineNo:i_text:l_operands);
     when l_keyword = 'SCRATCH';
       ConvertScratch(i_lineNo:i_text:l_operands);
     when l_keyword = 'REMOVE' and g_deletMode;
