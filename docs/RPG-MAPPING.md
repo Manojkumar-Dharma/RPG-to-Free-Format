@@ -249,7 +249,7 @@ Source: SC09-1818 chapter 24 (columns) and chapter 27 (operations). Written for 
 | Factors | character literal as is; numeric literal (`+` dropped, `.5` as `0.5`); `*BLANK(S)`, `*ZERO(S)`, `UDATE`, `UMONTH`, `UDAY`, `UYEAR`; array element `ARR,I` as `ARR(I)`; names as typed. `PAGE`, `PAGE1` to `PAGE7`: R (O specifications) | C |
 | Comment (columns 60-74) | `// text` after the first statement | - |
 | `MOVE`, `MOVEL`, `MOVEA`, `MVR`, move zone, bit operations, `TESTZ`, `LOKUP`, `KEY`, `DEFN`, `CALL`, `PARM`, `PLIST`, `EXIT`, `RLABL`, `FORCE`, `FREE`, `SET`, `SHTDN`, `DEBUG` | comment | R, with the reason from the table |
-| `CHAIN`, `READ`, `READE`, `READP`, `SETLL`, `ACQ`, `NEXT`, `POST`, `REL` | comment | R: file operations need the record layout from the I specifications (FREE-04) or the display file (later item) |
+| `CHAIN`, `READ`, `READE`, `READP`, `SETLL`, `ACQ`, `NEXT`, `POST`, `REL` | comment | R: file operations need the `FILE_REC` data structures from the I specifications (FREE-04, done) and are converted with FREE-08; WORKSTN files need the display file (later item) |
 | `EXCPT` | comment | R: converted with the O specifications (FREE-06) |
 | `GOTO`, `TAG` | comment | R: no replacement in free-form |
 | Unknown operation code, wrong factor entries (required missing, blank given), a built-in function newer than the target release | comment | R |
