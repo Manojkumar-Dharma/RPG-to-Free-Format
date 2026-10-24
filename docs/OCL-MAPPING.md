@@ -279,6 +279,23 @@ CL cannot put a variable inside a word or a quoted text. Where OCL has an expres
 - `/*` and `/&` marker lines are copied as comments (R).
 - Statement keywords are matched ignoring case; names are written in upper case.
 
+## ALLOCATE, DEALLOC, ATTR, SCRATCH (OCL-05)
+
+Evidence: SC41-4731 chapter 5 (`ALLOCATE`, `DEALLOC`, `ATTR`), chapter 3 Table 3-1 (`?CD?` return codes) and appendix A ("$DELET Utility"). The device names and run priorities are constants at the top of IAoclCvt and were **not tested on a system**.
+
+| OCL | CLLE output | Status |
+|---|---|---|
+| `// ALLOCATE UNIT-I1\|T1\|T2\|'T1,T2'\|TC[,WAIT-YES\|NO]` | `CHGVAR &CD '0000'`, `ALCOBJ OBJ((QSYS/dev *DEVD *EXCL))` (`WAIT(0)` for WAIT-NO), `MONMSG CPF1002` sets `&CD` to the in-use code | A |
+| `?CD?` | `&CD` (4 characters, declared when used). 2033 diskette, 2036 tape 1, 2038 tape 2, 2042 tape cartridge | A |
+| `// DEALLOC UNIT-...` | `DLCOBJ`, `MONMSG CPF0000` | A |
+| `// ATTR PRIORITY-HIGH\|MEDIUM\|LOW` | `CHGJOB RUNPTY(10\|20\|50)` | A |
+| `// ATTR` with CANCEL-YES, INQUIRY-YES, NEP-NO, MRTWAIT-YES, RELEASE-NO, NOTIFY-NO | nothing (normal behaviour), comment | A |
+| `// ATTR` with CANCEL-NO, INQUIRY-NO, NEP-YES, MRTMAX, MRTWAIT-NO, RELEASE-YES, NOTIFY-JOB, PRIORITY-NO | comment | R |
+| `// LOAD $DELET`, `// RUN`, `// SCRATCH LABEL-file,UNIT-F1`, `// END` | `DLTF FILE(file)`, `MONMSG CPF2105` | A |
+| `SCRATCH` for UNIT-I1, LABEL-ALL, DATE, LOCATION, GROUP and other keywords; `REMOVE` | comment | R |
+
+Assumptions: WAIT-YES (the default) waits the `ALCOBJ` default of 30 seconds, not the class wait time; `AUTO-YES` (next tape drive) is not converted; `CONTINUE` is accepted for diskette only. `SCRATCH` looks for the file on the library list and ignores a missing file; the reference does not say what S/36 does.
+
 ## Not converted yet
 
-Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `ATTR`, `ALLOCATE`, `DEALLOC`, `PROMPT`, `HELP`, `SCRATCH`, `INCLUDE`, `SESSION` for communications types other than APPC, and `CANCEL PRT,...` (spool file entries). Each is copied as a comment and reported R.
+Statements seen in the IBM guides but not converted: calls of the IBM-supplied procedures (`BLDFILE` is converted, and calls of your own procedures are converted), `PROMPT`, `HELP`, `INCLUDE`, `SESSION` for communications types other than APPC, and `CANCEL PRT,...` (spool file entries). Each is copied as a comment and reported R.

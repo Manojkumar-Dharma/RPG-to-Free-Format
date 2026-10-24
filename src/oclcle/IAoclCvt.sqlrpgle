@@ -4,7 +4,8 @@
 // Converted in v1 (see docs/OCL-MAPPING.md for the rules and what is assumed):
 //   comment lines, LOAD + RUN, FILE, LOCAL, TAG, GOTO, RETURN,
 //   substitution expressions ?n?, ?USER?, ?WS?, procedure calls,
-//   WAIT, PAUSE, NOHALT, CANCEL (without operands), LIBRARY, SESSION (APPC)
+//   WAIT, PAUSE, NOHALT, CANCEL (without operands), LIBRARY, SESSION (APPC),
+//   ALLOCATE, DEALLOC, ATTR (PRIORITY), SCRATCH (inside a $DELET step)
 // Everything else is written as a CL comment and reported as REVIEW.
 // The converted program is collected first, because the PGM statement and
 // the DCLs depend on which substitution expressions were used.
@@ -24,6 +25,15 @@ dcl-c C_FDINITFLD 'PHRCDC';   // DSPFD initial records (unverified)
 dcl-c C_MARKLIB 'QGPL';          // library of the ACTIVE- marker data areas
 dcl-c C_MSGPREFIX 'USR';         // message id prefix of CRTS36MSGF (assumed)
 dcl-c C_MAXACTIVE 10;
+// ALLOCATE and DEALLOC: device descriptions of the S/36 units (assumed names).
+dcl-c C_DEV_DISKETTE 'DKT01';    // UNIT-I1
+dcl-c C_DEV_TAPE1 'TAP01';       // UNIT-T1
+dcl-c C_DEV_TAPE2 'TAP02';       // UNIT-T2
+dcl-c C_DEV_CARTRIDGE 'TAP03';   // UNIT-TC
+// ATTR PRIORITY: CHGJOB run priorities (assumed values).
+dcl-c C_PTY_HIGH '10';
+dcl-c C_PTY_MEDIUM '20';
+dcl-c C_PTY_LOW '50';
 dcl-c C_DFTWIDTH 80;             // line width assumed when the target width is unknown
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -89,6 +99,9 @@ dcl-s g_activeCount int(10);     // ACTIVE- flags: &A1, &A2, ...
 dcl-s g_procName varchar(10);    // OCL procedure (source member) name
 dcl-s g_useFileSize ind;         // &FSN and &FSD work variables are needed
 dcl-s g_usePause ind;            // &PAUSERPY reply variable is needed
+dcl-s g_useCd ind;               // &CD return code variable is needed (?CD?)
+dcl-s g_isDelet ind;             // the pending LOAD is $DELET
+dcl-s g_deletMode ind;           // inside the statements of a $DELET step
 dcl-s g_libMode int(10);         // LIBRARY: 0 none, 1 SESSION-NO, 2 SESSION-YES
 dcl-s g_sessionLib varchar(60);  // library set at exit by LIBRARY SESSION-YES
 dcl-s g_user1Member varchar(60); // MEMBER USER1: first-level message file
@@ -411,6 +424,11 @@ dcl-proc ExpressionVariable;
     o_length = 6;
     return '&DATE';
   endif;
+  if l_upperToken = 'CD';
+    g_useCd = *on;
+    o_length = 4;
+    return '&CD';
+  endif;
   if ParseLdaExpression(l_upperToken:l_position:l_number);
     o_length = l_number;
     return LdaVariableName(l_position:l_number:*on);
@@ -714,6 +732,8 @@ dcl-proc ConvertLoad;
 
   g_pendLoad = *on;
   g_isSort = (l_name = '#GSORT');
+  g_isDelet = (l_name = '$DELET');
+  g_deletMode = *off;
   g_loadName = l_name;
   g_loadLib = l_library;
   g_loadLine = i_lineNo;
@@ -746,6 +766,14 @@ dcl-proc ConvertRun;
     g_conditions = *off;
     g_sortFirst = i_lineNo;
     g_pendLoad = *off;
+    return;
+  endif;
+
+  if g_isDelet;
+    // The statements of the $DELET step are converted one by one (SCRATCH).
+    g_deletMode = *on;
+    g_pendLoad = *off;
+    RptItem(C_STS_CONVERTED:g_loadLine:g_loadText:'');
     return;
   endif;
 
@@ -3745,6 +3773,319 @@ dcl-proc ConvertMessage;
 end-proc;
 
 // ------------------------------------------------------------------
+// UNIT value of ALLOCATE and DEALLOC (SC41-4731, chapter 5): I1 diskette, T1,
+// T2, 'T1,T2' (both tape drives) and TC (tape cartridge). Returns the OBJ
+// list of ALCOBJ or DLCOBJ, or '' for another unit. o_code is the ?CD? return
+// code of ALLOCATE when the drive is in use (chapter 3, Table 3-1).
+dcl-proc UnitObjects;
+  dcl-pi *n varchar(120);
+    i_unit varchar(60) const;
+    o_code varchar(4);
+  end-pi;
+
+  dcl-s l_unit varchar(60);
+
+  l_unit = ToUpper(%trim(i_unit));
+  if %len(l_unit) >= 2 and SafeSubstr(l_unit:1:1) = C_QUOTE
+     and SafeSubstr(l_unit:%len(l_unit):1) = C_QUOTE;
+    l_unit = SafeSubstr(l_unit:2:%len(l_unit) - 2);
+  endif;
+  l_unit = %scanrpl(' ':'':l_unit);
+
+  select;
+    when l_unit = 'I1';
+      o_code = '2033';
+      return '(QSYS/' + C_DEV_DISKETTE + ' *DEVD *EXCL)';
+    when l_unit = 'T1';
+      o_code = '2036';
+      return '(QSYS/' + C_DEV_TAPE1 + ' *DEVD *EXCL)';
+    when l_unit = 'T2';
+      o_code = '2038';
+      return '(QSYS/' + C_DEV_TAPE2 + ' *DEVD *EXCL)';
+    when l_unit = 'T1,T2';
+      o_code = '2036';
+      return '(QSYS/' + C_DEV_TAPE1 + ' *DEVD *EXCL) (QSYS/' + C_DEV_TAPE2
+             + ' *DEVD *EXCL)';
+    when l_unit = 'TC';
+      o_code = '2042';
+      return '(QSYS/' + C_DEV_CARTRIDGE + ' *DEVD *EXCL)';
+  endsl;
+  o_code = '';
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// ALLOCATE UNIT-x[,AUTO-YES|NO][,CONTINUE-YES|NO][,WAIT-YES|NO]
+// (SC41-4731, chapter 5). The drive stays allocated to the job until the job
+// ends or DEALLOC; ALCOBJ with an exclusive lock held by the job does the
+// same. When the drive is in use ?CD? is 2033 (diskette), 2036 (tape 1), 2038
+// (tape 2) or 2042 (tape cartridge). WAIT-YES (the default) waits for the
+// class wait time, then continues as WAIT-NO; ALCOBJ waits 30 seconds when
+// WAIT is not given (not the class wait time).
+dcl-proc ConvertAllocate;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_itemCount int(10);
+  dcl-s l_index int(10);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
+  dcl-s l_unit varchar(60) inz('');
+  dcl-s l_wait varchar(3) inz('YES');
+  dcl-s l_auto varchar(3) inz('');
+  dcl-s l_continue varchar(3) inz('');
+  dcl-s l_objects varchar(120);
+  dcl-s l_code varchar(4);
+  dcl-s l_line varchar(200);
+  dcl-s l_reason varchar(200);
+
+  l_itemCount = SplitItems(i_operands:l_items);
+  for l_index = 1 to l_itemCount;
+    SplitKeyword(l_items(l_index):l_keyword:l_value);
+    l_value = ToUpper(l_value);
+    select;
+      when l_keyword = 'UNIT';
+        l_unit = l_value;
+      when l_keyword = 'WAIT' and (l_value = 'YES' or l_value = 'NO');
+        l_wait = l_value;
+      when l_keyword = 'AUTO' and (l_value = 'YES' or l_value = 'NO');
+        l_auto = l_value;
+      when l_keyword = 'CONTINUE' and (l_value = 'YES' or l_value = 'NO');
+        l_continue = l_value;
+      other;
+        ReviewLine(i_lineNo:i_text:'ALLOCATE operand not understood: '
+                   + l_items(l_index));
+        return;
+    endsl;
+  endfor;
+
+  l_objects = UnitObjects(l_unit:l_code);
+  if l_objects = '';
+    ReviewLine(i_lineNo:i_text
+               :'ALLOCATE needs UNIT-I1, T1, T2, ''T1,T2'' or TC');
+    return;
+  endif;
+  if l_continue <> '' and %scan('I1':ToUpper(l_unit)) = 0;
+    ReviewLine(i_lineNo:i_text
+               :'CONTINUE does not apply to tape (an error on the S/36 environment)');
+    return;
+  endif;
+
+  g_useCd = *on;
+  AddBody('CHGVAR VAR(&CD) VALUE(' + C_QUOTE + '0000' + C_QUOTE + ')');
+  l_line = 'ALCOBJ OBJ(' + l_objects + ')';
+  if l_wait = 'NO';
+    l_line += ' WAIT(0)';
+  endif;
+  AddBody(l_line);
+  AddBody('MONMSG MSGID(CPF1002) EXEC(CHGVAR VAR(&CD) VALUE(' + C_QUOTE + l_code
+          + C_QUOTE + '))');
+
+  l_reason = 'ALLOCATE as ALCOBJ of the device description (names are constants'
+           + ' in IAoclCvt, not tested); ?CD? is ' + l_code + ' when in use';
+  if l_wait = 'YES' or l_wait = '';
+    l_reason += '; WAIT-YES waits the ALCOBJ default of 30 seconds, not the class wait';
+  endif;
+  if l_auto = 'YES' and %scan('I1':ToUpper(l_unit)) = 0;
+    l_reason += '; AUTO-YES (next tape drive) is not converted';
+  endif;
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text:l_reason);
+end-proc;
+
+// ------------------------------------------------------------------
+// DEALLOC UNIT-x (SC41-4731, chapter 5): frees what ALLOCATE took.
+dcl-proc ConvertDealloc;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_itemCount int(10);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
+  dcl-s l_objects varchar(120);
+  dcl-s l_code varchar(4);
+
+  l_itemCount = SplitItems(i_operands:l_items);
+  if l_itemCount <> 1;
+    ReviewLine(i_lineNo:i_text:'DEALLOC needs UNIT-I1, T1, T2, ''T1,T2'' or TC');
+    return;
+  endif;
+  SplitKeyword(l_items(1):l_keyword:l_value);
+  if l_keyword <> 'UNIT';
+    ReviewLine(i_lineNo:i_text:'DEALLOC needs UNIT-I1, T1, T2, ''T1,T2'' or TC');
+    return;
+  endif;
+  l_objects = UnitObjects(l_value:l_code);
+  if l_objects = '';
+    ReviewLine(i_lineNo:i_text:'DEALLOC unit must be I1, T1, T2, ''T1,T2'' or TC');
+    return;
+  endif;
+
+  AddBody('DLCOBJ OBJ(' + l_objects + ')');
+  AddBody('MONMSG MSGID(CPF0000)');
+  RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+          :'DEALLOC as DLCOBJ of the device description (same names as ALLOCATE,'
+           + ' not tested)');
+end-proc;
+
+// ------------------------------------------------------------------
+// ATTR (SC41-4731, chapter 5). Only PRIORITY has a CL equivalent (CHGJOB
+// RUNPTY). CANCEL-YES, INQUIRY-YES, NEP-NO, MRTWAIT-YES, RELEASE-NO and
+// NOTIFY-NO are the normal behaviour and need nothing. The System Request menu
+// options, MRT settings, RELEASE-YES and NOTIFY-JOB are not converted (R).
+dcl-proc ConvertAttr;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_itemCount int(10);
+  dcl-s l_index int(10);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
+  dcl-s l_priority varchar(2) inz('');
+  dcl-s l_skipped varchar(300) inz('');
+  dcl-s l_isSkipped ind;
+
+  if g_pendLoad;
+    ReviewLine(i_lineNo:i_text:'ATTR cannot be placed between LOAD and RUN');
+    return;
+  endif;
+  l_itemCount = SplitItems(i_operands:l_items);
+  if l_itemCount = 0;
+    ReviewLine(i_lineNo:i_text:'ATTR without operands');
+    return;
+  endif;
+
+  for l_index = 1 to l_itemCount;
+    SplitKeyword(l_items(l_index):l_keyword:l_value);
+    l_value = ToUpper(l_value);
+    l_isSkipped = *off;
+    select;
+      when (l_keyword = 'CANCEL' or l_keyword = 'INQUIRY')
+           and (l_value = 'YES' or l_value = 'NO');
+        l_isSkipped = (l_value = 'NO');
+      when l_keyword = 'MRTMAX' and IsPlainNumber(l_value);
+        l_isSkipped = *on;
+      when l_keyword = 'NEP' and (l_value = 'YES' or l_value = 'NO');
+        l_isSkipped = (l_value = 'YES');
+      when l_keyword = 'MRTWAIT' and (l_value = 'YES' or l_value = 'NO');
+        l_isSkipped = (l_value = 'NO');
+      when l_keyword = 'RELEASE' and (l_value = 'YES' or l_value = 'NO');
+        l_isSkipped = (l_value = 'YES');
+      when l_keyword = 'NOTIFY' and (l_value = 'JOB' or l_value = 'NO');
+        l_isSkipped = (l_value = 'JOB');
+      when l_keyword = 'PRIORITY' and (l_value = 'HIGH' or l_value = 'YES');
+        l_priority = C_PTY_HIGH;
+      when l_keyword = 'PRIORITY' and l_value = 'MEDIUM';
+        l_priority = C_PTY_MEDIUM;
+      when l_keyword = 'PRIORITY' and l_value = 'LOW';
+        l_priority = C_PTY_LOW;
+      when l_keyword = 'PRIORITY' and l_value = 'NO';
+        l_isSkipped = *on;       // MEDIUM or LOW depending on the job type
+      other;
+        ReviewLine(i_lineNo:i_text:'ATTR operand not understood: '
+                   + l_items(l_index));
+        return;
+    endsl;
+    if l_isSkipped;
+      if %len(l_skipped) > 0;
+        l_skipped += ' ';
+      endif;
+      l_skipped += l_keyword + '-' + l_value;
+    endif;
+  endfor;
+
+  if l_priority <> '';
+    AddBody('CHGJOB RUNPTY(' + l_priority + ')');
+    AddBody('MONMSG MSGID(CPF0000)');
+  endif;
+  select;
+    when %len(l_skipped) > 0;
+      AddComment('OCL: ' + %trim(i_text));
+      RptItem(C_STS_REVIEW:i_lineNo:i_text
+              :'Not converted (no CL equivalent): ' + l_skipped);
+    when l_priority <> '';
+      RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+              :'PRIORITY as CHGJOB RUNPTY(' + l_priority + '); the run priorities'
+               + ' are constants in IAoclCvt, not tested');
+    other;
+      AddComment('OCL: ' + %trim(i_text) + ' (normal behaviour, nothing to do)');
+      RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+              :'All values are the normal behaviour: nothing written');
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+// SCRATCH LABEL-file,UNIT-F1 inside a $DELET step (SC41-4731, appendix A,
+// "$DELET Utility"). A disk file is deleted with DLTF. Not converted (R):
+// diskette (UNIT-I1), LABEL-ALL, a date, a location, a file group, libraries
+// and folders.
+dcl-proc ConvertScratch;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_text varchar(512) const;
+    i_operands varchar(512) const;
+  end-pi;
+
+  dcl-s l_items varchar(200) dim(C_MAXITEMS);
+  dcl-s l_itemCount int(10);
+  dcl-s l_index int(10);
+  dcl-s l_keyword varchar(60);
+  dcl-s l_value varchar(200);
+  dcl-s l_label varchar(60) inz('');
+  dcl-s l_unit varchar(10) inz('');
+  dcl-s l_isValid ind inz(*on);
+  dcl-s l_extra varchar(200) inz('');
+
+  l_itemCount = SplitItems(i_operands:l_items);
+  for l_index = 1 to l_itemCount;
+    SplitKeyword(l_items(l_index):l_keyword:l_value);
+    select;
+      when l_keyword = 'LABEL';
+        l_label = ConvertOperand(l_value:l_isValid);
+      when l_keyword = 'UNIT';
+        l_unit = ToUpper(l_value);
+      when (l_keyword = 'USERLIBS' or l_keyword = 'FOLDER')
+           and ToUpper(l_value) = 'NO';
+        // the normal behaviour
+      other;
+        l_extra += ' ' + l_keyword;
+    endsl;
+  endfor;
+
+  select;
+    when %len(l_extra) > 0;
+      ReviewLine(i_lineNo:i_text:'SCRATCH keywords not converted:' + l_extra);
+    when not l_isValid;
+      ReviewLine(i_lineNo:i_text
+                 :'SCRATCH LABEL uses an expression that is not converted');
+    when l_unit = 'I1';
+      ReviewLine(i_lineNo:i_text:'SCRATCH of a diskette file has no CL equivalent');
+    when l_unit <> 'F1';
+      ReviewLine(i_lineNo:i_text:'SCRATCH needs UNIT-F1 (disk) to be converted');
+    when ToUpper(l_label) = 'ALL' or not IsValidName(l_label:10);
+      ReviewLine(i_lineNo:i_text:'SCRATCH LABEL must be one file name (not ALL)');
+    other;
+      AddBody('DLTF FILE(' + l_label + ')');
+      AddBody('MONMSG MSGID(CPF2105)');
+      RptItem(C_STS_ASSUMPTION:i_lineNo:i_text
+              :'SCRATCH as DLTF; the file is looked for on the library list (the'
+               + ' S/36 current files library) and a missing file is ignored'
+               + ' (CPF2105): the reference does not say what S/36 does');
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc ProcessStatement;
   dcl-pi *n;
     i_lineNo int(10) const;
@@ -3833,6 +4174,17 @@ dcl-proc ProcessStatement;
       ConvertNohalt(i_lineNo:i_text:l_operands);
     when l_keyword = 'CANCEL';
       ConvertCancel(i_lineNo:i_text:l_operands);
+    when l_keyword = 'ALLOCATE';
+      ConvertAllocate(i_lineNo:i_text:l_operands);
+    when l_keyword = 'DEALLOC';
+      ConvertDealloc(i_lineNo:i_text:l_operands);
+    when l_keyword = 'ATTR';
+      ConvertAttr(i_lineNo:i_text:l_operands);
+    when l_keyword = 'SCRATCH';
+      ConvertScratch(i_lineNo:i_text:l_operands);
+    when l_keyword = 'REMOVE' and g_deletMode;
+      ReviewLine(i_lineNo:i_text
+                 :'REMOVE (libraries, folders, ALL) is not converted');
     when l_keyword = 'LIBRARY';
       ConvertLibrary(i_lineNo:i_text:l_operands);
     when l_keyword = 'SESSION';
@@ -3989,6 +4341,14 @@ dcl-proc ProcessLine;
     if CollectSortLine(i_lineNo:i_text);
       return;
     endif;
+  endif;
+
+  if g_deletMode and %len(l_trimmedLine) >= 2
+     and SafeSubstr(l_trimmedLine:1:2) = '//'
+     and ToUpper(%trim(SafeSubstrToEnd(l_trimmedLine:3))) = 'END';
+    g_deletMode = *off;               // ends the $DELET step
+    RptItem(C_STS_CONVERTED:i_lineNo:i_text:'');
+    return;
   endif;
 
   l_first2 = '';
@@ -4205,6 +4565,12 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endif;
+  if g_useCd;
+    if WriteCl('DCL VAR(&CD) TYPE(*CHAR) LEN(4) VALUE(' + C_QUOTE + '0000'
+               + C_QUOTE + ')':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
   if g_useDate;
     if WriteCl('DCL VAR(&DATE) TYPE(*CHAR) LEN(6)':o_msgId:o_msgData) <> 0;
       return 1;
@@ -4359,6 +4725,9 @@ dcl-proc OclConvert export;
   g_dataf1Count = 0;
   g_useFileSize = *off;
   g_usePause = *off;
+  g_useCd = *off;
+  g_isDelet = *off;
+  g_deletMode = *off;
   g_libMode = 0;
   g_sessionLib = '';
   g_user1Member = '';

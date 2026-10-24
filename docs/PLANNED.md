@@ -12,7 +12,7 @@ the same commit. Status values: Planned, In progress, Done.
 | OCL-03 | IAOCLTOCLE | `?F'...'?` file sizes; DATAF1- and ACTIVE- conditions | In progress (`?F'A,..'?`, DATAF1 and ACTIVE written, need a compile and test) |
 | OCL-09 | IAOCLTOCLE | Open items from OCL-03: `?F'S,..'?` written as initial records (field name PHRCDC to verify), DATAF1 date form (DATAF1 `'name,ALL'` is written, needs a compile and test) | In progress |
 | OCL-04 | IAOCLTOCLE | WAIT, PAUSE, NOHALT, CANCEL | In progress (written, needs a compile and test; `CANCEL PRT,...` for spool entries moved to OCL-10) |
-| OCL-05 | IAOCLTOCLE | ATTR, ALLOCATE, DEALLOC, SCRATCH | Planned |
+| OCL-05 | IAOCLTOCLE | ATTR, ALLOCATE, DEALLOC, SCRATCH | In progress (written, needs a compile and test; device names and priorities are untested constants) |
 | OCL-06 | IAOCLTOCLE | SESSION, MEMBER, LIBRARY, MRTPROC | In progress (LIBRARY, SESSION for APPC and MRTPROC calls written, need a compile and test; MEMBER is part of OCL-11; MRTPROC is a sample procedure name, not a statement) |
 | OCL-07 | IAOCLTOCLE | PROMPT, HELP, INCLUDE | Planned |
 | OCL-08 | IAOCLTOCLE | Explicit SRCCCSID for IFS input | Planned |
