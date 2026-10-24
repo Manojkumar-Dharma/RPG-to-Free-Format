@@ -24,8 +24,8 @@ the same commit. Status values: Planned, In progress, Done.
 | DSP-04 | IACNVDSPF | Confirm assumptions: CFnn(nn) command keys, INDARA and INVITE added, OVRDTA/OVRATR override keywords | Done (checked against the manuals, see `docs/DSPF-MAPPING.md`; open: `CFnn(nn)` response indicator, `CF` against `CA`, `PUTOVR` and `ERASEINP` behaviour need a compile or display test) |
 | DSP-05 | IACNVDSPF | Check the layout against a real QS36SRC DSPF36 member (needs a sample from the user) | Planned |
 | DSP-06 | IACNVDSPF | Subfile candidates: detect repeated continuous rows of the same D specifications and report them (status R, output unchanged); subfile DDS (`SFL`, `SFLCTL`) only once a real example shows how the program was changed | Planned (waiting for a DSPF36 member that was converted to a subfile, from the user) |
-| FREE-01 | IACNVFREE | RPG to fully free format, based on the S/36-compatible RPG II guide (SC09-1818) | Planned |
-| FREE-02 | IACNVFREE | Evaluate CVTRPGSRC as stage 1 | Planned |
+| FREE-01 | IACNVFREE | RPG to fully free format, based on the S/36-compatible RPG II guide (SC09-1818) | Planned (waiting for SC09-1818 in `docs/` and for the CVTRPGSRC result on real RPG36 members, see FREE-02; nothing of IACNVFREE exists yet) |
+| FREE-02 | IACNVFREE | Evaluate CVTRPGSRC as stage 1 | Planned (needs the IBM i: run CVTRPGSRC on two or three real RPG36 members and keep the output and messages) |
 
 ## Notes
 
