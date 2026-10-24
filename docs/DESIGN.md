@@ -14,7 +14,7 @@ Three converters, one program (and one command) each. Smallest first.
 | 2 | `IACNVDSPF` | `IAcnvDspf` | DSPF36 / DSPF38 to DSPF (DDS) |
 | 3 | `IACNVFREE` | `IAcnvFree` | RPG36 / RPG38 / RPG3 / RPG4 to fully free format (`**FREE`) |
 
-For `IAcnvFree`, the intended route is two stages: normalize the older dialects to fixed-format RPG IV, then convert fixed RPG IV to `**FREE`. IBM's `CVTRPGSRC` may cover stage 1 and must be evaluated first.
+For `IAcnvFree`, RPG36 is converted directly to `**FREE`: IBM's `CVTRPGSRC` does not convert RPG36 or RPT36 members (SC09-2507, Table 125), so there is no stage 1 for it. For RPG38 and RPG3 members `CVTRPGSRC` is supported and remains an option for a stage 1 (fixed RPG IV, then to `**FREE`); that is not planned yet. See [RPG-MAPPING.md](RPG-MAPPING.md).
 
 Later: a VS Code extension that drives the same commands (see section 10).
 
@@ -184,4 +184,4 @@ The IFS parameters are the integration point: an extension can upload the open f
 ## 11. Open items
 
 - Library name, to be chosen when the objects are first compiled.
-- Whether `CVTRPGSRC` is good enough to use as stage 1 of `IAcnvFree`.
+- `CVTRPGSRC` as stage 1 of `IAcnvFree`: answered for RPG36 (not supported); open only for RPG38 and RPG3.
