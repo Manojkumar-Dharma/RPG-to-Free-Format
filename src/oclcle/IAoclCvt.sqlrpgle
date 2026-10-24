@@ -3374,6 +3374,9 @@ end-proc;
 // the LIBRARY statement: put the original current library back (SESSION-NO)
 // or set the session library (SESSION-YES).
 dcl-proc AddCurLibExit;
+  dcl-pi *n;
+  end-pi;
+
   select;
     when g_libMode = 1;
       AddBody('CHGCURLIB CURLIB(&OLDCURLIB)');
