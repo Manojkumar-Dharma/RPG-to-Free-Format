@@ -1,6 +1,6 @@
 # RPG II to fully free-form RPG (IACNVFREE)
 
-Status: decisions and evidence for FREE-01 to FREE-06. No converter code yet.
+Status: decisions and evidence for FREE-01 to FREE-07. FREE-03 (control and file description specifications) is written and not compiled or tested yet; the other specifications are kept as comments.
 The source is System/36-compatible RPG II (member type RPG36); the target is
 `**FREE` RPGLE, written for the V7R3 base release.
 
@@ -67,7 +67,95 @@ Search the text files in `docs/ref/` for the heading.
 | Which release added a feature | same | `What's New in 7.3?`, `What's New in 7.4?` |
 | CVTRPGSRC and member types | `sc092507-ile-rpg-programmers-guide.txt` | `Table 125. Source Member Types and their Conversion Status` |
 
-## Mapping tables
+## Control specification (H) to `ctl-opt`
 
-To be written with the converter, one section per specification type, in the
-same form as `OCL-MAPPING.md` and `DSPF-MAPPING.md`.
+Source: SC09-1818 chapter 18. Target: `ctl-opt` keywords (SC09-2508). Only the first H specification is converted; a second one is kept as a comment and reported R. Columns that the guide says have no relevance on the AS/400 system (7-14 size entries, 10-12, 16-17, 22-25, 27-36, 38-40, 42, 44, 46-56, 58-74) are ignored.
+
+| Column | Entry | Result | Status |
+|---|---|---|---|
+| 15 | `1` (debug) | `debug(*dump)` | A: the `DEBUG` operation is a C specification item |
+| 18 | a currency symbol | `cursym('c')` | C. `0 * , & . - C R` are R |
+| 19-21 | date format `M` `D` `Y`, date edit, inverted print | `datedit(*MDY or *DMY or *YMD` + separator`)`. Blank format is `*DMY` when column 21 is `D`, `I` or `J`, else `*MDY`. A blank separator is `.` when the format is `Y` or blank and column 21 is `I` or `J`, else `/`; `&` means a blank separator. | C. The Reference says `DATEDIT` also sets the `UDATE` format, as columns 19-21 do. |
+| 21 | `I` or `J` | `decedit(',')` or `decedit('0,')` | C |
+| 26 | `S` (alternate collating sequence) | comment | R: needs its table |
+| 37 | `B` (inquiry) | comment | R: System/36 environment function. Blank and `I` are ignored |
+| 41 | `1` (1P forms position) | `formsalign(*yes)` | C |
+| 43 | `F` (file translation) | comment | R: needs its table |
+| 45 | `1` (nonprint characters) | none | A: no equivalent |
+| 57 | `1` (transparent literals) | comment | R: double-byte data |
+| 75-80 | program name | none | A: the name is set on the compile command |
+
+## File description specification (F) to `dcl-f`
+
+Source: SC09-1818 chapter 19. Target: SC09-2508 "Equivalent Free-form Coding for Fixed-Form File Entries" (Table 105) and Table 106 (`USAGE`). DISK and PRINTER files only; a file with continuation records is kept as comments whole, so no option is lost silently.
+
+| Entry | Result | Status |
+|---|---|---|
+| DISK, type `I`, designation `F` | `dcl-f NAME disk(len) usage(*input)` | C |
+| DISK, type `U`, designation `F` | `usage(*update:*delete)` | A: `*DELETE` is explicit in free-form (Table 106) |
+| DISK, type `O`, blank designation | `usage(*output)` | C |
+| File addition `A` (column 66) on `I` or `U` | `*input:*output` or `*update:*delete:*output` | same as above. `O` with `A` is R (not supported) |
+| Designation `C` (chained) or `D` (demand) | handled as full-procedural | A: use it only with `CHAIN` or `READ` |
+| Indexed (column 32 `I`) with address type `A` | `keyed(*char:keylen) keyloc(start)` | A: a zoned-decimal key is declared as a character key |
+| Indexed with address type `P`, or blank | comment | R: packed keys are not supported; a blank address type processes by arrival order, free-form `KEYED` reads in key order |
+| Record length (24-27) | the number in `disk(len)` | required |
+| Designation `P` or `S` | comment | R: the RPG cycle is not supported in free-form |
+| Designation `R` or `T`, organization `T`, address type `I` | comment | R: not supported in free-form |
+| Mode `L`, sequence checking (18), `EXTK` key | comment | R: not supported in free-form |
+| Mode `R` or designation `C` on an output file (direct load) | comment | R |
+| File condition `U1` to `U8` | `extind(*INU1)` ... | C |
+| End of file `E` (17) on a non-cycle file | ignored | A |
+| PRINTER, type `O` | `dcl-f NAME printer` with `oflind(*INOA)` for `OA` to `OG`, `OV` | A: declared externally described, the printer file comes from the O specifications (FREE-06). Column 39 `L` also A; `E` is R |
+| WORKSTN, SPECIAL, CONSOLE, KEYBORD, CRT, BSCA | comment | R: WORKSTN needs the display file and format I/O (later item) |
+| Continuation records (`K` in column 53: RECNO, SUBR exit, NUM, FMTS, INFSR) | the whole file as comments | R |
+
+## Other lines
+
+| Source | Result | Status |
+|---|---|---|
+| Blank line | blank line | - |
+| Comment (`*` in column 7) | `//` and the text of columns 8-80 | - (not reported) |
+| `/EJECT`, `/TITLE`, `/SPACE` | kept (valid in free-form) | C |
+| Other directives such as `/COPY` | comment | R |
+| E, L, I, C, O specifications | `// RPG II:` and the line | R (FREE-04 to FREE-06, arrays and tables) |
+| `**` record and the data after it | kept as is | R: arrays are not converted yet |
+
+The output always starts with a `**FREE` line.
+
+## Expected results for `samples/FREEHF.rpg36`
+
+The reasons are worded slightly differently in the report; the statements and statuses are what matters. Comment lines and blank lines are not listed.
+
+| Line | Source (from column 6) | Result | Status | Reason |
+|---|---|---|---|---|
+| 2 | `H        1  %D-I                   1                                 PAYRL1` | `ctl-opt debug(*dump) cursym('%') datedit(*DMY-) decedit(',') formsalign(*yes);` | A | column 15: DEBUG operation itself is a C specification item; program name PAYRL1 is set on the compile command |
+| 3 | `H        1` | `// RPG II: H        1` | R | more than one control specification (only the first is converted) |
+| 5 | `FCUSTMAS IF         80  6AI     1 DISK` | `dcl-f CUSTMAS disk(80) usage(*input) keyed(*char:6) keyloc(1);` | A | zoned-decimal key (column 31 A) declared as a character key |
+| 6 | `FORDERS  UF        120 10AI     1 DISK` | `dcl-f ORDERS disk(120) usage(*update:*delete) keyed(*char:10) keyloc(1);` | A | zoned-decimal key (column 31 A) declared as a character key; *DELETE added: fixed-form update files can delete records |
+| 7 | `FORDHIST O         200            DISK` | `dcl-f ORDHIST disk(200) usage(*output);` | C |  |
+| 8 | `FCHAINF  IC         64R           DISK` | `dcl-f CHAINF disk(64) usage(*input);` | A | chained file declared as a full-procedural file: use it only with CHAIN |
+| 9 | `FDEMAND1 IDE       100            DISK` | `dcl-f DEMAND1 disk(100) usage(*input);` | A | demand file declared as a full-procedural file: use it only with READ; end of file entry (column 17) ignored |
+| 10 | `FLIMITS  IF         80L 6AI     1 DISK` | `// RPG II: FLIMITS  IF         80L 6AI     1 DISK` | R | limits processing (column 28 L) is not supported in free-form |
+| 11 | `FNEWREC  IF         80            DISK                      A` | `dcl-f NEWREC disk(80) usage(*input:*output);` | C |  |
+| 12 | `FCOND1   IF         80            DISK                           U1` | `dcl-f COND1 disk(80) usage(*input) extind(*INU1);` | C |  |
+| 13 | `FREPORT1 O         132     OA     PRINTER` | `dcl-f REPORT1 printer oflind(*INOA);` | A | declared externally described: the printer file comes from the O specifications (FREE-06) |
+| 14 | `FREPORT2 O         132           LPRINTER` | `dcl-f REPORT2 printer;` | A | line counter specification is converted with the O specifications (FREE-06); declared externally described: the printer file comes from the O specifications (FREE-06) |
+| 15 | `FSALES   IP         80            DISK` | `// RPG II: FSALES   IP         80            DISK` | R | primary/secondary file (RPG cycle) is not supported in free-form |
+| 16 | `FCRTSCR  CP       1920            WORKSTN` | `// RPG II: FCRTSCR  CP       1920            WORKSTN` | R | device WORKSTN is not converted yet (WORKSTN needs the display file and format I/O) |
+| 17 | `FPACKKEY IF         80  6PI     1 DISK` | `// RPG II: FPACKKEY IF         80  6PI     1 DISK` | R | packed key (column 31 P) is not supported in free-form |
+| 18 | `FINDXCON IF         80  6 I     1 DISK` | `// RPG II: FINDXCON IF         80  6 I     1 DISK` | R | indexed file processed consecutively or by relative record number: free-form KEYED reads in key order |
+| 19 | `FSPEC1   IF         80            SPECIAL       SUBR01` | `// RPG II: FSPEC1   IF         80            SPECIAL       SUBR01` | R | device SPECIAL is not converted yet |
+| 20 | `FRECNOF  UF         80            DISK` | `// RPG II: FRECNOF  UF         80            DISK` | R | continuation records (RECNO, SUBR exit, NUM, FMTS, INFSR) are not converted |
+| 22 | ` /TITLE Customer update` | `/TITLE Customer update` | C |  |
+| 23 | ` /EJECT` | `/EJECT` | C |  |
+| 24 | ` /COPY QRPGSRC,MYCOPY` | `// RPG II:  /COPY QRPGSRC,MYCOPY` | R | directive /COPY is not converted |
+| 25 | `E                    TAB1` | `// RPG II: E                    TAB1` | R | E (extension) specification not converted yet |
+| 26 | `IORDERS      NS 01` | `// RPG II: IORDERS      NS 01` | R | I specification not converted yet (FREE-04) |
+| 27 | `C                     ADD  1         TOTAL` | `// RPG II: C                     ADD  1         TOTAL` | R | C specification not converted yet (FREE-05) |
+| 28 | `OREPORT1  D` | `// RPG II: OREPORT1  D` | R | O specification not converted yet (FREE-06) |
+| 29 | `mpile-time data` | `** compile-time data` | R | compile-time data kept as is; arrays not converted yet |
+| 30 | `3` | `ABC123` | - | compile-time data, kept |
+
+## More mapping tables
+
+To be written with the converter, one section per specification type (E, I, C, O), in the same form as `OCL-MAPPING.md` and `DSPF-MAPPING.md`.

@@ -86,6 +86,25 @@ A source with message fields (D column 56 = M) needs the message file they refer
 
 Without `MSGF` message fields are reported for review and kept as program output fields. Module IAdspCvt must be compiled before IAcnvDspf is bound: after this change `DspConvert` has two more parameters (message file and library), so compile both modules again and run CRTPGM and CRTCMD again.
 
+## 6. IACNVFREE (RPG36 to fully free-form RPGLE)
+
+Uses the same service program IAcnvSrv. Only RPG36 source is converted so far; other source types end with message IAC0103. Run `IACNVMSG` again after pulling this change (it adds IAC0103).
+
+```
+CRTSQLRPGI OBJ(MYLIB/IAfreeCvt) SRCSTMF('REPO/src/free/IAfreeCvt.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTSQLRPGI OBJ(MYLIB/IAcnvFree) SRCSTMF('REPO/src/free/IAcnvFree.sqlrpgle') COMMIT(*NONE) OBJTYPE(*MODULE) INCDIR('REPO/src/common') DBGVIEW(*SOURCE)
+CRTPGM PGM(MYLIB/IACNVFREE) MODULE(MYLIB/IAcnvFree MYLIB/IAfreeCvt) BNDSRVPGM(MYLIB/IAcnvSrv) ACTGRP(*NEW)
+CRTCMD CMD(MYLIB/IACNVFREE) PGM(MYLIB/IACNVFREE) SRCSTMF('REPO/src/free/IACNVFREE.cmd')
+```
+
+First test, with `samples/FREEHF.rpg36` copied into a source file (record length 112 or more) as type RPG36:
+
+```
+IACNVFREE SRC(MYLIB/QS36SRC FREEHF) SRCTYPE(RPG36) TGT(QRPGLESRC)
+```
+
+Expected result: the control and file description specifications become `ctl-opt` and `dcl-f` statements; everything else (E, I, C and O specifications, compile-time data) is kept as `// RPG II:` comments and reported R. The expected output for each line of the sample is in `docs/RPG-MAPPING.md`. The target is not meant to compile yet: it is only the declarations part.
+
 ## Grouped file and member parameters
 
 `SRC(lib/file member)` and `TGT(lib/file member)` replace the separate library, file and member keywords:

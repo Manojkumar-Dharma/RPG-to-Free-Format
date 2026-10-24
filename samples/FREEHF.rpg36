@@ -1,0 +1,30 @@
+      * RPG II sample: control and file description specifications (FREE-03)
+     H        1  %D-I                   1                                 PAYRL1
+     H        1
+      * indexed input, full-procedural, key 6 bytes from position 1
+     FCUSTMAS IF         80  6AI     1 DISK
+     FORDERS  UF        120 10AI     1 DISK
+     FORDHIST O         200            DISK
+     FCHAINF  IC         64R           DISK
+     FDEMAND1 IDE       100            DISK
+     FLIMITS  IF         80L 6AI     1 DISK
+     FNEWREC  IF         80            DISK                      A
+     FCOND1   IF         80            DISK                           U1
+     FREPORT1 O         132     OA     PRINTER
+     FREPORT2 O         132           LPRINTER
+     FSALES   IP         80            DISK
+     FCRTSCR  CP       1920            WORKSTN
+     FPACKKEY IF         80  6PI     1 DISK
+     FINDXCON IF         80  6 I     1 DISK
+     FSPEC1   IF         80            SPECIAL       SUBR01
+     FRECNOF  UF         80            DISK
+     F                                              KRECNO RRNFLD
+      /TITLE Customer update
+      /EJECT
+      /COPY QRPGSRC,MYCOPY
+     E                    TAB1
+     IORDERS      NS 01
+     C                     ADD  1         TOTAL
+     OREPORT1  D
+** compile-time data
+ABC123

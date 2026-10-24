@@ -6,7 +6,7 @@ Converters for legacy IBM i source, written in free-format RPGLE (`**FREE`).
 |---|---|
 | `IAOCLTOCLE` | OCL36 to CLLE |
 | `IACNVDSPF` | DSPF36 / DSPF38 to DSPF |
-| `IACNVFREE` | RPG36 / RPG38 / RPG3 / RPG4 to fully free format |
+| `IACNVFREE` | RPG36 to fully free format (H and F specifications so far; RPG38, RPG3 and RPG4 later) |
 
 Each converter reads from a source member or an IFS stream file and writes to either. Base release is IBM i V7R3, with support for later releases.
 
