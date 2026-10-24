@@ -24,19 +24,20 @@ the same commit. Status values: Planned, In progress, Done.
 | DSP-04 | IACNVDSPF | Confirm assumptions: CFnn(nn) command keys, INDARA and INVITE added, OVRDTA/OVRATR override keywords | Done (checked against the manuals, see `docs/DSPF-MAPPING.md`; open: `CFnn(nn)` response indicator, `CF` against `CA`, `PUTOVR` and `ERASEINP` behaviour need a compile or display test) |
 | DSP-05 | IACNVDSPF | Check the layout against a real QS36SRC DSPF36 member (needs a sample from the user) | Planned |
 | DSP-06 | IACNVDSPF | Subfile candidates: detect repeated continuous rows of the same D specifications and report them (status R, output unchanged); subfile DDS (`SFL`, `SFLCTL`) only once a real example shows how the program was changed | Planned (waiting for a DSPF36 member that was converted to a subfile, from the user) |
-| FREE-01 | IACNVFREE | RPG to fully free format, based on the S/36-compatible RPG II guide (SC09-1818). Umbrella for FREE-03 to FREE-07; decisions and evidence in `docs/RPG-MAPPING.md` | In progress (decisions made, no code yet) |
+| FREE-01 | IACNVFREE | RPG to fully free format, based on the S/36-compatible RPG II guide (SC09-1818). Umbrella for FREE-03 to FREE-08; decisions and evidence in `docs/RPG-MAPPING.md` | In progress (decisions made, no code yet) |
 | FREE-02 | IACNVFREE | Evaluate CVTRPGSRC as stage 1 | Done (answered from the manual: CVTRPGSRC does not convert RPG36 or RPT36, SC09-2507 Table 125; no stage 1 for RPG36) |
 | FREE-03 | IACNVFREE | Command, driver, report; H and F specifications to `ctl-opt` and `dcl-f` (E specifications moved to FREE-07) | In progress (written, needs a compile and test; `samples/FREEHF.rpg36`) |
-| FREE-04 | IACNVFREE | I specifications to D statements (rename or data structure, external or internal) | Planned |
-| FREE-05 | IACNVFREE | C specifications to free-form calculations, on JSON rule tables loaded into Db2 (`rules/`, `docs/RPG-MAPPING.md`); `TAG`, `GOTO`, `CABxx` reported R; file operations and MOVE wait for the I and E specifications | In progress (written, needs a compile and test; `samples/FREEC.rpg36`; `rules/IACNVRULES.sql` needs JSON_TABLE) |
+| FREE-04 | IACNVFREE | I specifications to D statements (data structure: file record layouts and `DS` lines) | In progress (written, needs a compile and test; `samples/FREEIN.rpg36`; record-identifying indicators, record codes and the cycle entries are R) |
+| FREE-05 | IACNVFREE | C specifications to free-form calculations, on JSON rule tables loaded into Db2 (`rules/`, `docs/RPG-MAPPING.md`); `TAG`, `GOTO`, `CABxx` reported R; file operations and MOVE wait for FREE-08 and the E specifications | In progress (written, needs a compile and test; `samples/FREEC.rpg36`; `rules/IACNVRULES.sql` needs JSON_TABLE) |
 | FREE-06 | IACNVFREE | O specifications to an externally described printer file (DDS) and `WRITE`/`EXCEPT` | Planned |
 | FREE-07 | IACNVFREE | E specifications (arrays and tables) to `dcl-s`/`dcl-ds`, compile-time data | Planned |
+| FREE-08 | IACNVFREE | File operations in the C specifications (`CHAIN`, `READ`, `READE`, `READP`, `SETLL`, `WRITE`, `UPDATE`, `DELETE`) and `MOVE`/`MOVEL`, on the `FILE_REC` data structures and field types from FREE-04 | Planned |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-07 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-08 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.

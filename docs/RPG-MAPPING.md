@@ -1,6 +1,6 @@
 # RPG II to fully free-form RPG (IACNVFREE)
 
-Status: decisions and evidence for FREE-01 to FREE-07. FREE-03 (control and file description specifications) and FREE-05 (calculation specifications, with the rule tables) are written and not compiled or tested yet; the other specifications are kept as comments.
+Status: decisions and evidence for FREE-01 to FREE-08. FREE-03 (control and file description specifications), FREE-04 (input specifications) and FREE-05 (calculation specifications, with the rule tables) are written and not compiled or tested yet; the other specifications are kept as comments.
 The source is System/36-compatible RPG II (member type RPG36); the target is
 `**FREE` RPGLE, written for the V7R3 base release.
 
@@ -109,6 +109,57 @@ Source: SC09-1818 chapter 19. Target: SC09-2508 "Equivalent Free-form Coding for
 | WORKSTN, SPECIAL, CONSOLE, KEYBORD, CRT, BSCA | comment | R: WORKSTN needs the display file and format I/O (later item) |
 | Continuation records (`K` in column 53: RECNO, SUBR exit, NUM, FMTS, INFSR) | the whole file as comments | R |
 
+## Input specification (I) to data structures
+
+Source: SC09-1818 chapter 23. Target: free-form `DCL-DS` and subfields (SC09-2508; `DCL-SUBF` is optional but written, `POS`, `LEN`, `BINDEC`, `*N`). Decision: an I specification becomes a data structure (RPG II has no externally described files, so the data structures are internal).
+
+An input block is a record line (a file name, or `DS` in columns 19-20) followed by its field lines. A field line has columns 7-42 blank and the field entries in columns 43-70: 43 packed or binary, 44-47 from, 48-51 to, 52 decimal positions, 53-58 name.
+
+| Source | Result | Status |
+|---|---|---|
+| File record line with no record identification codes, one record type, no indicator, and a file declared by a converted DISK input or update file description | `dcl-ds FILE_REC len(record length);` ... `end-ds;` | A: free-form `READ` and `CHAIN` of a program-described file name this data structure; the C specification converter (FREE-05) must use it |
+| `DS` line with a name, or without one | `dcl-ds NAME;` or `dcl-ds *n;` ... `end-ds;` | C |
+| Field, blank in column 43 and 52 | `dcl-subf NAME char(len) pos(from);` | C. Longer than 256 is R |
+| Field with decimal positions | `zoned(len:dec)` | C. Longer than 15 digits is R |
+| Field with `P` (packed) | `packed(2*bytes-1:dec)` | C. Longer than 8 bytes is R |
+| Field with `B` (binary) | `bindec(4:dec)` for 2 bytes, `bindec(9:dec)` for 4 bytes | C. Other lengths are R |
+| Numeric field with no decimal positions entry | comment | R |
+| Name not valid, a special word (`PAGE`, `PAGE1`-`PAGE7`, `UDATE`, `UDAY`, `UMONTH`, `UYEAR`), or already defined (the same field in two record types or files needs one definition) | comment inside the data structure | R |
+| Field ends past the record length | comment | R |
+| Control level (59-60), matching fields (61-62), field record relation (63-64), field indicators (65-70) | comment | R: the cycle and indicators are not supported in free-form |
+| Record identification codes (21-41), AND/OR lines, a second record type for a file | whole block as comments | R: more than one record type is not supported |
+| Record-identifying indicator (19-20), sequence checking (15-16 numeric), number/option entries (17-18) | whole block as comments | R: free-form I/O does not set the indicator or check the sequence |
+| Look-ahead (`**` in 19-20) | whole block as comments | R |
+| `DS` with option `U` (display station local data area), or a name already used | whole block as comments | R |
+| File not declared by a converted file description, PRINTER file, or output file | whole block as comments | R |
+| A block in which no field converts | whole block as comments | R |
+
+A field that cannot be converted is kept as a comment inside the data structure, so the rest of it still compiles; the field is reported R with its own reason.
+
+### Expected results for `samples/FREEIN.rpg36`
+
+The F specifications at the start of the sample set up the files; the blocks are listed with their results.
+
+| Line | Source (from column 6) | Result | Status | Reason or note |
+|---|---|---|---|---|
+| 12 | `ICUSTMAS AA`<br>`I                                        1   60CUSTNO`<br>`I                                        7  26 NAME`<br>`I                                    P  27  312BAL`<br>`I                                    B  32  330CNT`<br>`I                                    B  34  370BIGCNT` | `dcl-ds CUSTMAS_REC len(80);`<br>`  dcl-subf CUSTNO zoned(6:0) pos(1);`<br>`  dcl-subf NAME char(20) pos(7);`<br>`// packed (5 bytes), binary (2 and 4 bytes)`<br>`  dcl-subf BAL packed(9:2) pos(27);`<br>`  dcl-subf CNT bindec(4:0) pos(32);`<br>`  dcl-subf BIGCNT bindec(9:0) pos(34);`<br>`end-ds;` | A | record layout of file CUSTMAS declared as data structure CUSTMAS_REC: READ and CHAIN of the file must name it (FREE-05) |
+| 19 | `IORDERS  BC`<br>`I                                        1  10 ORDNO`<br>`I                                       11  160CUSTNO`<br>`I                                       17  20xQTY`<br>`I                                      130 140 TOOFAR`<br>`I                                       21  30 PAGE`<br>`I                                       31  40 LV    L1`<br>`I                                       41  50 ORDDAT` | `dcl-ds ORDERS_REC len(120);`<br>`  dcl-subf ORDNO char(10) pos(1);`<br>`// RPG II: I                                       11  160CUSTNO`<br>`// RPG II: I                                       17  20xQTY`<br>`// RPG II: I                                      130 140 TOOFAR`<br>`// RPG II: I                                       21  30 PAGE`<br>`// RPG II: I                                       31  40 LV    L1`<br>`  dcl-subf ORDDAT char(10) pos(41);`<br>`end-ds;` | A | record layout of file ORDERS declared as data structure ORDERS_REC: READ and CHAIN of the file must name it (FREE-05); line 21: field CUSTNO is already defined at line 13; line 22: decimal positions (column 52) are not valid; line 23: field ends past the record length 120; line 24: field name PAGE is a special word; line 25: control level, matching fields, field record relation or field indicators (columns 59-70) are not supported in free-form |
+| 27 | `IREPORT1 AA`<br>`I                                        1  10 PRT1` | `// RPG II: IREPORT1 AA`<br>`// RPG II: I                                        1  10 PRT1` | R | file REPORT1 is not a DISK input or update file; line 28: part of the record layout above that is not converted |
+| 29 | `ISALES   AA`<br>`I                                        1  10 SAL1` | `// RPG II: ISALES   AA`<br>`// RPG II: I                                        1  10 SAL1` | R | file SALES is not declared by a converted file description; line 30: part of the record layout above that is not converted |
+| 31 | `INEWF    AA  01`<br>`I                                        1  10 NEW1` | `// RPG II: INEWF    AA  01`<br>`// RPG II: I                                        1  10 NEW1` | R | record-identifying indicator 01 is not set by free-form I/O; line 32: part of the record layout above that is not converted |
+| 33 | `IMULTI   AA      1 C1`<br>`I                                        1  10 MUL1` | `// RPG II: IMULTI   AA      1 C1`<br>`// RPG II: I                                        1  10 MUL1` | R | record identification codes (more than one record type) are not supported in free-form; line 34: part of the record layout above that is not converted |
+| 35 | `IMULTI   AB      1 C2`<br>`I                                        1  10 MUL2` | `// RPG II: IMULTI   AB      1 C2`<br>`// RPG II: I                                        1  10 MUL2` | R | record identification codes (more than one record type) are not supported in free-form; line 36: part of the record layout above that is not converted |
+| 37 | `ILOOKF   AA`<br>`I                                        1  10 LOK1` | `dcl-ds LOOKF_REC len(80);`<br>`  dcl-subf LOK1 char(10) pos(1);`<br>`end-ds;` | A | record layout of file LOOKF declared as data structure LOOKF_REC: READ and CHAIN of the file must name it (FREE-05) |
+| 39 | `I        AA  **`<br>`I                                       11  14 NXTLOK` | `// RPG II: I        AA  **`<br>`// RPG II: I                                       11  14 NXTLOK` | R | look-ahead fields are not supported in free-form; line 40: part of the record layout above that is not converted |
+| 41 | `ISEQF    011`<br>`I                                        1  10 SEQ1` | `// RPG II: ISEQF    011`<br>`// RPG II: I                                        1  10 SEQ1` | R | sequence checking (columns 15-16) is not supported in free-form; line 42: part of the record layout above that is not converted |
+| 43 | `INOFILE  AA`<br>`I                                        1  10 NOF1` | `// RPG II: INOFILE  AA`<br>`// RPG II: I                                        1  10 NOF1` | R | file NOFILE is not declared by a converted file description; line 44: part of the record layout above that is not converted |
+| 45 | `ITWICE   AA`<br>`I                                        1  10 TWI1` | `dcl-ds TWICE_REC len(80);`<br>`  dcl-subf TWI1 char(10) pos(1);`<br>`end-ds;` | A | record layout of file TWICE declared as data structure TWICE_REC: READ and CHAIN of the file must name it (FREE-05) |
+| 47 | `ITWICE   AB`<br>`I                                       11  20 TWI2` | `// RPG II: ITWICE   AB`<br>`// RPG II: I                                       11  20 TWI2` | R | file TWICE already has a record layout (more than one record type); line 48: part of the record layout above that is not converted |
+| 50 | `IDTADS       DS`<br>`I                                        1   40YEAR`<br>`I                                        5   60MONTH`<br>`I                                        1   60YYMM` | `dcl-ds DTADS;`<br>`  dcl-subf YEAR zoned(4:0) pos(1);`<br>`  dcl-subf MONTH zoned(2:0) pos(5);`<br>`  dcl-subf YYMM zoned(6:0) pos(1);`<br>`end-ds;` | C |  |
+| 54 | `I            DS`<br>`I                                        1  10 WORK1`<br>`I                                       11  20 WORK2` | `dcl-ds *n;`<br>`  dcl-subf WORK1 char(10) pos(1);`<br>`  dcl-subf WORK2 char(10) pos(11);`<br>`end-ds;` | C |  |
+| 57 | `ILDAREA     UDS`<br>`I                                        1  50 LDA1` | `// RPG II: ILDAREA     UDS`<br>`// RPG II: I                                        1  50 LDA1` | R | data structure option U (display station local data area) is not converted; line 58: part of the record layout above that is not converted |
+| 59 | `IDUPDS       DS`<br>`I                                        1  10 ORDNO`<br>`I                                       41  44 ORPHAN` | `dcl-ds DUPDS;`<br>`// RPG II: I                                        1  10 ORDNO`<br>`  dcl-subf ORPHAN char(4) pos(41);`<br>`end-ds;` | C | line 60: field ORDNO is already defined at line 20 |
+
 ## Other lines
 
 | Source | Result | Status |
@@ -117,7 +168,8 @@ Source: SC09-1818 chapter 19. Target: SC09-2508 "Equivalent Free-form Coding for
 | Comment (`*` in column 7) | `//` and the text of columns 8-80 | - (not reported) |
 | `/EJECT`, `/TITLE`, `/SPACE` | kept (valid in free-form) | C |
 | Other directives such as `/COPY` | comment | R |
-| E, L, I, O specifications | `// RPG II:` and the line | R (FREE-04, FREE-06, FREE-07) |
+| E, L, O specifications | `// RPG II:` and the line | R (FREE-06, FREE-07) |
+| I specifications | see "Input specification (I) to data structures" | C, A or R |
 | C specifications | see "Calculation specifications (C)" | C, A or R |
 | `**` record and the data after it | kept as is | R: arrays are not converted yet |
 

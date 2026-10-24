@@ -3,10 +3,11 @@
 // free-form RPGLE (IACNVFREE).
 // FREE-03: control (H) and file description (F) specifications, comment
 // lines and the compiler directives /EJECT, /TITLE and /SPACE.
+// FREE-04: input (I) specifications, as data structures.
 // FREE-05: calculation (C) specifications, converted by module IAfreeCalc with
-// the rule tables read by IAfreeRul (rules/*.json). Everything else (E, L, I,
-// O specifications, compile-time data) is kept as a comment and reported R;
-// those are later items (FREE-04, FREE-06, FREE-07). The rules are in
+// the rule tables read by IAfreeRul (rules/*.json). Everything else (E, L, O
+// specifications, compile-time data) is kept as a comment and reported R;
+// those are later items (FREE-06, FREE-07). The rules are in
 // docs/RPG-MAPPING.md. Module of program IACNVFREE. Target release V7R3.
 
 ctl-opt nomain option(*srcstmt:*nodebugio);
@@ -17,6 +18,9 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 
 dcl-c C_MAXSRC 20000;
 dcl-c C_MAXOUT 40000;
+dcl-c C_MAXFILES 100;
+dcl-c C_MAXNAMES 3000;
+dcl-c C_MAXBLOCK 600;
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 dcl-c C_DIGITS '0123456789';
@@ -30,6 +34,21 @@ dcl-s g_outputLineNos int(10) dim(C_MAXOUT);
 dcl-s g_outputCount int(10);
 dcl-s g_overflow ind;
 dcl-s g_headerSeen ind;
+// Files declared by converted file descriptions, for the input specifications.
+dcl-s g_fileNames varchar(8) dim(C_MAXFILES);
+dcl-s g_fileLens int(10) dim(C_MAXFILES);
+dcl-s g_fileDevices char(1) dim(C_MAXFILES);
+dcl-s g_fileTypes char(1) dim(C_MAXFILES);
+dcl-s g_fileHasLayout ind dim(C_MAXFILES);
+dcl-s g_fileCount int(10);
+// Names defined so far (files, data structures, fields) and the line of each.
+dcl-s g_nameList varchar(12) dim(C_MAXNAMES);
+dcl-s g_nameLines int(10) dim(C_MAXNAMES);
+dcl-s g_nameCount int(10);
+// Lines of the data structure being built.
+dcl-s g_blockText varchar(200) dim(C_MAXBLOCK);
+dcl-s g_blockLineNos int(10) dim(C_MAXBLOCK);
+dcl-s g_blockCount int(10);
 
 // ------------------------------------------------------------------
 dcl-proc FreeConvert export;
@@ -50,6 +69,9 @@ dcl-proc FreeConvert export;
   g_outputCount = 0;
   g_overflow = *off;
   g_headerSeen = *off;
+  g_fileCount = 0;
+  g_nameCount = 0;
+  g_blockCount = 0;
 
   if %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) <> 'RPG36';
     o_msgId = 'IAC0103';
@@ -155,14 +177,14 @@ dcl-proc ConvertSource;
         ConvertHeader(l_lineNo:l_line);
       when l_form = 'F';
         l_extra = ConvertFile(l_index:l_lineNo:l_line);
+      when l_form = 'I';
+        l_extra = ConvertInput(l_index:l_lineNo:l_line);
       other;
         select;
           when l_form = 'E';
             l_reason = 'E (extension) specification not converted yet';
           when l_form = 'L';
             l_reason = 'L (line counter) specification not converted yet';
-          when l_form = 'I';
-            l_reason = 'I specification not converted yet (FREE-04)';
           when l_form = 'C';
             l_reason = '';
           when l_form = 'O';
@@ -602,6 +624,7 @@ dcl-proc ConvertFile;
   endif;
 
   AddOut(l_stmt:i_lineNo);
+  RegisterFile(l_name:ToInt(l_recLen):'D':l_type:i_lineNo);
   if l_note = '';
     RptItem(C_STS_CONVERTED:i_lineNo:%trimr(%subst(i_line:6:69)):'');
   else;
@@ -668,6 +691,7 @@ dcl-proc ConvertPrinterFile;
   AppendText(l_note:'declared externally described: the printer file comes from the O '
              + 'specifications (FREE-06)');
   AddOut(l_stmt:i_lineNo);
+  RegisterFile(i_name:0:'P':i_type:i_lineNo);
   RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
 end-proc;
 
@@ -770,7 +794,18 @@ dcl-proc IsFileName;
     i_text varchar(20) const;
   end-pi;
 
-  if %len(i_text) = 0 or %len(i_text) > 8;
+  return IsRpgName(i_text:8);
+end-proc;
+
+// ------------------------------------------------------------------
+// RPG II name: a letter, then letters and digits, at most i_max characters.
+dcl-proc IsRpgName;
+  dcl-pi *n ind;
+    i_text varchar(20) const;
+    i_max int(10) const;
+  end-pi;
+
+  if %len(i_text) = 0 or %len(i_text) > i_max;
     return *off;
   endif;
   return %check(C_UPPER:%subst(i_text:1:1)) = 0
@@ -865,4 +900,498 @@ dcl-proc OutInsertAfter export;
   g_outputCount += 1;
   g_outputLines(i_index + 1) = i_text;
   g_outputLineNos(i_index + 1) = g_outputLineNos(i_index);
+end-proc;
+
+// ------------------------------------------------------------------
+// I: input specifications (RPG II guide, chapter 23) to data structures.
+// A block is a record line (a file name or DS) followed by its field lines.
+//   - File record layout, one record type and no cycle entries:
+//       dcl-ds FILE_REC len(record length); dcl-subf ... pos(from); end-ds;
+//     Free-form READ and CHAIN of a program-described file name this data
+//     structure (done with the C specifications, FREE-05).
+//   - DS line: dcl-ds NAME; (or *n when it has no name) with its subfields.
+// Everything driven by the cycle is reported R and kept as comments: record
+// identification codes, record-identifying indicators, AND/OR lines, sequence
+// checking, look-ahead fields, control levels, matching fields, field record
+// relations and field indicators. Returns the number of lines after the first
+// one that belong to the block.
+dcl-proc ConvertInput;
+  dcl-pi *n int(10);
+    i_index int(10) const;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_up char(100);
+  dcl-s l_nextUp char(100);
+  dcl-s l_last int(10);
+  dcl-s l_next int(10);
+  dcl-s l_k int(10);
+  dcl-s l_multi ind inz(*off);
+  dcl-s l_kind char(1);
+  dcl-s l_name varchar(8);
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_file int(10) inz(0);
+  dcl-s l_recLen int(10) inz(0);
+  dcl-s l_dsName varchar(12) inz('');
+  dcl-s l_head varchar(100);
+  dcl-s l_note varchar(190) inz('');
+  dcl-s l_fields int(10) inz(0);
+  dcl-s l_stmt varchar(200);
+  dcl-s l_fieldReason varchar(190);
+  dcl-s l_status char(1);
+
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+
+  // A field or AND/OR line with no record line before it.
+  if IsInputField(l_up);
+    ReviewSpec(i_lineNo:i_line:'Field line without a record or data structure line');
+    return 0;
+  endif;
+  if IsInputContinuation(l_up);
+    ReviewSpec(i_lineNo:i_line:'AND/OR line without a record line');
+    return 0;
+  endif;
+
+  // The block ends before the next record line. Comment and blank lines
+  // belong to it only when more field lines follow.
+  l_last = i_index;
+  l_next = i_index + 1;
+  dow l_next <= g_sourceCount;
+    l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_next));
+    if IsInputField(l_nextUp);
+      l_last = l_next;
+    elseif IsInputContinuation(l_nextUp);
+      l_multi = *on;
+      l_last = l_next;
+    elseif not IsCommentOrBlank(l_nextUp);
+      leave;
+    endif;
+    l_next += 1;
+  enddo;
+
+  l_name = %trim(%subst(l_up:7:8));
+  select;
+    when %subst(l_up:19:2) = 'DS';
+      l_kind = 'D';
+    when %subst(l_up:19:2) = '**';
+      l_kind = 'L';
+    other;
+      l_kind = 'F';
+  endsl;
+
+  // ---- the record line ----
+  select;
+    when l_multi;
+      l_reason = 'More than one record type (AND/OR lines) is not supported in '
+                 + 'free-form';
+    when l_kind = 'L';
+      l_reason = 'Look-ahead fields are not supported in free-form';
+    when %trim(%subst(l_up:21:21)) <> '';
+      l_reason = 'Record identification codes (more than one record type) are not '
+                 + 'supported in free-form';
+    when %subst(l_up:42:1) <> ' ' or %trim(%subst(l_up:43:28)) <> '';
+      l_reason = 'Field entries on the record line are not valid';
+    when l_last - i_index + 2 > C_MAXBLOCK;
+      l_reason = 'The record layout has more than ' + %char(C_MAXBLOCK) + ' lines';
+    when l_kind = 'D';
+      if %trim(%subst(l_up:15:3)) <> '';
+        l_reason = 'Sequence entries on a data structure line are not valid';
+      elseif %subst(l_up:18:1) <> ' ';
+        l_reason = 'Data structure option ' + %subst(l_up:18:1)
+                   + ' (display station local data area) is not converted';
+      elseif l_name <> '' and not IsRpgName(l_name:6);
+        l_reason = 'Data structure name is not valid';
+      elseif l_name <> '' and FindName(l_name) > 0;
+        l_reason = 'Data structure name ' + l_name + ' is already used at line '
+                   + %char(FindName(l_name));
+      endif;
+    other;
+      if %subst(l_up:15:2) <> '  ' and %check(C_UPPER:%subst(l_up:15:2)) > 0;
+        l_reason = 'Sequence checking (columns 15-16) is not supported in free-form';
+      elseif %trim(%subst(l_up:17:2)) <> '';
+        l_reason = 'Number or option entries (columns 17-18) are not valid without '
+                   + 'sequence checking';
+      elseif %trim(%subst(l_up:19:2)) <> '';
+        l_reason = 'Record-identifying indicator ' + %trim(%subst(l_up:19:2))
+                   + ' is not set by free-form I/O';
+      else;
+        l_file = FindFile(l_name);
+        if l_file = 0;
+          l_reason = 'File ' + l_name
+                     + ' is not declared by a converted file description';
+        elseif g_fileDevices(l_file) <> 'D';
+          l_reason = 'File ' + l_name + ' is not a DISK input or update file';
+        elseif g_fileTypes(l_file) <> 'I' and g_fileTypes(l_file) <> 'U';
+          l_reason = 'File ' + l_name + ' is not a DISK input or update file';
+        elseif g_fileHasLayout(l_file);
+          l_reason = 'File ' + l_name + ' already has a record layout (more than '
+                     + 'one record type)';
+        else;
+          l_recLen = g_fileLens(l_file);
+        endif;
+      endif;
+  endsl;
+
+  if l_reason <> '';
+    ReviewBlock(i_index:l_last:l_reason);
+    return l_last - i_index;
+  endif;
+
+  // ---- the data structure ----
+  g_blockCount = 0;
+  if l_kind = 'F';
+    l_dsName = l_name + '_REC';
+    l_head = 'dcl-ds ' + l_dsName + ' len(' + %trim(%char(l_recLen)) + ');';
+    l_note = 'record layout of file ' + l_name + ' declared as data structure '
+             + l_dsName + ': READ and CHAIN of the file must name it (FREE-05)';
+  elseif l_name = '';
+    l_head = 'dcl-ds *n;';
+  else;
+    l_head = 'dcl-ds ' + l_name + ';';
+  endif;
+  BlockAdd(l_head:i_lineNo);
+
+  for l_k = i_index + 1 to l_last;
+    l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
+    if IsCommentOrBlank(l_nextUp);
+      if %subst(l_nextUp:7:1) = '*';
+        BlockAdd('//' + %trimr(%subst(g_sourceLines(l_k):8:73)):g_sourceLineNos(l_k));
+      else;
+        BlockAdd('':g_sourceLineNos(l_k));
+      endif;
+    elseif ConvertInputField(g_sourceLines(l_k):l_recLen:l_stmt:l_fieldReason);
+      DefineName(%trim(%subst(l_nextUp:53:6)):g_sourceLineNos(l_k));
+      l_fields += 1;
+      BlockAdd(l_stmt:g_sourceLineNos(l_k));
+      RptItem(C_STS_CONVERTED:g_sourceLineNos(l_k)
+              :%trimr(%subst(g_sourceLines(l_k):6:69)):'');
+    else;
+      BlockAdd('// RPG II: ' + %trimr(%subst(g_sourceLines(l_k):6:69))
+               :g_sourceLineNos(l_k));
+      RptItem(C_STS_REVIEW:g_sourceLineNos(l_k)
+              :%trimr(%subst(g_sourceLines(l_k):6:69)):l_fieldReason);
+    endif;
+  endfor;
+
+  // No subfield could be converted: the whole block stays as comments. The
+  // field lines were reported with their own reasons.
+  if l_fields = 0;
+    for l_k = i_index to l_last;
+      l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
+      if IsCommentOrBlank(l_nextUp);
+        if %subst(l_nextUp:7:1) = '*';
+          AddOut('//' + %trimr(%subst(g_sourceLines(l_k):8:73)):g_sourceLineNos(l_k));
+        else;
+          AddOut('':g_sourceLineNos(l_k));
+        endif;
+      else;
+        AddOut('// RPG II: ' + %trimr(%subst(g_sourceLines(l_k):6:69))
+               :g_sourceLineNos(l_k));
+      endif;
+    endfor;
+    RptItem(C_STS_REVIEW:i_lineNo:%trimr(%subst(i_line:6:69))
+            :'No subfield could be converted');
+    return l_last - i_index;
+  endif;
+
+  BlockAdd('end-ds;':g_sourceLineNos(l_last));
+  for l_k = 1 to g_blockCount;
+    AddOut(g_blockText(l_k):g_blockLineNos(l_k));
+  endfor;
+
+  if l_kind = 'F';
+    g_fileHasLayout(l_file) = *on;
+    DefineName(l_dsName:i_lineNo);
+  elseif l_name <> '';
+    DefineName(l_name:i_lineNo);
+  endif;
+
+  if l_note = '';
+    l_status = C_STS_CONVERTED;
+  else;
+    l_status = C_STS_ASSUMPTION;
+  endif;
+  RptItem(l_status:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
+  return l_last - i_index;
+end-proc;
+
+// ------------------------------------------------------------------
+// One field line of an input block: name, location, type. o_stmt is the
+// subfield statement, or o_reason says why the line cannot be converted.
+// Columns: 43 packed or binary, 44-47 from, 48-51 to, 52 decimal positions,
+// 53-58 field name, 59-70 control level, matching, relation, indicators.
+dcl-proc ConvertInputField;
+  dcl-pi *n ind;
+    i_line char(100) const;
+    i_recLen int(10) const;
+    o_stmt varchar(200);
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_up char(100);
+  dcl-s l_packBin char(1);
+  dcl-s l_dec char(1);
+  dcl-s l_from int(10);
+  dcl-s l_to int(10);
+  dcl-s l_len int(10);
+  dcl-s l_digits int(10);
+  dcl-s l_name varchar(6);
+  dcl-s l_type varchar(30);
+
+  o_stmt = '';
+  o_reason = '';
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  l_packBin = %subst(l_up:43:1);
+  l_dec = %subst(l_up:52:1);
+  l_from = ToInt(%trim(%subst(l_up:44:4)));
+  l_to = ToInt(%trim(%subst(l_up:48:4)));
+  l_name = %trim(%subst(l_up:53:6));
+  l_len = l_to - l_from + 1;
+
+  select;
+    when l_packBin <> ' ' and l_packBin <> 'P' and l_packBin <> 'B';
+      o_reason = 'Packed or binary entry (column 43) must be blank, P or B';
+    when l_from < 1 or l_to < l_from;
+      o_reason = 'Field location (columns 44-51) is not valid';
+    when l_dec <> ' ' and %check(C_DIGITS:l_dec) > 0;
+      o_reason = 'Decimal positions (column 52) are not valid';
+    when not IsRpgName(l_name:6);
+      o_reason = 'Field name (columns 53-58) is not valid';
+    when IsReservedName(l_name);
+      o_reason = 'Field name ' + l_name + ' is a special word';
+    when FindName(l_name) > 0;
+      o_reason = 'Field ' + l_name + ' is already defined at line '
+                 + %char(FindName(l_name));
+    when %trim(%subst(l_up:59:12)) <> '';
+      o_reason = 'Control level, matching fields, field record relation or field '
+                 + 'indicators are not supported in free-form';
+    when i_recLen > 0 and l_to > i_recLen;
+      o_reason = 'Field ends past the record length ' + %char(i_recLen);
+  endsl;
+  if o_reason <> '';
+    return *off;
+  endif;
+
+  select;
+    when l_packBin = ' ' and l_dec = ' ';
+      if l_len > 256;
+        o_reason = 'An alphanumeric field is longer than 256 characters';
+      else;
+        l_type = 'char(' + %trim(%char(l_len)) + ')';
+      endif;
+    when l_dec = ' ';
+      o_reason = 'A numeric field needs decimal positions (column 52)';
+    when l_packBin = ' ';
+      if l_len > 15;
+        o_reason = 'A zoned field is longer than 15 digits';
+      elseif ToInt(%trim(l_dec)) > l_len;
+        o_reason = 'Decimal positions are more than the length';
+      else;
+        l_type = 'zoned(' + %trim(%char(l_len)) + ':' + l_dec + ')';
+      endif;
+    when l_packBin = 'P';
+      l_digits = 2 * l_len - 1;
+      if l_len > 8;
+        o_reason = 'A packed field is longer than 8 bytes';
+      elseif ToInt(%trim(l_dec)) > l_digits;
+        o_reason = 'Decimal positions are more than the length';
+      else;
+        l_type = 'packed(' + %trim(%char(l_digits)) + ':' + l_dec + ')';
+      endif;
+    other;
+      if l_len = 2;
+        l_digits = 4;
+      else;
+        l_digits = 9;
+      endif;
+      if l_len <> 2 and l_len <> 4;
+        o_reason = 'A binary field must be 2 or 4 bytes long';
+      elseif ToInt(%trim(l_dec)) > l_digits;
+        o_reason = 'Decimal positions are more than the length';
+      else;
+        l_type = 'bindec(' + %trim(%char(l_digits)) + ':' + l_dec + ')';
+      endif;
+  endsl;
+  if o_reason <> '';
+    return *off;
+  endif;
+
+  o_stmt = '  dcl-subf ' + l_name + ' ' + l_type + ' pos('
+           + %trim(%char(l_from)) + ');';
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// Keeps a whole input block as comments and reports it R: the first line with
+// the reason, the other lines as part of it. Comment and blank lines stay.
+dcl-proc ReviewBlock;
+  dcl-pi *n;
+    i_first int(10) const;
+    i_last int(10) const;
+    i_reason varchar(190) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_line char(100);
+  dcl-s l_up char(100);
+
+  for l_k = i_first to i_last;
+    l_line = g_sourceLines(l_k);
+    l_up = %xlate(C_LOWER:C_UPPER:l_line);
+    if IsCommentOrBlank(l_up);
+      if %subst(l_up:7:1) = '*';
+        AddOut('//' + %trimr(%subst(l_line:8:73)):g_sourceLineNos(l_k));
+      else;
+        AddOut('':g_sourceLineNos(l_k));
+      endif;
+    elseif l_k = i_first;
+      ReviewSpec(g_sourceLineNos(l_k):l_line:i_reason);
+    else;
+      ReviewSpec(g_sourceLineNos(l_k):l_line
+                 :'Part of the record layout above that is not converted');
+    endif;
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+// A field line: form type I, columns 7-42 blank, something in columns 43-70.
+dcl-proc IsInputField;
+  dcl-pi *n ind;
+    i_up char(100) const;
+  end-pi;
+
+  if %subst(i_up:6:1) <> 'I';
+    return *off;
+  endif;
+  if %subst(i_up:7:36) <> *blanks;
+    return *off;
+  endif;
+  return %trim(%subst(i_up:43:28)) <> '';
+end-proc;
+
+// ------------------------------------------------------------------
+// An AND or OR line: form type I, columns 7-13 blank, AND or OR from column 14.
+dcl-proc IsInputContinuation;
+  dcl-pi *n ind;
+    i_up char(100) const;
+  end-pi;
+
+  if %subst(i_up:6:1) <> 'I';
+    return *off;
+  endif;
+  if %subst(i_up:7:7) <> *blanks;
+    return *off;
+  endif;
+  return %subst(i_up:14:2) = 'OR' or %subst(i_up:14:3) = 'AND';
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc IsCommentOrBlank;
+  dcl-pi *n ind;
+    i_up char(100) const;
+  end-pi;
+
+  return %subst(i_up:7:1) = '*' or %trim(%subst(i_up:6:75)) = '';
+end-proc;
+
+// ------------------------------------------------------------------
+// Words that cannot be used as input field names: page numbering and the
+// program date fields.
+dcl-proc IsReservedName;
+  dcl-pi *n ind;
+    i_text varchar(20) const;
+  end-pi;
+
+  return %scan('|' + i_text + '|'
+               :'|PAGE|PAGE1|PAGE2|PAGE3|PAGE4|PAGE5|PAGE6|PAGE7|UDATE|UDAY|UMONTH'
+               + '|UYEAR|') > 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// Files declared by converted file descriptions.
+dcl-proc RegisterFile;
+  dcl-pi *n;
+    i_name varchar(8) const;
+    i_recLen int(10) const;
+    i_device char(1) const;
+    i_type char(1) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  if g_fileCount >= C_MAXFILES;
+    return;
+  endif;
+  g_fileCount += 1;
+  g_fileNames(g_fileCount) = i_name;
+  g_fileLens(g_fileCount) = i_recLen;
+  g_fileDevices(g_fileCount) = i_device;
+  g_fileTypes(g_fileCount) = i_type;
+  g_fileHasLayout(g_fileCount) = *off;
+  DefineName(i_name:i_lineNo);
+end-proc;
+
+// ------------------------------------------------------------------
+// The number of the file in the table, or 0.
+dcl-proc FindFile;
+  dcl-pi *n int(10);
+    i_name varchar(8) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+
+  for l_i = 1 to g_fileCount;
+    if g_fileNames(l_i) = i_name;
+      return l_i;
+    endif;
+  endfor;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// The line where a name was defined, or 0 when it is not defined.
+dcl-proc FindName;
+  dcl-pi *n int(10);
+    i_name varchar(12) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+
+  for l_i = 1 to g_nameCount;
+    if g_nameList(l_i) = i_name;
+      return g_nameLines(l_i);
+    endif;
+  endfor;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc DefineName;
+  dcl-pi *n;
+    i_name varchar(12) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  if g_nameCount >= C_MAXNAMES;
+    return;
+  endif;
+  g_nameCount += 1;
+  g_nameList(g_nameCount) = i_name;
+  g_nameLines(g_nameCount) = i_lineNo;
+end-proc;
+
+// ------------------------------------------------------------------
+// Adds a line to the data structure being built.
+dcl-proc BlockAdd;
+  dcl-pi *n;
+    i_text varchar(200) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  if g_blockCount >= C_MAXBLOCK;
+    return;
+  endif;
+  g_blockCount += 1;
+  g_blockText(g_blockCount) = i_text;
+  g_blockLineNos(g_blockCount) = i_lineNo;
 end-proc;

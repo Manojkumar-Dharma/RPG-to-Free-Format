@@ -1,0 +1,61 @@
+      * RPG II sample: input specifications (FREE-04)
+     FCUSTMAS IF         80  6AI     1 DISK
+     FORDERS  UC        120            DISK
+     FREPORT1 O         132            PRINTER
+     FSALES   IP         80            DISK
+     FNEWF    IF         60            DISK
+     FMULTI   IF         80            DISK
+     FLOOKF   IF         80            DISK
+     FSEQF    IF         80            DISK
+     FTWICE   IF         80            DISK
+      * single record type, no identification codes
+     ICUSTMAS AA
+     I                                        1   60CUSTNO
+     I                                        7  26 NAME
+      * packed (5 bytes), binary (2 and 4 bytes)
+     I                                    P  27  312BAL
+     I                                    B  32  330CNT
+     I                                    B  34  370BIGCNT
+     IORDERS  BC
+     I                                        1  10 ORDNO
+     I                                       11  160CUSTNO
+     I                                       17  20xQTY
+     I                                      130 140 TOOFAR
+     I                                       21  30 PAGE
+     I                                       31  40 LV    L1
+     I                                       41  50 ORDDAT
+     IREPORT1 AA
+     I                                        1  10 PRT1
+     ISALES   AA
+     I                                        1  10 SAL1
+     INEWF    AA  01
+     I                                        1  10 NEW1
+     IMULTI   AA      1 C1
+     I                                        1  10 MUL1
+     IMULTI   AB      1 C2
+     I                                        1  10 MUL2
+     ILOOKF   AA
+     I                                        1  10 LOK1
+     I        AA  **
+     I                                       11  14 NXTLOK
+     ISEQF    011
+     I                                        1  10 SEQ1
+     INOFILE  AA
+     I                                        1  10 NOF1
+     ITWICE   AA
+     I                                        1  10 TWI1
+     ITWICE   AB
+     I                                       11  20 TWI2
+      * data structures
+     IDTADS       DS
+     I                                        1   40YEAR
+     I                                        5   60MONTH
+     I                                        1   60YYMM
+     I            DS
+     I                                        1  10 WORK1
+     I                                       11  20 WORK2
+     ILDAREA     UDS
+     I                                        1  50 LDA1
+     IDUPDS       DS
+     I                                        1  10 ORDNO
+     I                                       41  44 ORPHAN
