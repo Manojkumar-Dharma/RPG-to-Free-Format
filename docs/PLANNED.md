@@ -29,7 +29,7 @@ the same commit. Status values: Planned, In progress, Done.
 | FREE-03 | IACNVFREE | Command, driver, report; H and F specifications to `ctl-opt` and `dcl-f` (E specifications moved to FREE-07) | In progress (written, needs a compile and test; `samples/FREEHF.rpg36`) |
 | FREE-04 | IACNVFREE | I specifications to D statements (data structure: file record layouts and `DS` lines) | In progress (written, needs a compile and test; `samples/FREEIN.rpg36`; record-identifying indicators, record codes and the cycle entries are R) |
 | FREE-05 | IACNVFREE | C specifications to free-form calculations, on JSON rule tables loaded into Db2 (`rules/`, `docs/RPG-MAPPING.md`); `TAG`, `GOTO`, `CABxx` reported R; file operations and MOVE wait for FREE-08 and the E specifications | In progress (written, needs a compile and test; `samples/FREEC.rpg36`; `rules/IACNVRULES.sql` needs JSON_TABLE) |
-| FREE-09 | IACNVFREE | RPG III (`RPG38`, `RPG`): dialect column on `IACNVOPC`, column map `IACNVLAY`, F (external files, `UC`), I (`inz`), structured operations (`SELEC`, `WHxx`, `ANDxx`, `ORxx`, `ENDyy`, `ITER`, `LEAVE`), `CLEAR`, `RESET`; string operations, `CABxx` and file operations reported R | In progress (written, needs a compile and test; `samples/FREE3.rpg38`) |
+| FREE-09 | IACNVFREE | RPG III (`RPG38`, `RPG`): dialect column on `IACNVOPC`, column map `IACNVLAY`, F (external files, `UC`), I (`inz`), structured operations (`SELEC`, `WHxx`, `ANDxx`, `ORxx`, `ENDyy`, `ITER`, `LEAVE`), `CLEAR`, `RESET`; string operations, `CABxx` and file operations reported R | In progress (written, needs a compile and test; `samples/FREE3.rpg38`; `SQLRPG` accepted, its embedded SQL reported R) |
 | FREE-10 | IACNVFREE | RPG IV fixed form (`RPGLE`, `SQLRPGLE`): H, F, D, I, C, O, P specifications read through `IACNVLAY`; extended factor 2 and the free-form syntax lines of SC09-2508 as templates | Planned (7.3 manuals are in `docs/ref`) |
 | FREE-06 | IACNVFREE | O specifications to an externally described printer file (DDS) and `WRITE`/`EXCEPT` | Planned |
 | FREE-07 | IACNVFREE | E specifications (arrays and tables) to `dcl-s`/`dcl-ds`, compile-time data | Planned |
@@ -43,3 +43,36 @@ the same commit. Status values: Planned, In progress, Done.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.
+
+## Notes for parallel sessions (IACNVFREE dialects, 2026-10-25)
+
+- Source types for IACNVFREE: `RPG36` (RPG II, dialect 2), `RPG38`, `RPG` and
+  `SQLRPG` (RPG III, dialect 3), `RPGLE` and `SQLRPGLE` (RPG IV fixed, dialect 4,
+  not converted yet: FREE-10). `RPG3` and `RPG4` are not types. No `CVTRPGSRC`
+  stage 1 for any of them: RPG III is converted directly.
+- The dialect is chosen in `IAfreeCvt` (`g_dialect`) and given to `RulLoad`. Rule
+  rows have a `dialects` value in `rules/opcodes.json` (`2`, `3`, `23`, `4`);
+  column positions come from `rules/layouts.json` (`IACNVLAY`) through
+  `RulLayout`. New C-spec code must read fields with `Fld(line:'NAME')` in
+  `IAfreeCalc`, never by fixed column. H, F, I, E, L and O are still read by
+  fixed columns in `IAfreeCvt`; moving them onto `IACNVLAY` is part of FREE-10.
+- After changing a JSON file in `rules/`, re-run `rules/IACNVRULES.sql`.
+- Comments in the converted source use `RulDialectLabel()` (`// RPG III: ...`).
+- Open decisions and gaps: `SQLRPG` embedded SQL (`C/EXEC SQL`, `C+`,
+  `C/END-EXEC`) is reported R, to be converted to `exec sql ...;`; string
+  operations (`CAT`, `SCAN`, `SUBST`, `CHECK`, `CHEKR`, `XLATE`) are reported R
+  (decision pending: temporary field for the no-`P` case, or wait for real
+  sources); file operations, `KLIST`/`KFLD` and `OPEN`/`CLOSE` wait for FREE-08;
+  RPG III I specifications of externally described files (renames) are
+  reported R.
+- Hot spots for merge conflicts: `IAfreeCalc.sqlrpgle` (`CalcLine`, dispatch in
+  `CalcLine`, `ConvertEnd`), `IAfreeCvt.sqlrpgle` (`ConvertFile`, `ConvertInput`),
+  `rules/opcodes.json`, `docs/RPG-MAPPING.md` (sections "RPG III" and "Rule
+  tables"). Pull and rebase before editing them.
+- Waiting on the user: compile and test spools for `FREEC.rpg36` (RPG36) and
+  `FREE3.rpg38` (RPG38); the JSON_TABLE level on V7R3; real RPG II, RPG III
+  and RPG IV source members.
+- Reference text copies are in `docs/ref/` (index in `docs/ref/README.md`):
+  SC09-1818 (RPG II), SC09-1817 and SC09-1816 (RPG III), SC09-2508 and
+  SC09-2507 for IBM i 7.3 (RPG IV).
+
