@@ -1,7 +1,7 @@
 # RPG II to fully free-form RPG (IACNVFREE)
 
 Status: decisions and evidence for FREE-01 to FREE-08. FREE-03 (control and file description specifications), FREE-04 (input specifications) and FREE-05 (calculation specifications, with the rule tables) are written and not compiled or tested yet; the other specifications are kept as comments.
-The source is System/36-compatible RPG II (member type RPG36); the target is
+The source is System/36-compatible RPG II (member type RPG36), or RPG III (RPG38, RPG; section "RPG III" below); the target is
 `**FREE` RPGLE, written for the V7R3 base release.
 
 ## Decisions
@@ -258,6 +258,62 @@ Source: SC09-1818 chapter 24 (columns) and chapter 27 (operations). Written for 
 A line that is not converted is kept as `// RPG II: ...`. When it opens a group (IFxx, DO, DOWxx, DOUxx, CASxx) a placeholder group is opened, so that the END of it is reported R too and the converted groups stay in balance. Everything inside such a group is still converted: read the report before using the result.
 
 Fields that are defined by I, E or O specifications or by other lines are not declared (FREE-04, FREE-07); the result will not compile until those are converted. `samples/FREEC.rpg36` has one line for each rule above; the expected result of each line is what this table says (written from the design, not from a run).
+
+## RPG III (RPG38 and RPG) to free form
+
+Source types `RPG38` (System/38 RPG III and the System/38 environment) and `RPG`
+(RPG/400, OPM) are converted straight to `**FREE`: no `CVTRPGSRC` stage. The
+dialect is chosen from the source type (`RPG36` is dialect 2, `RPG38` and `RPG`
+are dialect 3) and selects the rows of `IACNVOPC` and `IACNVLAY`. Sources:
+SC09-1817 (RPG/400 Reference), SC09-1816 (User's Guide, appendix E on the
+System/38 environment).
+
+| Specification | RPG II (S/36) | RPG III | What the converter does |
+|---|---|---|---|
+| H | Columns 15, 18-21, 26, 37, 41, 43, 45, 57, 75-80 | Same, without 37 (inquiry) and 45; column 21 `D` is decimal notation | Same code as RPG II |
+| F | Designation `C`, `D` (chained, demand) | Designation `F` only for input and update; `C`, `D` are not valid | `F` becomes a full procedural file |
+| F | Column 19 blank or `F` | Column 19 `F` or `E` (externally described) | `E`: `dcl-f NAME usage(...)` without a record length; `K` in column 31 adds `keyed` |
+| F | Columns 71-72: `U1` to `U8` | Also `UC` (programmer controls the first open) | `UC` becomes `usropn` |
+| I | Record layout, data structure, subfields | Same columns for program-described files; data structure option `I` (column 18) | `I` becomes `inz`; `S` and `U` are reported R; the I specifications of an externally described file (renames) are reported R |
+| C | Columns 7-59 | Same columns; column 53 can also be `N` and `P` | Read through `IACNVLAY`; `N` and `P` are reported R (only half adjust is converted) |
+| C | `SET`, `KEY`, `EXIT`, `RLABL` | `KLIST`, `KFLD`, `FREE`, ... | Rows have a `dialects` value, so an operation code is only found in its own dialect |
+
+New operation codes converted for RPG III:
+
+| Operation | Becomes | Notes |
+|---|---|---|
+| `SELEC`, `WHxx`, `OTHER`, `ENDSL` | `select;`, `when a op b;`, `other;`, `endsl;` | `WHxx` and `OTHER` only directly inside a converted `SELEC`; `END` also closes it |
+| `ANDxx`, `ORxx` | The condition of the `IFxx`, `DOWxx`, `DOUxx` or `WHxx` header before is extended with `and` or `or` | `AND` binds tighter than `OR`, as in RPG. When an `ANDxx` or `ORxx` line cannot be converted, the header is rewritten to a condition that is never true (always true for `DOU`) and reported R, so no half condition stays in the source |
+| `ENDIF`, `ENDDO`, `ENDCS`, `ENDSL` | The same as `END`, checked against the open group | A mismatch is reported R and the group stays open |
+| `ITER`, `LEAVE` | `iter;`, `leave;` | Only inside a converted `DO`, `DOWxx` or `DOUxx`; with conditioning indicators they are wrapped in an `if` |
+| `CLEAR`, `RESET` | `clear F2;`, `reset F2;` | `*NOKEY` in factor 1 is reported R |
+
+Reported R, with the reason in `IACNVOPC`: `CABxx` (no `GOTO` or `TAG` in
+free-form), `CAT`, `CHECK`, `CHEKR`, `SCAN`, `SUBST`, `XLATE` (colon operands and
+the rule that the result keeps its tail without `P`), `TESTN`, `DSPLY`, `DUMP`,
+all file and data area operations (`OPEN`, `CLOSE`, `WRITE`, `UPDAT`, `DELET`,
+`SETGT`, `EXFMT`, `FEOD`, `UNLCK`, `READC`, `REDPE`, `COMIT`, `ROLBK`, `IN`, `OUT`,
+`OCUR`, `KLIST`, `KFLD`), which wait for FREE-08. E, L and O specifications are
+reported R as for RPG II.
+
+`samples/FREE3.rpg38` has one line for each rule above. Expected result, written
+from the design and not from a run:
+
+| Line | Expected |
+|---|---|
+| `H` | Converted (no `ctl-opt` keyword) |
+| `FCUSTMAS IF E K DISK` | `dcl-f CUSTMAS usage(*input) keyed;`, converted |
+| `FORDERS UF F 80 DISK` | `dcl-f ORDERS disk(80) usage(*update:*delete);` assumption (`*DELETE` added) |
+| `FLATE IF E DISK UC` | `dcl-f LATE usage(*input) usropn;` assumption (`OPEN` waits for FREE-08) |
+| `IWORK DS` with option `I` | `dcl-ds WORK inz;` with `dcl-subf CODE char(10) pos(1);` and `dcl-subf RATE packed(9:2) pos(11);` |
+| `SELEC` / `WHEQ` / `WHEQ`+`ANDGT` / `OTHER` / `ENDSL` | `select;`, `when CODE = 'A';`, `when CODE = 'B' and RATE > 5;`, `other;`, `endsl;` |
+| `IFEQ` + `ANDGT` + `OREQ` | `if CODE = 'X' and RATE > 1 or RATE = 0;` |
+| `IFEQ` + `ANDGT` with indicator 99 | `if *off; // ANDxx/ORxx not converted`, the `ANDGT` line R, the body and `ENDIF` converted |
+| `DO` then `ENDIF` then `ENDDO` | `ENDIF` reported R (mismatch), `ENDDO` closes the loop |
+| `DOWLT`, `ITER` (ind 01), `LEAVE` (ind 02) | `dow CNT < 9;`, `if *IN01; iter; endif;`, `if *IN02; leave; endif;`, `enddo;` |
+| `LEAVE` outside a loop | Reported R |
+| `CLEAR WORK`, `RESET FLAG` | `clear WORK;`, `reset FLAG;` |
+| `CABEQ`, `CAT`, `OPEN`, extra `ENDSL` | Reported R |
 
 ## More mapping tables
 

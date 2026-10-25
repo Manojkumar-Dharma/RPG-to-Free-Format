@@ -34,6 +34,7 @@ dcl-s g_outputLineNos int(10) dim(C_MAXOUT);
 dcl-s g_outputCount int(10);
 dcl-s g_overflow ind;
 dcl-s g_headerSeen ind;
+dcl-s g_dialect char(1) inz('2');
 // Files declared by converted file descriptions, for the input specifications.
 dcl-s g_fileNames varchar(8) dim(C_MAXFILES);
 dcl-s g_fileLens int(10) dim(C_MAXFILES);
@@ -73,11 +74,18 @@ dcl-proc FreeConvert export;
   g_nameCount = 0;
   g_blockCount = 0;
 
-  if %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) <> 'RPG36';
-    o_msgId = 'IAC0103';
-    o_msgData = %trim(i_source.type) + ' (only RPG36 is converted so far)';
-    return 1;
-  endif;
+  select;
+    when %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPG36';
+      g_dialect = '2';
+    when %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPG38'
+         or %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPG';
+      g_dialect = '3';
+    other;
+      o_msgId = 'IAC0103';
+      o_msgData = %trim(i_source.type)
+                  + ' (only RPG36, RPG38 and RPG are converted so far)';
+      return 1;
+  endsl;
 
   if OpenSource(i_source:o_msgId:o_msgData) <> 0;
     return 1;
@@ -102,7 +110,7 @@ dcl-proc FreeConvert export;
     return 1;
   endif;
 
-  if RulLoad('2':o_msgId:o_msgData) <> 0;
+  if RulLoad(g_dialect:o_msgId:o_msgData) <> 0;
     return 1;
   endif;
 
@@ -368,7 +376,7 @@ dcl-proc ConvertHeader;
     AddOut('ctl-opt ' + l_kw + ';':i_lineNo);
   endif;
   if l_review <> '';
-    AddOut('// RPG II: ' + %trimr(%subst(i_line:6:69)):i_lineNo);
+    AddOut('// ' + RulDialectLabel() + ': ' + %trimr(%subst(i_line:6:69)):i_lineNo);
     l_status = C_STS_REVIEW;
   elseif l_note <> '';
     l_status = C_STS_ASSUMPTION;
@@ -471,7 +479,7 @@ dcl-proc ConvertFile;
         ReviewSpec(i_lineNo:i_line:'Device ' + l_device + ' is not converted yet');
       endif;
       return 0;
-    when l_fmt <> ' ' and l_fmt <> 'F';
+    when l_fmt <> ' ' and l_fmt <> 'F' and not (g_dialect = '3' and l_fmt = 'E');
       ReviewSpec(i_lineNo:i_line
                  :'Record format (column 19) ' + l_fmt + ' is not converted');
       return 0;
@@ -479,12 +487,22 @@ dcl-proc ConvertFile;
       ReviewSpec(i_lineNo:i_line
                  :'Sequence checking (column 18) is not supported in free-form');
       return 0;
-    when l_cond <> '' and not IsExternalIndicator(l_cond);
+    when l_cond <> '' and not IsExternalIndicator(l_cond)
+         and not (g_dialect = '3' and l_cond = 'UC');
       ReviewSpec(i_lineNo:i_line:'File condition (columns 71-72) ' + l_cond
-                 + ' must be U1 to U8');
+                 + ' must be U1 to U8 (or UC in RPG III)');
       return 0;
-    when ToInt(l_recLen) < 1;
+    when ToInt(l_recLen) < 1 and l_fmt <> 'E';
       ReviewSpec(i_lineNo:i_line:'Record length (columns 24-27) is missing');
+      return 0;
+    when g_dialect = '3' and l_fmt = 'E' and (l_recLen <> '' or l_keyLen <> ''
+         or l_org <> ' ' or l_keyStart <> '' or (l_addr <> ' ' and l_addr <> 'K'));
+      ReviewSpec(i_lineNo:i_line:'Record length, key length, organization and key '
+                 + 'start must be blank for an externally described file');
+      return 0;
+    when g_dialect = '3' and (l_desig = 'C' or l_desig = 'D');
+      ReviewSpec(i_lineNo:i_line:'File designation (column 16) ' + l_desig
+                 + ' is not valid in RPG III');
       return 0;
   endsl;
 
@@ -551,11 +569,16 @@ dcl-proc ConvertFile;
       return 0;
     when (l_type = 'I' or l_type = 'U') and l_desig = ' ';
       ReviewSpec(i_lineNo:i_line
-                 :'An input or update file needs a designation (F, C or D)');
+                 :'An input or update file needs a designation (F, C or D; F in '
+                  + 'RPG III)');
       return 0;
   endsl;
 
-  l_stmt = 'dcl-f ' + l_name + ' disk(' + %trim(%char(ToInt(l_recLen))) + ')';
+  if l_fmt = 'E';
+    l_stmt = 'dcl-f ' + l_name;
+  else;
+    l_stmt = 'dcl-f ' + l_name + ' disk(' + %trim(%char(ToInt(l_recLen))) + ')';
+  endif;
 
   select;
     when l_type = 'I' and l_add = 'A';
@@ -598,12 +621,18 @@ dcl-proc ConvertFile;
     l_stmt += ' keyed(*char:' + %trim(%char(ToInt(l_keyLen))) + ') keyloc('
               + %trim(%char(ToInt(l_keyStart))) + ')';
     AppendText(l_note:'zoned-decimal key (column 31 A) declared as a character key');
+  elseif l_fmt = 'E' and l_addr = 'K';
+    l_stmt += ' keyed';
   elseif l_keyLen <> '' or l_keyStart <> '' or l_addr <> ' ';
     ReviewSpec(i_lineNo:i_line:'Key entries given for a file that is not indexed');
     return 0;
   endif;
 
-  if l_cond <> '';
+  if l_cond = 'UC';
+    l_stmt += ' usropn';
+    AppendText(l_note:'UC: the file is not opened at start; OPEN and CLOSE are '
+               + 'converted with the file operations (FREE-08)');
+  elseif l_cond <> '';
     l_stmt += ' extind(*IN' + l_cond + ')';
   endif;
   l_stmt += ';';
@@ -624,7 +653,11 @@ dcl-proc ConvertFile;
   endif;
 
   AddOut(l_stmt:i_lineNo);
-  RegisterFile(l_name:ToInt(l_recLen):'D':l_type:i_lineNo);
+  if l_fmt = 'E';
+    RegisterFile(l_name:0:'X':l_type:i_lineNo);
+  else;
+    RegisterFile(l_name:ToInt(l_recLen):'D':l_type:i_lineNo);
+  endif;
   if l_note = '';
     RptItem(C_STS_CONVERTED:i_lineNo:%trimr(%subst(i_line:6:69)):'');
   else;
@@ -679,7 +712,9 @@ dcl-proc ConvertPrinterFile;
   if i_ovf <> '';
     l_stmt += ' oflind(*IN' + i_ovf + ')';
   endif;
-  if i_cond <> '';
+  if i_cond = 'UC';
+    l_stmt += ' usropn';
+  elseif i_cond <> '';
     l_stmt += ' extind(*IN' + i_cond + ')';
   endif;
   l_stmt += ';';
@@ -730,7 +765,7 @@ dcl-proc ReviewSpec export;
     i_reason varchar(190) const;
   end-pi;
 
-  AddOut('// RPG II: ' + %trimr(%subst(i_line:6:69)):i_lineNo);
+  AddOut('// ' + RulDialectLabel() + ': ' + %trimr(%subst(i_line:6:69)):i_lineNo);
   RptItem(C_STS_REVIEW:i_lineNo:%trimr(%subst(i_line:6:69)):i_reason);
 end-proc;
 
@@ -997,9 +1032,11 @@ dcl-proc ConvertInput;
     when l_kind = 'D';
       if %trim(%subst(l_up:15:3)) <> '';
         l_reason = 'Sequence entries on a data structure line are not valid';
-      elseif %subst(l_up:18:1) <> ' ';
+      elseif %subst(l_up:18:1) <> ' '
+             and not (g_dialect = '3' and %subst(l_up:18:1) = 'I');
         l_reason = 'Data structure option ' + %subst(l_up:18:1)
-                   + ' (display station local data area) is not converted';
+                   + ' (local data area, program status or data area) is not '
+                   + 'converted';
       elseif l_name <> '' and not IsRpgName(l_name:6);
         l_reason = 'Data structure name is not valid';
       elseif l_name <> '' and FindName(l_name) > 0;
@@ -1020,6 +1057,10 @@ dcl-proc ConvertInput;
         if l_file = 0;
           l_reason = 'File ' + l_name
                      + ' is not declared by a converted file description';
+        elseif g_fileDevices(l_file) = 'X';
+          l_reason = 'File ' + l_name + ' is externally described: field renames '
+                     + 'and the record identifying entries of external files are '
+                     + 'not converted yet';
         elseif g_fileDevices(l_file) <> 'D';
           l_reason = 'File ' + l_name + ' is not a DISK input or update file';
         elseif g_fileTypes(l_file) <> 'I' and g_fileTypes(l_file) <> 'U';
@@ -1050,6 +1091,9 @@ dcl-proc ConvertInput;
   else;
     l_head = 'dcl-ds ' + l_name + ';';
   endif;
+  if l_kind = 'D' and %subst(l_up:18:1) = 'I';
+    l_head = %subst(l_head:1:%len(l_head) - 1) + ' inz;';
+  endif;
   BlockAdd(l_head:i_lineNo);
 
   for l_k = i_index + 1 to l_last;
@@ -1067,7 +1111,7 @@ dcl-proc ConvertInput;
       RptItem(C_STS_CONVERTED:g_sourceLineNos(l_k)
               :%trimr(%subst(g_sourceLines(l_k):6:69)):'');
     else;
-      BlockAdd('// RPG II: ' + %trimr(%subst(g_sourceLines(l_k):6:69))
+      BlockAdd('// ' + RulDialectLabel() + ': ' + %trimr(%subst(g_sourceLines(l_k):6:69))
                :g_sourceLineNos(l_k));
       RptItem(C_STS_REVIEW:g_sourceLineNos(l_k)
               :%trimr(%subst(g_sourceLines(l_k):6:69)):l_fieldReason);
@@ -1086,7 +1130,7 @@ dcl-proc ConvertInput;
           AddOut('':g_sourceLineNos(l_k));
         endif;
       else;
-        AddOut('// RPG II: ' + %trimr(%subst(g_sourceLines(l_k):6:69))
+        AddOut('// ' + RulDialectLabel() + ': ' + %trimr(%subst(g_sourceLines(l_k):6:69))
                :g_sourceLineNos(l_k));
       endif;
     endfor;

@@ -68,6 +68,12 @@ dcl-s g_inSub ind;
 dcl-s g_cycleNoted ind;
 dcl-s g_lastLineNo int(10);
 
+// The last converted IFxx, DOWxx, DOUxx or WHxx header: ANDxx and ORxx lines
+// that follow extend its condition. g_hdrIndex is 0 when there is none.
+dcl-s g_hdrIndex int(10);
+dcl-s g_hdrKeyword varchar(4);
+dcl-s g_hdrLine varchar(200);
+
 // Lines of conditioning indicators waiting for their operation.
 dcl-s g_condTerms varchar(300) dim(C_MAXGROUP);
 dcl-s g_condCount int(10);
@@ -94,6 +100,7 @@ dcl-proc CalcStart export;
   g_inSub = *off;
   g_cycleNoted = *off;
   g_lastLineNo = 0;
+  g_hdrIndex = 0;
   g_condCount = 0;
   g_condLineCount = 0;
   g_condBad = '';
@@ -371,6 +378,43 @@ dcl-proc LineTerms;
 end-proc;
 
 // ------------------------------------------------------------------
+// Remembers the header just written so that ANDxx and ORxx can extend it.
+dcl-proc SetHeader;
+  dcl-pi *n;
+    i_keyword varchar(4) const;
+    i_text varchar(200) const;
+  end-pi;
+
+  g_hdrIndex = OutCount();
+  g_hdrKeyword = i_keyword;
+  g_hdrLine = i_text;
+end-proc;
+
+// ------------------------------------------------------------------
+// An ANDxx or ORxx line that cannot be converted must not leave the header it
+// belongs to with half of its condition: the header gets a condition that is
+// never true (always true for DOU, which runs its body once), and the line is
+// reported R.
+dcl-proc SafeHeader;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_condition varchar(5);
+
+  if g_hdrIndex = 0;
+    return;
+  endif;
+  if g_hdrKeyword = 'dou';
+    l_condition = '*on';
+  else;
+    l_condition = '*off';
+  endif;
+  OutSet(g_hdrIndex:%subst(g_hdrLine:1:%scan(g_hdrKeyword:g_hdrLine) - 1)
+         + g_hdrKeyword + ' ' + l_condition + '; // ANDxx/ORxx not converted');
+  g_hdrIndex = 0;
+end-proc;
+
+// ------------------------------------------------------------------
 // Keeps a line as a comment, reports it R and, when asked, opens a group that
 // stands for an IF, DO, DOW, DOU or CAS that was not converted so that its END
 // matches.
@@ -384,14 +428,30 @@ dcl-proc ReviewHere;
 
   dcl-s l_index int(10);
   dcl-s l_reason varchar(190);
+  dcl-s l_op varchar(5);
+
+  // An ANDxx or ORxx line that fails leaves its header safe.
+  if g_hdrIndex > 0;
+    l_op = Up(%trim(Fld(i_line:'OPERATION')));
+    if %len(l_op) = 5 and %subst(l_op:1:3) = 'AND'
+       and RulComparison(%subst(l_op:4:2)) <> '';
+      SafeHeader();
+    elseif %len(l_op) = 4 and %subst(l_op:1:2) = 'OR'
+       and RulComparison(%subst(l_op:3:2)) <> '';
+      SafeHeader();
+    else;
+      g_hdrIndex = 0;
+    endif;
+  endif;
 
   l_reason = i_reason;
   for l_index = 1 to g_condLineCount;
-    Emit('// RPG II: ' + SpecText(g_condLines(l_index)):g_condLineNos(l_index));
+    Emit('// ' + RulDialectLabel() + ': ' + SpecText(g_condLines(l_index))
+         :g_condLineNos(l_index));
     RptItem(C_STS_REVIEW:g_condLineNos(l_index):SpecText(g_condLines(l_index))
             :'Indicator line of an operation that is not converted');
   endfor;
-  Emit('// RPG II: ' + SpecText(i_line):i_lineNo);
+  Emit('// ' + RulDialectLabel() + ': ' + SpecText(i_line):i_lineNo);
   RptItem(C_STS_REVIEW:i_lineNo:SpecText(i_line):l_reason);
   g_condCount = 0;
   g_condLineCount = 0;
@@ -853,7 +913,8 @@ dcl-proc CalcLine export;
     return;
   endif;
   l_isStructure = (l_rule.kind = 'IF' or l_rule.kind = 'DO' or l_rule.kind = 'DOW'
-                   or l_rule.kind = 'DOU' or l_rule.kind = 'CASE');
+                   or l_rule.kind = 'DOU' or l_rule.kind = 'CASE'
+                   or l_rule.kind = 'SELEC');
   if l_rule.status = 'R';
     ReviewHere(i_line:i_lineNo:%trim(l_rule.reason):l_isStructure);
     return;
@@ -901,9 +962,22 @@ dcl-proc CalcLine export;
     return;
   endif;
 
+  if l_rule.kind <> 'ANDOR';
+    g_hdrIndex = 0;
+  endif;
   select;
     when l_rule.kind = 'IF';
       ConvertIf(l_c:l_rule:l_xx);
+    when l_rule.kind = 'ANDOR';
+      ConvertAndOr(l_c:l_rule:l_xx);
+    when l_rule.kind = 'WHEN';
+      ConvertWhen(l_c:l_rule:l_xx);
+    when l_rule.kind = 'SELEC';
+      ConvertSelec(l_c:l_rule);
+    when l_rule.kind = 'OTHER';
+      ConvertOther(l_c:l_rule);
+    when l_rule.kind = 'LOOPCTL';
+      ConvertLoopControl(l_c:l_rule);
     when l_rule.kind = 'DOW' or l_rule.kind = 'DOU';
       ConvertDoWhile(l_c:l_rule:l_xx);
     when l_rule.kind = 'DO';
@@ -939,8 +1013,8 @@ dcl-proc IsGroupOpener;
 
   dcl-s l_op varchar(5);
 
-  l_op = %trim(%subst(i_up:28:5));
-  return l_op = 'DO' or l_op = 'CAS'
+  l_op = %trim(Fld(i_up:'OPERATION'));
+  return l_op = 'DO' or l_op = 'CAS' or l_op = 'SELEC'
          or (%len(l_op) >= 3 and %subst(l_op:1:2) = 'IF')
          or (%len(l_op) >= 4 and %subst(l_op:1:3) = 'DOW')
          or (%len(l_op) >= 4 and %subst(l_op:1:3) = 'DOU')
@@ -1031,6 +1105,7 @@ dcl-proc ConvertIf;
   endif;
   if i_c.cond = '';
     Emit('if ' + l_compare + ';':i_c.lineNo);
+    SetHeader('if':IndentText() + 'if ' + l_compare);
     if not Push('IF ':1:0:'');
       ReviewHere(i_c.line:i_c.lineNo:'Groups are nested too deep');
       return;
@@ -1039,6 +1114,7 @@ dcl-proc ConvertIf;
     Emit('if ' + i_c.cond + ';':i_c.lineNo);
     g_depth += 1;
     Emit('if ' + l_compare + ';':i_c.lineNo);
+    SetHeader('if':IndentText() + 'if ' + l_compare);
     g_depth -= 1;
     if not Push('IFW':2:0:'');
       ReviewHere(i_c.line:i_c.lineNo:'Groups are nested too deep');
@@ -1071,6 +1147,8 @@ dcl-proc ConvertDoWhile;
   endif;
   Emit(Low(i_rule.opcode) + ' ' + i_c.factor1C + ' ' + l_operator + ' '
        + i_c.factor2C + ';':i_c.lineNo);
+  SetHeader(Low(i_rule.opcode):IndentText() + Low(i_rule.opcode) + ' '
+            + i_c.factor1C + ' ' + l_operator + ' ' + i_c.factor2C);
   if not Push(%subst(i_rule.opcode + '   ':1:3):1:0:'');
     ReviewHere(i_c.line:i_c.lineNo:'Groups are nested too deep');
     return;
@@ -1184,6 +1262,10 @@ dcl-proc ConvertEnd;
   endif;
 
   l_kind = g_stackKind(g_stackCount);
+  if i_c.operation <> 'END' and l_kind <> 'RVW' and not EndMatches(i_c.operation:l_kind);
+    ReviewHere(i_c.line:i_c.lineNo:i_c.operation + ' does not match the open group');
+    return;
+  endif;
   select;
     when l_kind = 'RVW';
       Pop();
@@ -1199,7 +1281,7 @@ dcl-proc ConvertEnd;
     when l_kind = 'DOW' or l_kind = 'DOU';
       Pop();
       Emit('enddo;':i_c.lineNo);
-    when l_kind = 'CAS';
+    when l_kind = 'CAS' or l_kind = 'SEL';
       Pop();
       Emit('endsl;':i_c.lineNo);
     when l_kind = 'DO ';
@@ -1221,6 +1303,164 @@ dcl-proc ConvertEnd;
   else;
     RptItem(C_STS_ASSUMPTION:i_c.lineNo:SpecText(i_c.line):l_note);
   endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// Does ENDIF, ENDDO, ENDCS or ENDSL close a group of this kind?
+dcl-proc EndMatches;
+  dcl-pi *n ind;
+    i_operation varchar(5) const;
+    i_kind char(3) const;
+  end-pi;
+
+  select;
+    when i_operation = 'ENDIF';
+      return i_kind = 'IF ' or i_kind = 'IFW';
+    when i_operation = 'ENDDO';
+      return i_kind = 'DO ' or i_kind = 'DOW' or i_kind = 'DOU';
+    when i_operation = 'ENDCS';
+      return i_kind = 'CAS';
+    when i_operation = 'ENDSL';
+      return i_kind = 'SEL';
+  endsl;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// ANDxx and ORxx: extend the condition of the IFxx, DOWxx, DOUxx or WHxx
+// header just before. AND binds tighter than OR in RPG and in free-form.
+dcl-proc ConvertAndOr;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+    i_xx char(2) const;
+  end-pi;
+
+  dcl-s l_operator varchar(2);
+  dcl-s l_joiner varchar(5);
+
+  if i_c.cond <> '';
+    ReviewHere(i_c.line:i_c.lineNo:'Conditioning indicators on ' + i_rule.opcode
+               + 'xx are not converted');
+    return;
+  endif;
+  l_operator = RulComparison(i_xx);
+  if l_operator = '';
+    ReviewHere(i_c.line:i_c.lineNo:i_rule.opcode + ' needs xx: GT, LT, EQ, NE, GE'
+               + ' or LE');
+    return;
+  endif;
+  if g_hdrIndex = 0;
+    ReviewHere(i_c.line:i_c.lineNo:i_rule.opcode + 'xx without an IFxx, DOWxx, DOUxx'
+               + ' or WHxx that was converted');
+    return;
+  endif;
+  if i_rule.opcode = 'AND';
+    l_joiner = ' and ';
+  else;
+    l_joiner = ' or ';
+  endif;
+  g_hdrLine += l_joiner + i_c.factor1C + ' ' + l_operator + ' ' + i_c.factor2C;
+  OutSet(g_hdrIndex:g_hdrLine + ';');
+  ReportConverted(i_c:i_rule:'');
+end-proc;
+
+// ------------------------------------------------------------------
+// SELEC: SELECT. The WHxx and OTHER lines are one level in, their statements
+// two levels in; ENDSL (or END) closes the group.
+dcl-proc ConvertSelec;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  if i_c.cond <> '';
+    ReviewHere(i_c.line:i_c.lineNo:'Conditioning indicators on SELEC are not converted'
+               :*on);
+    return;
+  endif;
+  Emit('select;':i_c.lineNo);
+  if not Push('SEL':2:0:'');
+    ReviewHere(i_c.line:i_c.lineNo:'Groups are nested too deep');
+    return;
+  endif;
+  ReportConverted(i_c:i_rule:'');
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc ConvertWhen;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+    i_xx char(2) const;
+  end-pi;
+
+  dcl-s l_operator varchar(2);
+
+  if i_c.cond <> '';
+    ReviewHere(i_c.line:i_c.lineNo:'Conditioning indicators on WHxx are not converted');
+    return;
+  endif;
+  l_operator = RulComparison(i_xx);
+  if l_operator = '';
+    ReviewHere(i_c.line:i_c.lineNo:'WH needs xx: GT, LT, EQ, NE, GE or LE');
+    return;
+  endif;
+  if g_stackCount = 0 or g_stackKind(g_stackCount) <> 'SEL';
+    ReviewHere(i_c.line:i_c.lineNo:'WHxx without a SELEC that was converted, or inside'
+               + ' a group that is still open');
+    return;
+  endif;
+  Emit('when ' + i_c.factor1C + ' ' + l_operator + ' ' + i_c.factor2C + ';'
+       :i_c.lineNo:-1);
+  SetHeader('when':IndentText(-1) + 'when ' + i_c.factor1C + ' ' + l_operator + ' '
+            + i_c.factor2C);
+  ReportConverted(i_c:i_rule:'');
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc ConvertOther;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  if i_c.cond <> '';
+    ReviewHere(i_c.line:i_c.lineNo:'Conditioning indicators on OTHER are not converted');
+    return;
+  endif;
+  if g_stackCount = 0 or g_stackKind(g_stackCount) <> 'SEL';
+    ReviewHere(i_c.line:i_c.lineNo:'OTHER without a SELEC that was converted, or inside'
+               + ' a group that is still open');
+    return;
+  endif;
+  Emit('other;':i_c.lineNo:-1);
+  ReportConverted(i_c:i_rule:'');
+end-proc;
+
+// ------------------------------------------------------------------
+// ITER and LEAVE need a DO, DOWxx or DOUxx group around them.
+dcl-proc ConvertLoopControl;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_inLoop ind inz(*off);
+
+  for l_index = 1 to g_stackCount;
+    if g_stackKind(l_index) = 'DO ' or g_stackKind(l_index) = 'DOW'
+       or g_stackKind(l_index) = 'DOU';
+      l_inLoop = *on;
+    endif;
+  endfor;
+  if not l_inLoop;
+    ReviewHere(i_c.line:i_c.lineNo:i_rule.opcode + ' is not inside a DO, DOWxx or DOUxx'
+               + ' group that was converted');
+    return;
+  endif;
+  ConvertTemplate(i_c:i_rule);
 end-proc;
 
 // ------------------------------------------------------------------

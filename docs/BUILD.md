@@ -125,6 +125,12 @@ IACNVFREE SRC(MYLIB/QS36SRC FREEHF) SRCTYPE(RPG36) TGT(QRPGLESRC)
 IACNVFREE SRC(MYLIB/QS36SRC FREEC)  SRCTYPE(RPG36) TGT(QRPGLESRC)
 ```
 
+RPG III (`RPG38`, `RPG`): `samples/FREE3.rpg38` is converted the same way with `SRCTYPE(RPG38)`. Run `rules/IACNVRULES.sql` again first: the tables now have a `DIALECTS` column and `IACNVLAY` is new.
+
+```
+IACNVFREE SRC(MYLIB/QS36SRC FREE3) SRCTYPE(RPG38) TGT(QRPGLESRC)
+```
+
 Expected result: the control and file description specifications become `ctl-opt` and `dcl-f` statements, the input specifications become data structures (`samples/FREEIN.rpg36`), the calculation specifications become statements as described in `docs/RPG-MAPPING.md`, and everything else (E, L and O specifications, compile-time data) is kept as `// RPG II:` comments and reported R. The expected output for each line of the samples is in `docs/RPG-MAPPING.md`. The target is not meant to compile yet: fields from the E specifications are not declared.
 
 ## Grouped file and member parameters

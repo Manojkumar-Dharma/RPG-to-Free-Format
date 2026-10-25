@@ -1,4 +1,4 @@
-/* IACNVFREE - convert RPG36 (RPG II) source to fully free-form RPGLE. */
+/* IACNVFREE - convert RPG36, RPG38 or RPG source to fully free-form RPGLE. */
 /* CPP: IACNVFREE. Parameter order here must match the program's.         */
 /* SRC(lib/file member) and TGT(lib/file member) are grouped values:   */
 /*   IACNVFREE SRC(MYLIB/QS36SRC MYPGM) SRCTYPE(RPG36) TGT(QRPGLESRC)     */

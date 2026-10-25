@@ -79,6 +79,10 @@ end-pr;
 // The dialect given to RulLoad.
 dcl-pr RulDialect char(1) end-pr;
 
+// 'RPG II', 'RPG III' or 'RPG IV': the dialect as the comments of the
+// converted source name it.
+dcl-pr RulDialectLabel varchar(7) end-pr;
+
 // The comparison operator of an xx (GT, LT, EQ, NE, GE, LE), or ''.
 dcl-pr RulComparison varchar(2);
   i_xx char(2) const;

@@ -314,6 +314,20 @@ dcl-proc RulDialect export;
 end-proc;
 
 // ------------------------------------------------------------------
+dcl-proc RulDialectLabel export;
+  dcl-pi *n varchar(7);
+  end-pi;
+
+  select;
+    when g_dialect = '3';
+      return 'RPG III';
+    when g_dialect = '4';
+      return 'RPG IV';
+  endsl;
+  return 'RPG II';
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc FindOpcodeRow;
   dcl-pi *n int(10);
     i_name varchar(10) const;

@@ -1,0 +1,48 @@
+      * RPG III (RPG38 and RPG): operations that differ from RPG II
+     H
+     FCUSTMAS IF  E           K        DISK
+     FORDERS  UF  F      80            DISK
+     FLATE    IF  E                    DISK                           UC
+     IWORK       IDS
+     I                                        1  10 CODE
+     I                                    P  11  152RATE
+      * SELEC group
+     C                     SELEC
+     C           CODE      WHEQ 'A'
+     C                     EXSR DOA
+     C           CODE      WHEQ 'B'
+     C           RATE      ANDGT5
+     C                     EXSR DOB
+     C                     OTHER
+     C                     EXSR DOC
+     C                     ENDSL
+      * IFxx with ANDxx and ORxx
+     C           CODE      IFEQ 'X'
+     C           RATE      ANDGT1
+     C           RATE      OREQ 0
+     C                     Z-ADD1         FLAG  10
+     C                     ENDIF
+      * ANDxx that cannot be converted leaves a safe header
+     C           CODE      IFEQ 'Y'
+     C   99      RATE      ANDGT1
+     C                     Z-ADD2         FLAG
+     C                     ENDIF
+      * ENDIF closing a DO group is a mismatch
+     C                     DO   3         I     20
+     C                     ENDIF
+     C                     ENDDO
+      * Loop control
+     C           CNT       DOWLT9
+     C           CNT       ADD  1         CNT   30
+     C   01                ITER
+     C   02                LEAVE
+     C                     ENDDO
+     C                     LEAVE
+      * CLEAR and RESET
+     C                     CLEARWORK
+     C                     RESETFLAG
+      * Reported R
+     C           CODE      CABEQ'Z'       SKIP           88
+     C           FIRST     CAT  LAST:1    NAME  30
+     C                     OPEN LATE
+     C                     ENDSL

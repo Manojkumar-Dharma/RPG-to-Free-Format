@@ -1,6 +1,7 @@
 **FREE
 // IAcnvFree - entry program (CPP) of command IACNVFREE.
-// Converts RPG36 (RPG II) source to fully free-form RPGLE.
+// Converts RPG36 (RPG II), RPG38 and RPG (RPG III) source to fully free-form
+// RPGLE.
 // Validates the common parameters, opens the spooled report, runs the
 // conversion (module IAfreeCvt) and sends a completion message.
 // Bind with service program IAcnvSrv.
