@@ -215,7 +215,8 @@ What an operation code, an indicator or a special name becomes is data, not code
 
 | File | Table | Holds |
 |---|---|---|
-| `rpg36-opcodes.json` | IACNVOPC | Every operation code of SC09-1818 chapter 27: kind, whether factor 1, factor 2 and the result field are required (`R`), optional (`O`) or blank (`-`), the test of each resulting indicator column, half adjust allowed, status (C, A, R), the free-form template (`{F1}`, `{F2}`, `{RES}`; a second one when factor 1 is blank), the built-in functions it needs, the reason when not converted, the source |
+| `opcodes.json` | IACNVOPC | `dialects` (2 RPG II, 3 RPG III, 4 RPG IV fixed) and every operation code of SC09-1818 chapter 27 (RPG III and RPG IV rows follow the dialect work): kind, whether factor 1, factor 2 and the result field are required (`R`), optional (`O`) or blank (`-`), the test of each resulting indicator column, half adjust allowed, status (C, A, R), the free-form template (`{F1}`, `{F2}`, `{RES}`; a second one when factor 1 is blank), the built-in functions it needs, the reason when not converted, the source |
+| `layouts.json` | IACNVLAY | Column map per dialect, specification type and field (`from`, `length`). The C specification of RPG II and RPG III (identical columns, SC09-1818 chapter 24 and SC09-1817 Table 30) is loaded; RPG IV fixed (SC09-2508) and the other specification types follow with the dialect work. The converter reads C fields through this table |
 | `rpg36-comparisons.json` | IACNVCMP | xx of IFxx, DOWxx, DOUxx, CASxx and its operator |
 | `rpg36-results.json` | IACNVRES | The test a resulting indicator stands for (`+`, `-`, `Z`, `ZB`, `HI`, `LO`, `EQ`, `NR`, `ER`, `EOF`, `BOF`) |
 | `rpg36-indicators.json` | IACNVIND | All indicator names with their free-form name; `cycle` = `Y` (L1 to L9, MR) means the line is reported R |

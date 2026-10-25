@@ -1,0 +1,338 @@
+[
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "LEVEL",
+  "from": 7,
+  "length": 2,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "NOT1",
+  "from": 9,
+  "length": 1,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "IND1",
+  "from": 10,
+  "length": 2,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "NOT2",
+  "from": 12,
+  "length": 1,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "IND2",
+  "from": 13,
+  "length": 2,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "NOT3",
+  "from": 15,
+  "length": 1,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "IND3",
+  "from": 16,
+  "length": 2,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "FACTOR1",
+  "from": 18,
+  "length": 10,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "OPERATION",
+  "from": 28,
+  "length": 5,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "FACTOR2",
+  "from": 33,
+  "length": 10,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "RESULT",
+  "from": 43,
+  "length": 6,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "LENGTH",
+  "from": 49,
+  "length": 3,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "DECIMALS",
+  "from": 52,
+  "length": 1,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "EXTENDER",
+  "from": 53,
+  "length": 1,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "RES1",
+  "from": 54,
+  "length": 2,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "RES2",
+  "from": 56,
+  "length": 2,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "RES3",
+  "from": 58,
+  "length": 2,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "COMMENT",
+  "from": 60,
+  "length": 15,
+  "source": "SC09-1818 chapter 24, calculation specifications"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "LEVEL",
+  "from": 7,
+  "length": 2,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "NOT1",
+  "from": 9,
+  "length": 1,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "IND1",
+  "from": 10,
+  "length": 2,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "NOT2",
+  "from": 12,
+  "length": 1,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "IND2",
+  "from": 13,
+  "length": 2,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "NOT3",
+  "from": 15,
+  "length": 1,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "IND3",
+  "from": 16,
+  "length": 2,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "FACTOR1",
+  "from": 18,
+  "length": 10,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "OPERATION",
+  "from": 28,
+  "length": 5,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "FACTOR2",
+  "from": 33,
+  "length": 10,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "RESULT",
+  "from": 43,
+  "length": 6,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "LENGTH",
+  "from": 49,
+  "length": 3,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "DECIMALS",
+  "from": 52,
+  "length": 1,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "EXTENDER",
+  "from": 53,
+  "length": 1,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "RES1",
+  "from": 54,
+  "length": 2,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "RES2",
+  "from": 56,
+  "length": 2,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "RES3",
+  "from": 58,
+  "length": 2,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "COMMENT",
+  "from": 60,
+  "length": 15,
+  "source": "SC09-1817 chapter 9, Table 30"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "ALLC",
+  "from": 7,
+  "length": 53,
+  "source": "SC09-1818 chapter 24, calculation specifications (combined range)"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "CONDALL",
+  "from": 9,
+  "length": 9,
+  "source": "SC09-1818 chapter 24, calculation specifications (combined range)"
+ },
+ {
+  "dialect": "2",
+  "spec": "C",
+  "field": "BODY",
+  "from": 18,
+  "length": 42,
+  "source": "SC09-1818 chapter 24, calculation specifications (combined range)"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "ALLC",
+  "from": 7,
+  "length": 53,
+  "source": "SC09-1817 chapter 9, Table 30 (combined range)"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "CONDALL",
+  "from": 9,
+  "length": 9,
+  "source": "SC09-1817 chapter 9, Table 30 (combined range)"
+ },
+ {
+  "dialect": "3",
+  "spec": "C",
+  "field": "BODY",
+  "from": 18,
+  "length": 42,
+  "source": "SC09-1817 chapter 9, Table 30 (combined range)"
+ }
+]

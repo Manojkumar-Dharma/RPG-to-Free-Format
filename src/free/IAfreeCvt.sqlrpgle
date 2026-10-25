@@ -102,7 +102,7 @@ dcl-proc FreeConvert export;
     return 1;
   endif;
 
-  if RulLoad(o_msgId:o_msgData) <> 0;
+  if RulLoad('2':o_msgId:o_msgData) <> 0;
     return 1;
   endif;
 

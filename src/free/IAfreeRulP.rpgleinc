@@ -47,8 +47,12 @@ dcl-ds IAfreeNam_t qualified template;
   reason varchar(100);
 end-ds;
 
-// Reads all rule tables. Returns 0, or 1 with message IAC0104.
+// Reads all rule tables for one dialect: '2' RPG II (RPG36), '3' RPG III
+// (RPG38, RPG), '4' RPG IV fixed form (RPGLE, SQLRPGLE). Only the operation
+// codes and layouts of that dialect are kept. Returns 0, or 1 with message
+// IAC0104.
 dcl-pr RulLoad int(10);
+  i_dialect char(1) const;
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
@@ -61,6 +65,19 @@ dcl-pr RulOpcode ind;
   o_rule likeds(IAfreeOpc_t);
   o_xx char(2);
 end-pr;
+
+// The columns of a field of a specification type in the loaded dialect
+// (IACNVLAY): o_from is the first column, o_len the number of columns. Returns
+// *off when the dialect has no such field.
+dcl-pr RulLayout ind;
+  i_spec char(1) const;
+  i_field varchar(12) const;
+  o_from int(10);
+  o_len int(10);
+end-pr;
+
+// The dialect given to RulLoad.
+dcl-pr RulDialect char(1) end-pr;
 
 // The comparison operator of an xx (GT, LT, EQ, NE, GE, LE), or ''.
 dcl-pr RulComparison varchar(2);

@@ -17,7 +17,11 @@
 CREATE OR REPLACE VARIABLE IARULESDIR VARCHAR(512) DEFAULT '';
 SET IARULESDIR = '/home/REPO/rules/';
 
--- Operation codes: Table 20 of SC09-1818 and the free-form syntax of each.
+-- Operation codes of all source dialects and the free-form syntax of each.
+-- DIALECTS lists the dialects the row applies to: 2 = RPG II (RPG36),
+-- 3 = RPG III (RPG38 and RPG), 4 = RPG IV fixed form (RPGLE, SQLRPGLE). An
+-- operation code can have several rows with different DIALECTS.
+-- Sources: SC09-1818 (RPG II), SC09-1817 (RPG III), SC09-2508 (RPG IV).
 -- XX = 'Y' for IFxx, DOWxx, DOUxx and CASxx (OPCODE then holds IF, DOW, DOU
 -- or CAS). FACTOR1, FACTOR2 and RESULT are R (required), O (optional) or -
 -- (blank). IND1 to IND3 name the test of columns 54-55, 56-57 and 58-59
@@ -26,7 +30,8 @@ SET IARULESDIR = '/home/REPO/rules/';
 -- free-form statement ({F1}, {F2}, {RES}, {n}); TEMPLATENOF1 is used when
 -- factor 1 is blank.
 CREATE OR REPLACE TABLE IACNVOPC (
-  OPCODE        VARCHAR(10)  NOT NULL PRIMARY KEY,
+  OPCODE        VARCHAR(10)  NOT NULL,
+  DIALECTS      VARCHAR(4)   NOT NULL,
   XX            CHAR(1)      NOT NULL,
   KIND          VARCHAR(10)  NOT NULL,
   FACTOR1       CHAR(1)      NOT NULL,
@@ -41,16 +46,18 @@ CREATE OR REPLACE TABLE IACNVOPC (
   TEMPLATENOF1  VARCHAR(200) NOT NULL,
   BIFS          VARCHAR(100) NOT NULL,
   REASON        VARCHAR(200) NOT NULL,
-  SOURCE        VARCHAR(100) NOT NULL
+  SOURCE        VARCHAR(100) NOT NULL,
+  PRIMARY KEY (OPCODE, DIALECTS)
 ) RCDFMT IACNVOPCR;
 
 INSERT INTO IACNVOPC
-SELECT J.OPCODE, J.XX, J.KIND, J.FACTOR1, J.FACTOR2, J.RESULT,
+SELECT J.OPCODE, J.DIALECTS, J.XX, J.KIND, J.FACTOR1, J.FACTOR2, J.RESULT,
        J.IND1, J.IND2, J.IND3, J.HALFADJUST, J.STATUS, J.TEMPLATE,
        J.TEMPLATENOF1, J.BIFS, J.REASON, J.SOURCE
-  FROM JSON_TABLE(GET_CLOB_FROM_FILE(IARULESDIR CONCAT 'rpg36-opcodes.json'),
+  FROM JSON_TABLE(GET_CLOB_FROM_FILE(IARULESDIR CONCAT 'opcodes.json'),
          '$[*]' COLUMNS(
            OPCODE       VARCHAR(10)  PATH '$.opcode',
+           DIALECTS     VARCHAR(4)   PATH '$.dialects',
            XX           CHAR(1)      PATH '$.xx',
            KIND         VARCHAR(10)  PATH '$.kind',
            FACTOR1      CHAR(1)      PATH '$.factor1',
@@ -66,6 +73,30 @@ SELECT J.OPCODE, J.XX, J.KIND, J.FACTOR1, J.FACTOR2, J.RESULT,
            BIFS         VARCHAR(100) PATH '$.bifs',
            REASON       VARCHAR(200) PATH '$.reason',
            SOURCE       VARCHAR(100) PATH '$.source')) AS J;
+
+-- Column map of each specification type per dialect: the columns of every
+-- field. FROMCOL is the first column (1 based), LEN the number of columns.
+-- The converter reads fields through this table, never by fixed column.
+CREATE OR REPLACE TABLE IACNVLAY (
+  DIALECT   CHAR(1)      NOT NULL,
+  SPEC      CHAR(1)      NOT NULL,
+  FIELD     VARCHAR(12)  NOT NULL,
+  FROMCOL   INTEGER      NOT NULL,
+  LEN       INTEGER      NOT NULL,
+  SOURCE    VARCHAR(100) NOT NULL,
+  PRIMARY KEY (DIALECT, SPEC, FIELD)
+) RCDFMT IACNVLAYR;
+
+INSERT INTO IACNVLAY
+SELECT J.DIALECT, J.SPEC, J.FIELD, J.FROMCOL, J.LEN, J.SOURCE
+  FROM JSON_TABLE(GET_CLOB_FROM_FILE(IARULESDIR CONCAT 'layouts.json'),
+         '$[*]' COLUMNS(
+           DIALECT CHAR(1)      PATH '$.dialect',
+           SPEC    CHAR(1)      PATH '$.spec',
+           FIELD   VARCHAR(12)  PATH '$.field',
+           FROMCOL INTEGER      PATH '$.from',
+           LEN     INTEGER      PATH '$.length',
+           SOURCE  VARCHAR(100) PATH '$.source')) AS J;
 
 -- The xx of IFxx, DOWxx, DOUxx and CASxx and its comparison operator.
 CREATE OR REPLACE TABLE IACNVCMP (
@@ -176,6 +207,7 @@ SELECT J.CFGKEY, J.CFGVALUE, J.DESCRIPTION
 
 -- Check: the counts of the rows loaded.
 SELECT 'IACNVOPC' AS TABLE_NAME, COUNT(*) AS ROWS FROM IACNVOPC
+UNION ALL SELECT 'IACNVLAY', COUNT(*) FROM IACNVLAY
 UNION ALL SELECT 'IACNVCMP', COUNT(*) FROM IACNVCMP
 UNION ALL SELECT 'IACNVRES', COUNT(*) FROM IACNVRES
 UNION ALL SELECT 'IACNVIND', COUNT(*) FROM IACNVIND

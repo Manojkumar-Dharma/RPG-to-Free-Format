@@ -12,7 +12,8 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-dcl-c C_MAXOPC 150;
+dcl-c C_MAXOPC 250;
+dcl-c C_MAXLAY 120;
 dcl-c C_MAXCMP 12;
 dcl-c C_MAXRES 40;
 dcl-c C_MAXIND 250;
@@ -22,6 +23,11 @@ dcl-c C_MAXCFG 40;
 
 dcl-ds g_opc likeds(IAfreeOpc_t) dim(C_MAXOPC);
 dcl-s g_opcCount int(10) inz(0);
+dcl-s g_dialect char(1) inz('2');
+dcl-s g_layKey varchar(14) dim(C_MAXLAY);
+dcl-s g_layFrom int(10) dim(C_MAXLAY);
+dcl-s g_layLen int(10) dim(C_MAXLAY);
+dcl-s g_layCount int(10) inz(0);
 dcl-s g_cmpXx char(2) dim(C_MAXCMP);
 dcl-s g_cmpOperator varchar(2) dim(C_MAXCMP);
 dcl-s g_cmpCount int(10) inz(0);
@@ -64,6 +70,7 @@ end-proc;
 // ------------------------------------------------------------------
 dcl-proc RulLoad export;
   dcl-pi *n int(10);
+    i_dialect char(1) const;
     o_msgId char(7);
     o_msgData char(256);
   end-pi;
@@ -79,7 +86,15 @@ dcl-proc RulLoad export;
   dcl-s l_since varchar(4);
   dcl-s l_key varchar(30);
   dcl-s l_value varchar(200);
+  dcl-s l_spec char(1);
+  dcl-s l_field varchar(12);
+  dcl-s l_from int(10);
+  dcl-s l_len int(10);
+  dcl-s l_dialect char(1);
 
+  l_dialect = i_dialect;
+  g_dialect = i_dialect;
+  g_layCount = 0;
   g_opcCount = 0;
   g_cmpCount = 0;
   g_resCount = 0;
@@ -91,7 +106,7 @@ dcl-proc RulLoad export;
   exec sql declare opcCursor cursor for
     select opcode, xx, kind, factor1, factor2, result, ind1, ind2, ind3,
            halfadjust, status, template, templatenof1, bifs, reason
-      from IACNVOPC order by opcode;
+      from IACNVOPC where locate(:l_dialect, dialects) > 0 order by opcode;
   exec sql open opcCursor;
   if sqlcode < 0;
     return Fail('IACNVOPC':o_msgId:o_msgData);
@@ -109,6 +124,29 @@ dcl-proc RulLoad export;
     g_opc(g_opcCount) = l_opc;
   enddo;
   exec sql close opcCursor;
+
+  exec sql declare layCursor cursor for
+    select spec, field, fromcol, len from IACNVLAY
+      where dialect = :l_dialect order by spec, field;
+  exec sql open layCursor;
+  if sqlcode < 0;
+    return Fail('IACNVLAY':o_msgId:o_msgData);
+  endif;
+  dow *on;
+    exec sql fetch layCursor into :l_spec, :l_field, :l_from, :l_len;
+    if sqlcode < 0;
+      exec sql close layCursor;
+      return Fail('IACNVLAY':o_msgId:o_msgData);
+    endif;
+    if sqlcode = 100 or g_layCount >= C_MAXLAY;
+      leave;
+    endif;
+    g_layCount += 1;
+    g_layKey(g_layCount) = l_spec + %trim(l_field);
+    g_layFrom(g_layCount) = l_from;
+    g_layLen(g_layCount) = l_len;
+  enddo;
+  exec sql close layCursor;
 
   exec sql declare cmpCursor cursor for
     select xx, operator from IACNVCMP order by xx;
@@ -234,12 +272,45 @@ dcl-proc RulLoad export;
   enddo;
   exec sql close cfgCursor;
 
-  if g_opcCount = 0 or g_indCount = 0;
+  if g_opcCount = 0 or g_indCount = 0 or g_layCount = 0;
     o_msgId = 'IAC0104';
     o_msgData = 'The tables are empty: run rules/IACNVRULES.sql';
     return 1;
   endif;
   return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc RulLayout export;
+  dcl-pi *n ind;
+    i_spec char(1) const;
+    i_field varchar(12) const;
+    o_from int(10);
+    o_len int(10);
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_key varchar(14);
+
+  l_key = i_spec + %trim(i_field);
+  for l_index = 1 to g_layCount;
+    if g_layKey(l_index) = l_key;
+      o_from = g_layFrom(l_index);
+      o_len = g_layLen(l_index);
+      return *on;
+    endif;
+  endfor;
+  o_from = 0;
+  o_len = 0;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc RulDialect export;
+  dcl-pi *n char(1);
+  end-pi;
+
+  return g_dialect;
 end-proc;
 
 // ------------------------------------------------------------------

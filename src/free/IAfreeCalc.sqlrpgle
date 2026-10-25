@@ -3,7 +3,7 @@
 // RPG II) to fully free-form RPGLE (FREE-05). Module of program IACNVFREE.
 //
 // What an operation code becomes is read from the rule tables (module
-// IAfreeRul, rules/rpg36-opcodes.json): the factors it needs, the free-form
+// IAfreeRul, rules/opcodes.json): the factors it needs, the free-form
 // template, the status and the reason when it is not converted. This module
 // holds the rules that need state: conditioning indicators (AN and OR lines),
 // structured groups (IFxx, ELSE, DO, DOWxx, DOUxx, CASxx, END), subroutines
@@ -305,6 +305,24 @@ dcl-proc ConvOperand;
 end-proc;
 
 // ------------------------------------------------------------------
+// The text of a field of a C specification, read through the column map of the
+// dialect (IACNVLAY). Blank when the dialect has no such field.
+dcl-proc Fld;
+  dcl-pi *n varchar(80);
+    i_line char(100) const;
+    i_field varchar(12) const;
+  end-pi;
+
+  dcl-s l_from int(10);
+  dcl-s l_len int(10);
+
+  if not RulLayout('C':i_field:l_from:l_len) or l_len = 0;
+    return '';
+  endif;
+  return %subst(i_line:l_from:l_len);
+end-proc;
+
+// ------------------------------------------------------------------
 // The conditioning indicators of one line (columns 9 to 17) as free-form
 // terms joined by 'and'. o_reason is set when an indicator is not valid or
 // belongs to the RPG cycle.
@@ -320,11 +338,16 @@ dcl-proc LineTerms;
   dcl-s l_name char(2);
   dcl-s l_terms varchar(150) inz('');
   dcl-s l_term varchar(20);
+  dcl-s l_from int(10);
+  dcl-s l_len int(10);
 
   o_reason = '';
-  for l_slot = 0 to 2;
-    l_not = %subst(i_line:9 + l_slot * 3:1);
-    l_name = %subst(i_line:10 + l_slot * 3:2);
+  for l_slot = 1 to 3;
+    if not RulLayout('C':'IND' + %char(l_slot):l_from:l_len);
+      leave;
+    endif;
+    l_not = Fld(i_line:'NOT' + %char(l_slot));
+    l_name = Fld(i_line:'IND' + %char(l_slot));
     if l_name <> '  ';
       if not RulIndicator(l_name:l_rule);
         o_reason = 'Indicator ' + %trim(l_name) + ' is not known';
@@ -674,7 +697,7 @@ dcl-proc CalcLine export;
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
 
   // Everything between columns 7 and 59 blank: nothing to convert.
-  if %trim(%subst(i_line:7:53)) = '';
+  if %trim(Fld(i_line:'ALLC')) = '';
     return;
   endif;
 
@@ -687,21 +710,21 @@ dcl-proc CalcLine export;
   clear l_c;
   l_c.line = i_line;
   l_c.lineNo = i_lineNo;
-  l_c.level = %subst(l_up:7:2);
-  l_c.factor1 = %trim(%subst(i_line:18:10));
-  l_c.operation = %trim(%subst(l_up:28:5));
-  l_c.factor2 = %trim(%subst(i_line:33:10));
-  l_c.result = %trim(%subst(i_line:43:6));
-  l_c.length = %trim(%subst(l_up:49:3));
-  l_c.decimals = %subst(l_up:52:1);
-  l_c.halfAdjust = %subst(l_up:53:1);
-  l_c.result1 = %subst(l_up:54:2);
-  l_c.result2 = %subst(l_up:56:2);
-  l_c.result3 = %subst(l_up:58:2);
-  l_c.comment = %trimr(%subst(i_line:60:15));
+  l_c.level = Fld(l_up:'LEVEL');
+  l_c.factor1 = %trim(Fld(i_line:'FACTOR1'));
+  l_c.operation = %trim(Fld(l_up:'OPERATION'));
+  l_c.factor2 = %trim(Fld(i_line:'FACTOR2'));
+  l_c.result = %trim(Fld(i_line:'RESULT'));
+  l_c.length = %trim(Fld(l_up:'LENGTH'));
+  l_c.decimals = Fld(l_up:'DECIMALS');
+  l_c.halfAdjust = Fld(l_up:'EXTENDER');
+  l_c.result1 = Fld(l_up:'RES1');
+  l_c.result2 = Fld(l_up:'RES2');
+  l_c.result3 = Fld(l_up:'RES3');
+  l_c.comment = %trimr(Fld(i_line:'COMMENT'));
 
-  l_isCondOnly = ((%trim(%subst(i_line:18:42)) = '')
-                  and (%trim(%subst(i_line:9:9)) <> ''
+  l_isCondOnly = ((%trim(Fld(i_line:'BODY')) = '')
+                  and (%trim(Fld(i_line:'CONDALL')) <> ''
                        or l_c.level = 'AN' or l_c.level = 'OR'));
 
   // ---- A line of conditioning indicators without an operation -------------

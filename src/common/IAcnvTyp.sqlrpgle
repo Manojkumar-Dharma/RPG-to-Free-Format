@@ -10,7 +10,7 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 
 dcl-c C_SRC_OCL '|OCL36|';
 dcl-c C_SRC_DSPF '|DSPF36|DSPF38|';
-dcl-c C_SRC_FREE '|RPG36|RPG38|RPG3|RPG4|RPG|RPGLE|SQLRPGLE|';
+dcl-c C_SRC_FREE '|RPG36|RPG38|RPG|RPGLE|SQLRPGLE|';
 
 dcl-c C_TGT_OCL '|CLLE|';
 dcl-c C_TGT_DSPF '|DSPF|';

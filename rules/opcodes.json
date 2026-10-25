@@ -1,6 +1,7 @@
 [
  {
   "opcode": "ACQ",
+  "dialects": "23",
   "xx": "N",
   "kind": "FILE",
   "factor1": "-",
@@ -19,6 +20,7 @@
  },
  {
   "opcode": "ADD",
+  "dialects": "23",
   "xx": "N",
   "kind": "ARITH",
   "factor1": "O",
@@ -37,6 +39,7 @@
  },
  {
   "opcode": "BEGSR",
+  "dialects": "23",
   "xx": "N",
   "kind": "SUBR",
   "factor1": "R",
@@ -55,6 +58,7 @@
  },
  {
   "opcode": "BITOF",
+  "dialects": "23",
   "xx": "N",
   "kind": "BIT",
   "factor1": "-",
@@ -73,6 +77,7 @@
  },
  {
   "opcode": "BITON",
+  "dialects": "23",
   "xx": "N",
   "kind": "BIT",
   "factor1": "-",
@@ -91,6 +96,7 @@
  },
  {
   "opcode": "CALL",
+  "dialects": "23",
   "xx": "N",
   "kind": "CALL",
   "factor1": "-",
@@ -109,6 +115,7 @@
  },
  {
   "opcode": "CAS",
+  "dialects": "23",
   "xx": "Y",
   "kind": "CASE",
   "factor1": "O",
@@ -127,6 +134,7 @@
  },
  {
   "opcode": "CHAIN",
+  "dialects": "23",
   "xx": "N",
   "kind": "FILE",
   "factor1": "R",
@@ -145,6 +153,7 @@
  },
  {
   "opcode": "COMP",
+  "dialects": "23",
   "xx": "N",
   "kind": "COMPARE",
   "factor1": "R",
@@ -163,6 +172,7 @@
  },
  {
   "opcode": "DEBUG",
+  "dialects": "23",
   "xx": "N",
   "kind": "DEBUG",
   "factor1": "O",
@@ -181,6 +191,7 @@
  },
  {
   "opcode": "DEFN",
+  "dialects": "23",
   "xx": "N",
   "kind": "DEFN",
   "factor1": "R",
@@ -199,6 +210,7 @@
  },
  {
   "opcode": "DIV",
+  "dialects": "23",
   "xx": "N",
   "kind": "ARITH",
   "factor1": "O",
@@ -217,6 +229,7 @@
  },
  {
   "opcode": "DO",
+  "dialects": "23",
   "xx": "N",
   "kind": "DO",
   "factor1": "O",
@@ -235,6 +248,7 @@
  },
  {
   "opcode": "DOU",
+  "dialects": "23",
   "xx": "Y",
   "kind": "DOU",
   "factor1": "R",
@@ -253,6 +267,7 @@
  },
  {
   "opcode": "DOW",
+  "dialects": "23",
   "xx": "Y",
   "kind": "DOW",
   "factor1": "R",
@@ -271,6 +286,7 @@
  },
  {
   "opcode": "ELSE",
+  "dialects": "23",
   "xx": "N",
   "kind": "ELSE",
   "factor1": "-",
@@ -289,6 +305,7 @@
  },
  {
   "opcode": "END",
+  "dialects": "23",
   "xx": "N",
   "kind": "END",
   "factor1": "-",
@@ -307,6 +324,7 @@
  },
  {
   "opcode": "ENDSR",
+  "dialects": "23",
   "xx": "N",
   "kind": "SUBR",
   "factor1": "O",
@@ -325,6 +343,7 @@
  },
  {
   "opcode": "EXCPT",
+  "dialects": "23",
   "xx": "N",
   "kind": "OUTPUT",
   "factor1": "-",
@@ -343,6 +362,7 @@
  },
  {
   "opcode": "EXIT",
+  "dialects": "2",
   "xx": "N",
   "kind": "EXIT",
   "factor1": "-",
@@ -361,6 +381,7 @@
  },
  {
   "opcode": "EXSR",
+  "dialects": "23",
   "xx": "N",
   "kind": "SUBR",
   "factor1": "-",
@@ -379,6 +400,7 @@
  },
  {
   "opcode": "FORCE",
+  "dialects": "23",
   "xx": "N",
   "kind": "FILE",
   "factor1": "-",
@@ -397,6 +419,7 @@
  },
  {
   "opcode": "FREE",
+  "dialects": "23",
   "xx": "N",
   "kind": "FREE",
   "factor1": "-",
@@ -415,6 +438,7 @@
  },
  {
   "opcode": "GOTO",
+  "dialects": "23",
   "xx": "N",
   "kind": "GOTO",
   "factor1": "-",
@@ -433,6 +457,7 @@
  },
  {
   "opcode": "IF",
+  "dialects": "23",
   "xx": "Y",
   "kind": "IF",
   "factor1": "R",
@@ -451,6 +476,7 @@
  },
  {
   "opcode": "KEY",
+  "dialects": "2",
   "xx": "N",
   "kind": "KEY",
   "factor1": "O",
@@ -469,6 +495,7 @@
  },
  {
   "opcode": "LOKUP",
+  "dialects": "23",
   "xx": "N",
   "kind": "LOOKUP",
   "factor1": "R",
@@ -487,6 +514,7 @@
  },
  {
   "opcode": "MHHZO",
+  "dialects": "23",
   "xx": "N",
   "kind": "ZONE",
   "factor1": "-",
@@ -505,6 +533,7 @@
  },
  {
   "opcode": "MHLZO",
+  "dialects": "23",
   "xx": "N",
   "kind": "ZONE",
   "factor1": "-",
@@ -523,6 +552,7 @@
  },
  {
   "opcode": "MLHZO",
+  "dialects": "23",
   "xx": "N",
   "kind": "ZONE",
   "factor1": "-",
@@ -541,6 +571,7 @@
  },
  {
   "opcode": "MLLZO",
+  "dialects": "23",
   "xx": "N",
   "kind": "ZONE",
   "factor1": "-",
@@ -559,6 +590,7 @@
  },
  {
   "opcode": "MOVE",
+  "dialects": "23",
   "xx": "N",
   "kind": "MOVE",
   "factor1": "-",
@@ -577,6 +609,7 @@
  },
  {
   "opcode": "MOVEA",
+  "dialects": "23",
   "xx": "N",
   "kind": "MOVE",
   "factor1": "-",
@@ -595,6 +628,7 @@
  },
  {
   "opcode": "MOVEL",
+  "dialects": "23",
   "xx": "N",
   "kind": "MOVE",
   "factor1": "-",
@@ -613,6 +647,7 @@
  },
  {
   "opcode": "MULT",
+  "dialects": "23",
   "xx": "N",
   "kind": "ARITH",
   "factor1": "O",
@@ -631,6 +666,7 @@
  },
  {
   "opcode": "MVR",
+  "dialects": "23",
   "xx": "N",
   "kind": "ARITH",
   "factor1": "-",
@@ -649,6 +685,7 @@
  },
  {
   "opcode": "NEXT",
+  "dialects": "23",
   "xx": "N",
   "kind": "FILE",
   "factor1": "R",
@@ -667,6 +704,7 @@
  },
  {
   "opcode": "PARM",
+  "dialects": "23",
   "xx": "N",
   "kind": "CALL",
   "factor1": "O",
@@ -685,6 +723,7 @@
  },
  {
   "opcode": "PLIST",
+  "dialects": "23",
   "xx": "N",
   "kind": "CALL",
   "factor1": "R",
@@ -703,6 +742,7 @@
  },
  {
   "opcode": "POST",
+  "dialects": "23",
   "xx": "N",
   "kind": "FILE",
   "factor1": "O",
@@ -721,6 +761,7 @@
  },
  {
   "opcode": "READ",
+  "dialects": "23",
   "xx": "N",
   "kind": "FILE",
   "factor1": "-",
@@ -739,6 +780,7 @@
  },
  {
   "opcode": "READE",
+  "dialects": "23",
   "xx": "N",
   "kind": "FILE",
   "factor1": "R",
@@ -757,6 +799,7 @@
  },
  {
   "opcode": "READP",
+  "dialects": "23",
   "xx": "N",
   "kind": "FILE",
   "factor1": "-",
@@ -775,6 +818,7 @@
  },
  {
   "opcode": "REL",
+  "dialects": "23",
   "xx": "N",
   "kind": "FILE",
   "factor1": "R",
@@ -793,6 +837,7 @@
  },
  {
   "opcode": "RETRN",
+  "dialects": "23",
   "xx": "N",
   "kind": "RETRN",
   "factor1": "-",
@@ -811,6 +856,7 @@
  },
  {
   "opcode": "RLABL",
+  "dialects": "2",
   "xx": "N",
   "kind": "CALL",
   "factor1": "-",
@@ -829,6 +875,7 @@
  },
  {
   "opcode": "SET",
+  "dialects": "2",
   "xx": "N",
   "kind": "SET",
   "factor1": "O",
@@ -847,6 +894,7 @@
  },
  {
   "opcode": "SETLL",
+  "dialects": "23",
   "xx": "N",
   "kind": "FILE",
   "factor1": "R",
@@ -865,6 +913,7 @@
  },
  {
   "opcode": "SETOF",
+  "dialects": "23",
   "xx": "N",
   "kind": "IND",
   "factor1": "-",
@@ -883,6 +932,7 @@
  },
  {
   "opcode": "SETON",
+  "dialects": "23",
   "xx": "N",
   "kind": "IND",
   "factor1": "-",
@@ -901,6 +951,7 @@
  },
  {
   "opcode": "SHTDN",
+  "dialects": "23",
   "xx": "N",
   "kind": "SHTDN",
   "factor1": "-",
@@ -919,6 +970,7 @@
  },
  {
   "opcode": "SORTA",
+  "dialects": "23",
   "xx": "N",
   "kind": "SORT",
   "factor1": "-",
@@ -937,6 +989,7 @@
  },
  {
   "opcode": "SQRT",
+  "dialects": "23",
   "xx": "N",
   "kind": "ARITH",
   "factor1": "-",
@@ -955,6 +1008,7 @@
  },
  {
   "opcode": "SUB",
+  "dialects": "23",
   "xx": "N",
   "kind": "ARITH",
   "factor1": "O",
@@ -973,6 +1027,7 @@
  },
  {
   "opcode": "TAG",
+  "dialects": "23",
   "xx": "N",
   "kind": "TAG",
   "factor1": "O",
@@ -991,6 +1046,7 @@
  },
  {
   "opcode": "TESTB",
+  "dialects": "23",
   "xx": "N",
   "kind": "BIT",
   "factor1": "-",
@@ -1009,6 +1065,7 @@
  },
  {
   "opcode": "TESTZ",
+  "dialects": "23",
   "xx": "N",
   "kind": "ZONE",
   "factor1": "-",
@@ -1027,6 +1084,7 @@
  },
  {
   "opcode": "TIME",
+  "dialects": "23",
   "xx": "N",
   "kind": "TIME",
   "factor1": "-",
@@ -1045,6 +1103,7 @@
  },
  {
   "opcode": "XFOOT",
+  "dialects": "23",
   "xx": "N",
   "kind": "ARITH",
   "factor1": "-",
@@ -1063,6 +1122,7 @@
  },
  {
   "opcode": "Z-ADD",
+  "dialects": "23",
   "xx": "N",
   "kind": "ARITH",
   "factor1": "-",
@@ -1081,6 +1141,7 @@
  },
  {
   "opcode": "Z-SUB",
+  "dialects": "23",
   "xx": "N",
   "kind": "ARITH",
   "factor1": "-",
