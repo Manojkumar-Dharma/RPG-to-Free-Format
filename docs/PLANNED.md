@@ -40,6 +40,7 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-04 | IACNVFREE | I specifications to D statements (data structure: file record layouts and `DS` lines) | Written | Not tested | `samples/FREEIN.rpg36`; record-identifying indicators, record codes and the cycle entries are R |
 | FREE-05 | IACNVFREE | C specifications to free-form calculations, on JSON rule tables loaded into Db2 (`rules/`, `docs/RPG-MAPPING.md`) | Written | Not tested | `samples/FREEC.rpg36`; `rules/IACNVRULES.sql` needs JSON_TABLE; `TAG`, `GOTO`, `CABxx` reported R; file operations and MOVE wait for FREE-08 and the E specifications |
 | FREE-09 | IACNVFREE | RPG III (`RPG38`, `RPG`): dialect column on `IACNVOPC`, column map `IACNVLAY`, F (external files, `UC`), I (`inz`), structured operations (`SELEC`, `WHxx`, `ANDxx`, `ORxx`, `ENDyy`, `ITER`, `LEAVE`), `CLEAR`, `RESET` | Written | Not tested | `samples/FREE3.rpg38`; `SQLRPG` accepted, its embedded SQL reported R; string operations, `CABxx` and file operations reported R |
+| FREE-11 | IACNVFREE | Embedded SQL of `SQLRPG` (`C/EXEC SQL`, `C+`, `C/END-EXEC`) to free-form `exec sql ...;` | Written | Not tested | `samples/FREESQL.sqlrpg`; needs a compile and test; `WHENEVER ... GOTO` is A (TAG not converted); SQL in a `/COPY` member is not possible in RPG/400 |
 | FREE-10 | IACNVFREE | RPG IV fixed form (`RPGLE`, `SQLRPGLE`): H, F, D, I, C, O, P specifications read through `IACNVLAY`; extended factor 2 and the free-form syntax lines of SC09-2508 as templates | Planned | Not started | 7.3 manuals are in `docs/ref` |
 | FREE-06 | IACNVFREE | O specifications to an externally described printer file (DDS) and `WRITE`/`EXCEPT` | Planned | Not started |  |
 | FREE-07 | IACNVFREE | E specifications (arrays and tables) to `dcl-s`/`dcl-ds`, compile-time data | Planned | Not started |  |
@@ -68,8 +69,8 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
   fixed columns in `IAfreeCvt`; moving them onto `IACNVLAY` is part of FREE-10.
 - After changing a JSON file in `rules/`, re-run `rules/IACNVRULES.sql`.
 - Comments in the converted source use `RulDialectLabel()` (`// RPG III: ...`).
-- Open decisions and gaps: `SQLRPG` embedded SQL (`C/EXEC SQL`, `C+`,
-  `C/END-EXEC`) is reported R, to be converted to `exec sql ...;`; string
+- Open decisions and gaps: `SQLRPG` embedded SQL is converted (FREE-11, written in
+  `CalcSqlLine` of `IAfreeCalc`, needs a compile and test); string
   operations (`CAT`, `SCAN`, `SUBST`, `CHECK`, `CHEKR`, `XLATE`) are reported R
   (decision pending: temporary field for the no-`P` case, or wait for real
   sources); file operations, `KLIST`/`KFLD` and `OPEN`/`CLOSE` wait for FREE-08;

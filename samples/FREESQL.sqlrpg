@@ -1,0 +1,35 @@
+      * SQLRPG: embedded SQL statements (C/EXEC SQL ... C/END-EXEC)
+     H
+     C/EXEC SQL INCLUDE SQLCA
+     C/END-EXEC
+     C                     Z-ADD1         KEY     50
+      * Statement on several lines
+     C/EXEC SQL
+     C+  SELECT COUNT(*)
+     C+    INTO :CNT
+      * A comment between the lines goes before the statement
+     C+    FROM CUSTMAS
+     C+    WHERE CUSTNO = :KEY
+     C/END-EXEC
+      * Statement inside a group, started on the delimiter line
+     C           KEY       IFGT 0
+     C/EXEC SQL UPDATE CUSTMAS SET STATUS = 'A'
+     C+    WHERE CUSTNO = :KEY
+     C/END-EXEC
+     C                     END
+      * Comment (--) on the last line
+     C/EXEC SQL
+     C+  DELETE FROM WORKFILE -- clear the work file
+     C/END-EXEC
+      * WHENEVER with GOTO needs a TAG
+     C/EXEC SQL WHENEVER SQLERROR GOTO ERR
+     C/END-EXEC
+      * Not converted: indicators, statement not closed, END-EXEC alone
+     C   01
+     C/EXEC SQL
+     C+  DELETE FROM WORKFILE
+     C/END-EXEC
+     C/EXEC SQL
+     C+  DELETE FROM OLDFILE
+     C                     ADD  1         KEY
+     C/END-EXEC

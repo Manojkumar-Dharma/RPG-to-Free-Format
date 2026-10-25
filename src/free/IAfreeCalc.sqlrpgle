@@ -33,6 +33,7 @@ dcl-c C_MAXDECL 500;
 dcl-c C_MAXGROUP 8;
 dcl-c C_MAXCONDLINES 16;
 dcl-c C_MAXSTMT 8;
+dcl-c C_MAXSQL 200;
 
 // The parts of one C specification line.
 dcl-ds Calc_t qualified template;
@@ -90,6 +91,15 @@ dcl-s g_declCount int(10);
 dcl-s g_declAt int(10);
 dcl-s g_doCount int(10);
 
+// An embedded SQL statement (C/EXEC SQL, C+ lines, C/END-EXEC) being read. Text
+// is kept from column 16 of the first line and columns 8 to 74 of the others.
+dcl-s g_sqlOpen ind;
+dcl-s g_sqlTooLong ind;
+dcl-s g_sqlCount int(10);
+dcl-s g_sqlText varchar(70) dim(C_MAXSQL);
+dcl-s g_sqlLineNo int(10) dim(C_MAXSQL);
+dcl-s g_sqlRaw char(100) dim(C_MAXSQL);
+
 // ------------------------------------------------------------------
 dcl-proc CalcStart export;
   dcl-pi *n;
@@ -107,6 +117,9 @@ dcl-proc CalcStart export;
   g_declCount = 0;
   g_declAt = 0;
   g_doCount = 0;
+  g_sqlOpen = *off;
+  g_sqlTooLong = *off;
+  g_sqlCount = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1758,6 +1771,234 @@ dcl-proc ReportConverted;
 end-proc;
 
 // ------------------------------------------------------------------
+// Embedded SQL of an SQLRPG source (RPG/400 User's Guide, chapter 1): the
+// delimiter /EXEC SQL in columns 7-15, the statement from column 16 and on lines
+// with + in column 7 (up to column 74), the delimiter /END-EXEC on a line of its
+// own. Returns *on when the line belongs to an SQL statement and was handled.
+dcl-proc CalcSqlLine export;
+  dcl-pi *n ind;
+    i_line char(100) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  dcl-s l_up char(100);
+  dcl-s l_key char(9);
+
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  l_key = %subst(l_up:7:9);
+
+  select;
+    when l_key = '/EXEC SQL';
+      if g_sqlOpen;
+        SqlReject('EXEC SQL starts before the END-EXEC of the statement before');
+      endif;
+      g_sqlOpen = *on;
+      g_sqlTooLong = *off;
+      g_sqlCount = 0;
+      SqlAdd(%trim(%subst(i_line:16:59)):i_line:i_lineNo);
+      return *on;
+    when l_key = '/END-EXEC';
+      if not g_sqlOpen;
+        ReviewSpec(i_lineNo:i_line:'END-EXEC without EXEC SQL');
+        return *on;
+      endif;
+      SqlEnd(i_line:i_lineNo);
+      return *on;
+    when %subst(i_line:7:1) = '+';
+      if not g_sqlOpen;
+        ReviewSpec(i_lineNo:i_line:'SQL line (+ in column 7) without EXEC SQL');
+        return *on;
+      endif;
+      SqlAdd(%trim(%subst(i_line:8:67)):i_line:i_lineNo);
+      return *on;
+    other;
+      // Any other specification line ends a statement that was not closed.
+      if g_sqlOpen;
+        SqlReject('EXEC SQL is not closed by END-EXEC');
+      endif;
+      return *off;
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc SqlAdd;
+  dcl-pi *n;
+    i_text varchar(70) const;
+    i_line char(100) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  if g_sqlCount >= C_MAXSQL;
+    g_sqlTooLong = *on;
+    return;
+  endif;
+  g_sqlCount += 1;
+  g_sqlText(g_sqlCount) = i_text;
+  g_sqlLineNo(g_sqlCount) = i_lineNo;
+  g_sqlRaw(g_sqlCount) = i_line;
+end-proc;
+
+// ------------------------------------------------------------------
+// Position of a token (';' or '--') that is not inside a literal or a delimited
+// name, 0 when there is none. Checked line by line: SQL has no literal that
+// runs over two lines.
+dcl-proc SqlFindOutside;
+  dcl-pi *n int(10);
+    i_text varchar(100) const;
+    i_token varchar(2) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_quote char(1) inz(' ');
+  dcl-s l_char char(1);
+
+  for l_index = 1 to %len(i_text);
+    l_char = %subst(i_text:l_index:1);
+    if l_quote <> ' ';
+      if l_char = l_quote;
+        l_quote = ' ';
+      endif;
+    elseif l_char = C_QUOTE or l_char = '"';
+      l_quote = l_char;
+    elseif l_index + %len(i_token) - 1 <= %len(i_text)
+           and %subst(i_text:l_index:%len(i_token)) = i_token;
+      return l_index;
+    endif;
+  endfor;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// Keeps the lines of the statement read so far as comments and reports them R.
+dcl-proc SqlReject;
+  dcl-pi *n;
+    i_reason varchar(150) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  for l_index = 1 to g_sqlCount;
+    if l_index = 1;
+      // Also writes the lines of indicators that were waiting for an operation.
+      ReviewHere(g_sqlRaw(1):g_sqlLineNo(1):i_reason);
+    else;
+      Emit('// ' + RulDialectLabel() + ': ' + SpecText(g_sqlRaw(l_index))
+           :g_sqlLineNo(l_index));
+      RptItem(C_STS_REVIEW:g_sqlLineNo(l_index):SpecText(g_sqlRaw(l_index))
+              :i_reason);
+    endif;
+  endfor;
+  g_sqlOpen = *off;
+  g_sqlTooLong = *off;
+  g_sqlCount = 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// The END-EXEC line: the statement becomes one free-form EXEC SQL statement. The
+// lines of the source stay lines of the output, so the SQL text is not changed.
+dcl-proc SqlEnd;
+  dcl-pi *n;
+    i_line char(100) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_first int(10) inz(0);
+  dcl-s l_last int(10) inz(0);
+  dcl-s l_text varchar(100);
+  dcl-s l_all varchar(5000) inz('');
+  dcl-s l_reason varchar(150) inz('');
+  dcl-s l_note varchar(190) inz('');
+  dcl-s l_status char(1);
+
+  g_sqlOpen = *off;
+
+  for l_index = 1 to g_sqlCount;
+    if g_sqlText(l_index) <> '';
+      if l_first = 0;
+        l_first = l_index;
+      endif;
+      l_last = l_index;
+    endif;
+  endfor;
+
+  select;
+    when g_sqlTooLong;
+      l_reason = 'More than ' + %char(C_MAXSQL) + ' lines in one SQL statement';
+    when l_first = 0;
+      l_reason = 'EXEC SQL without an SQL statement';
+    when g_condLineCount > 0;
+      l_reason = 'Conditioning indicators cannot be used with EXEC SQL';
+    when g_stackCount > 0 and g_stackKind(g_stackCount) = 'CAS';
+      l_reason = 'Only CASxx operations can be in a CAS group';
+  endsl;
+  if l_reason = '';
+    for l_index = l_first to l_last;
+      if SqlFindOutside(g_sqlText(l_index):';') > 0;
+        l_reason = 'The SQL text contains a semicolon';
+      endif;
+    endfor;
+  endif;
+  if l_reason <> '';
+    SqlReject(l_reason);
+    ReviewSpec(i_lineNo:i_line:l_reason);
+    return;
+  endif;
+
+  // The declarations of the result fields go before the first statement.
+  if g_declAt = 0;
+    AddOut('':g_sqlLineNo(1));
+    g_declAt = OutCount();
+  endif;
+  g_hdrIndex = 0;
+
+  for l_index = l_first to l_last;
+    if g_sqlText(l_index) = '';
+      iter;
+    endif;
+    l_text = g_sqlText(l_index);
+    if l_index = l_first;
+      Emit('exec sql ' + l_text:g_sqlLineNo(l_index));
+    else;
+      Emit(l_text:g_sqlLineNo(l_index):1);
+    endif;
+  endfor;
+  // A comment (--) at the end of the last line would hide the semicolon.
+  if SqlFindOutside(g_sqlText(l_last):'--') > 0;
+    Emit(';':g_sqlLineNo(l_last):1);
+  else;
+    Emit(';':g_sqlLineNo(l_last));
+  endif;
+
+  // The report: each line of the source is converted; the notes go on the first.
+  l_all = %xlate(C_LOWER:C_UPPER:g_sqlText(l_first));
+  for l_index = l_first + 1 to l_last;
+    l_all += ' ' + %xlate(C_LOWER:C_UPPER:g_sqlText(l_index));
+  endfor;
+  if %scan('WHENEVER':l_all) > 0 and %scan('GOTO':l_all) > 0;
+    AddReason(l_note:'WHENEVER ... GOTO names a TAG label, and TAG is not converted');
+  endif;
+  l_status = C_STS_CONVERTED;
+  if l_note <> '';
+    l_status = C_STS_ASSUMPTION;
+  endif;
+  if not g_inSub and not g_cycleNoted;
+    g_cycleNoted = *on;
+    l_status = C_STS_ASSUMPTION;
+    AddReason(l_note:RulConfig('CYCLE_NOTE':'The RPG cycle is not emulated'));
+  endif;
+  for l_index = 1 to g_sqlCount;
+    if l_index = 1;
+      RptItem(l_status:g_sqlLineNo(1):SpecText(g_sqlRaw(1)):l_note);
+    else;
+      RptItem(C_STS_CONVERTED:g_sqlLineNo(l_index):SpecText(g_sqlRaw(l_index)):'');
+    endif;
+  endfor;
+  RptItem(C_STS_CONVERTED:i_lineNo:SpecText(i_line):'');
+  g_sqlCount = 0;
+end-proc;
+
+// ------------------------------------------------------------------
 // The end of the source: groups still open are reported, and the placeholder
 // written before the first calculation becomes the declarations of the fields
 // that result fields define.
@@ -1767,6 +2008,9 @@ dcl-proc CalcFinish export;
 
   dcl-s l_index int(10);
 
+  if g_sqlOpen;
+    SqlReject('EXEC SQL is not closed by END-EXEC at the end of the source');
+  endif;
   if g_condLineCount > 0;
     g_depth = 0;
     for l_index = 1 to g_condLineCount;

@@ -20,6 +20,13 @@ dcl-pr CalcLine;
   i_lineNo int(10) const;
 end-pr;
 
+// One line of an embedded SQL statement of an SQLRPG source (C/EXEC SQL, C+ and
+// C/END-EXEC lines). Returns *on when the line was handled here.
+dcl-pr CalcSqlLine ind;
+  i_line char(100) const;
+  i_lineNo int(10) const;
+end-pr;
+
 // Writes the declarations of the result fields and closes the open groups.
 dcl-pr CalcFinish;
 end-pr;

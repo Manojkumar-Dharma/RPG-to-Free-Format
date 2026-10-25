@@ -180,6 +180,8 @@ dcl-proc ConvertSource;
         AddOut('':l_lineNo);
       when %subst(l_line:7:1) = '*';
         AddOut('//' + %trimr(%subst(l_line:8:73)):l_lineNo);
+      // SQLRPG: C/EXEC SQL, C+ lines and C/END-EXEC become EXEC SQL statements.
+      when l_form = 'C' and g_dialect = '3' and CalcSqlLine(l_line:l_lineNo);
       when %subst(l_line:7:1) = '/';
         ConvertDirective(l_lineNo:l_line);
       when l_form = 'H';

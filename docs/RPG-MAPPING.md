@@ -264,7 +264,7 @@ Fields that are defined by I, E or O specifications or by other lines are not de
 Source types `RPG38` (System/38 RPG III and the System/38 environment), `RPG`
 (RPG/400, OPM) and `SQLRPG` (RPG/400 with embedded SQL) are converted straight to `**FREE`: no `CVTRPGSRC` stage. The
 dialect is chosen from the source type (`RPG36` is dialect 2, `RPG38` and `RPG`
-and `SQLRPG` are dialect 3; the embedded SQL statements (`C/EXEC SQL`) of `SQLRPG` are reported R until they are converted) and selects the rows of `IACNVOPC` and `IACNVLAY`. Sources:
+and `SQLRPG` are dialect 3; the embedded SQL statements (`C/EXEC SQL`) of `SQLRPG` are converted, see "Embedded SQL (SQLRPG)" below) and selects the rows of `IACNVOPC` and `IACNVLAY`. Sources:
 SC09-1817 (RPG/400 Reference), SC09-1816 (User's Guide, appendix E on the
 System/38 environment).
 
@@ -314,6 +314,35 @@ from the design and not from a run:
 | `LEAVE` outside a loop | Reported R |
 | `CLEAR WORK`, `RESET FLAG` | `clear WORK;`, `reset FLAG;` |
 | `CABEQ`, `CAT`, `OPEN`, extra `ENDSL` | Reported R |
+
+## Embedded SQL (SQLRPG) to free form (FREE-11)
+
+Source: SC09-1816 (RPG/400 User's Guide), chapter 1, "The Structured Query Language". The rules there: the delimiter `/EXEC SQL` is in columns 7-15 with the slash in column 7; the statement can start on the same line and go on over any number of lines with `+` in column 7; statements cannot go past column 74; `/END-EXEC` is in columns 7-15 on a line of its own. Only for the RPG III dialect (`SQLRPG`); in `RPG36` the lines stay R (compiler directive).
+
+| Source | Becomes | Status |
+|---|---|---|
+| `C/EXEC SQL` (text after column 15 optional), `C+` lines (columns 8-74), `C/END-EXEC` | `exec sql <first line>`, the other lines of the statement under it, indented one level, and the closing `;` on the last line. The SQL text is not changed and every source line stays one output line | C |
+| `C* comment` between the lines of a statement | `// comment`, written before the statement | C |
+| A `--` comment at the end of the last line | The `;` goes on a line of its own, so the comment cannot hide it | C |
+| `WHENEVER ... GOTO label` | Converted as written; `TAG` is not converted, so the label does not exist in the result | A |
+| The first statement outside a subroutine | Also carries the cycle note, as the first calculation does | A |
+| Conditioning indicators before `C/EXEC SQL`, `EXEC SQL` in a `CASxx` group, a `;` in the SQL text outside a literal, no SQL text, more than 200 lines | Lines kept as `// RPG III: ...` | R |
+| `C/EXEC SQL` without `C/END-EXEC` (the next specification ends it), `C/END-EXEC` or `C+` without `C/EXEC SQL` | Lines kept as comments | R |
+
+Host variables (`:name`) are not changed. A field that is only used in an SQL statement and defined nowhere else is not declared; the SQL precompiler reports it. The converted member must be compiled as `SQLRPGLE` (`CRTSQLRPGI`); `C/EXEC SQL INCLUDE SQLCA` is converted to `exec sql include sqlca;` (check on the first compile that the precompiler accepts it in a free-form source). SQL in `/COPY` members is not allowed in RPG/400, so nothing is converted there.
+
+`samples/FREESQL.sqlrpg` has one case for each row. Expected result, written from the design and not from a run:
+
+| Lines | Expected |
+|---|---|
+| `C/EXEC SQL INCLUDE SQLCA` + `C/END-EXEC` | `exec sql include sqlca;`, converted (cycle note, A) |
+| `Z-ADD 1 KEY 5 0` | `dcl-s KEY zoned(5:0);` at the top, `KEY = 1;` |
+| `C/EXEC SQL` + 3 `C+` lines (a comment line between) | the comment, then `exec sql select count(*)`, `into :CNT`, `from CUSTMAS`, `where CUSTNO = :KEY;` on separate lines (SQL text as typed) |
+| `IFGT` + `C/EXEC SQL UPDATE ...` + `END` | the statement indented inside `if KEY > 0;` ... `endif;` |
+| `DELETE FROM WORKFILE -- clear the work file` | `exec sql DELETE FROM WORKFILE -- clear the work file` and `;` on the next line |
+| `WHENEVER SQLERROR GOTO ERR` | `exec sql WHENEVER SQLERROR GOTO ERR;`, A (TAG) |
+| `C   01` before `C/EXEC SQL` | indicator line and statement as `// RPG III:` comments, R |
+| `C/EXEC SQL` with no `C/END-EXEC`, then `ADD 1 KEY` | statement kept as comments, R; `ADD` converted; the `C/END-EXEC` after it R |
 
 ## More mapping tables
 
