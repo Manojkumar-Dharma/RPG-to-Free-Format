@@ -78,12 +78,13 @@ dcl-proc FreeConvert export;
     when %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPG36';
       g_dialect = '2';
     when %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPG38'
-         or %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPG';
+         or %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPG'
+         or %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'SQLRPG';
       g_dialect = '3';
     other;
       o_msgId = 'IAC0103';
       o_msgData = %trim(i_source.type)
-                  + ' (only RPG36, RPG38 and RPG are converted so far)';
+                  + ' (only RPG36, RPG38, RPG and SQLRPG are converted so far)';
       return 1;
   endsl;
 

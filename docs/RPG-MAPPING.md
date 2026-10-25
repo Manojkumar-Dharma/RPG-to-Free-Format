@@ -261,10 +261,10 @@ Fields that are defined by I, E or O specifications or by other lines are not de
 
 ## RPG III (RPG38 and RPG) to free form
 
-Source types `RPG38` (System/38 RPG III and the System/38 environment) and `RPG`
-(RPG/400, OPM) are converted straight to `**FREE`: no `CVTRPGSRC` stage. The
+Source types `RPG38` (System/38 RPG III and the System/38 environment), `RPG`
+(RPG/400, OPM) and `SQLRPG` (RPG/400 with embedded SQL) are converted straight to `**FREE`: no `CVTRPGSRC` stage. The
 dialect is chosen from the source type (`RPG36` is dialect 2, `RPG38` and `RPG`
-are dialect 3) and selects the rows of `IACNVOPC` and `IACNVLAY`. Sources:
+and `SQLRPG` are dialect 3; the embedded SQL statements (`C/EXEC SQL`) of `SQLRPG` are reported R until they are converted) and selects the rows of `IACNVOPC` and `IACNVLAY`. Sources:
 SC09-1817 (RPG/400 Reference), SC09-1816 (User's Guide, appendix E on the
 System/38 environment).
 
