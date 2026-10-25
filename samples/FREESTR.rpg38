@@ -1,0 +1,26 @@
+      * RPG III string operations: CAT, SCAN, SUBST, CHECK, CHEKR
+     H
+      * CAT
+     C           FIRST     CAT  LAST:1    NAME   30
+     C           FIRST     CAT  LAST:0    NAME2  30 P
+     C           FIRST     CAT  LAST      FULL   60
+     C                     CAT  TAIL:2    NAME
+      * SCAN
+     C           'AB'      SCAN STRING:T  POS     30
+     C           KEY:3     SCAN STRING    POS
+     C           'AB'      SCAN STRING                   90
+     C           'AB'      SCAN STRING    POS            91
+      * CHECK and CHEKR
+     C           DIGITS    CHECKSTRING:2  N       30     92
+     C           ' '       CHEKRSTRING    LEN     30
+      * SUBST
+     C           3         SUBSTSTRING:T  OUT    10
+     C           3         SUBSTSTRING:T  OUT2   10 P
+     C                     SUBSTSTRING:T  OUT
+      * Not converted
+     C           3         SUBSTSTRING:T  OUT          93
+     C           'AB'      SCAN STRING    POS       P
+     C           'AB'      SCAN STRING
+     C           FIRST     CAT  *BLANK    NAME
+     C           FIRST     CAT  LAST:N    NAME
+     C           'AB':'CD' XLATESTRING    OUT

@@ -287,9 +287,15 @@ New operation codes converted for RPG III:
 | `ENDIF`, `ENDDO`, `ENDCS`, `ENDSL` | The same as `END`, checked against the open group | A mismatch is reported R and the group stays open |
 | `ITER`, `LEAVE` | `iter;`, `leave;` | Only inside a converted `DO`, `DOWxx` or `DOUxx`; with conditioning indicators they are wrapped in an `if` |
 | `CLEAR`, `RESET` | `clear F2;`, `reset F2;` | `*NOKEY` in factor 1 is reported R |
+| `CAT` | `R = F1 + F2;` (no colon), `R = %trimr(F1) + ' ' + F2;` (`F2:1`, up to 10 blanks as a numeric literal); without factor 1 the result field is the first string | A without `P` (the rest of the result keeps its old value in RPG III, free-form pads with blanks), C with `P`. A variable number of blanks is R |
+| `SCAN` | `R = %scan(F1:base:start);` and, with a found indicator, `*INnn = (R > 0);`; without a result field `*INnn = (%scan(...) > 0);`. A compare length `KEY:3` becomes `%subst(KEY:1:3)` | A: RPG III signals an error when the start is beyond the string, `%scan` returns 0; the result field must not be an array |
+| `CHECK`, `CHEKR` | `R = %check(F1:base:start);` / `%checkr`, the found indicator as for `SCAN` | A, same note as `SCAN` |
+| `SUBST` | `R = %subst(base:start:length);` without factor 1 `%subst(base:start)`; start defaults to 1 | A without `P` (as for `CAT`), C with `P` |
+
+For the string operations: the error indicator (columns 56-57), a resulting indicator in columns 54-55, an operation extender other than `P` (and `P` on `SCAN`, `CHECK`, `CHEKR`), a figurative constant, and `SCAN`, `CHECK` or `CHEKR` with neither a result field nor a found indicator are reported R. The result field of `SCAN`, `CHECK`, `CHEKR` is declared as a number without decimals, that of `CAT` and `SUBST` as `char` when columns 49-51 give a length. `XLATE` is still R.
 
 Reported R, with the reason in `IACNVOPC`: `CABxx` (no `GOTO` or `TAG` in
-free-form), `CAT`, `CHECK`, `CHEKR`, `SCAN`, `SUBST`, `XLATE` (colon operands and
+free-form), `XLATE` (colon operands and
 the rule that the result keeps its tail without `P`), `TESTN`, `DSPLY`, `DUMP`,
 all file and data area operations (`OPEN`, `CLOSE`, `WRITE`, `UPDAT`, `DELET`,
 `SETGT`, `EXFMT`, `FEOD`, `UNLCK`, `READC`, `REDPE`, `COMIT`, `ROLBK`, `IN`, `OUT`,
@@ -313,7 +319,33 @@ from the design and not from a run:
 | `DOWLT`, `ITER` (ind 01), `LEAVE` (ind 02) | `dow CNT < 9;`, `if *IN01; iter; endif;`, `if *IN02; leave; endif;`, `enddo;` |
 | `LEAVE` outside a loop | Reported R |
 | `CLEAR WORK`, `RESET FLAG` | `clear WORK;`, `reset FLAG;` |
-| `CABEQ`, `CAT`, `OPEN`, extra `ENDSL` | Reported R |
+| `CABEQ`, `OPEN`, extra `ENDSL` | Reported R |
+| `FIRST CAT LAST:1 NAME 30` | `dcl-s NAME char(30);` and `NAME = %trimr(FIRST) + ' ' + LAST;`, A (no `P`) |
+
+## String operations (FREE-12)
+
+`samples/FREESTR.rpg38` has one line for each rule of the string operations table above. Expected result, written from the design and not from a run:
+
+| Line | Expected |
+|---|---|
+| `FIRST CAT LAST:1 NAME 30` | `NAME = %trimr(FIRST) + ' ' + LAST;`, `dcl-s NAME char(30);`, A |
+| `FIRST CAT LAST:0 NAME2 30 P` | `NAME2 = %trimr(FIRST) + LAST;`, C |
+| `FIRST CAT LAST FULL 60` | `FULL = FIRST + LAST;`, A |
+| `CAT TAIL:2 NAME` | `NAME = %trimr(NAME) + '  ' + TAIL;`, A |
+| `'AB' SCAN STRING:T POS 3 0` | `POS = %scan('AB':STRING:T);`, `dcl-s POS zoned(3:0);`, A |
+| `KEY:3 SCAN STRING POS` | `POS = %scan(%subst(KEY:1:3):STRING);`, A |
+| `'AB' SCAN STRING`, found indicator 90 | `*IN90 = (%scan('AB':STRING) > 0);`, A |
+| `'AB' SCAN STRING POS`, found indicator 91 | `POS = %scan('AB':STRING);` and `*IN91 = (POS > 0);`, A |
+| `DIGITS CHECK STRING:2 N 3 0`, found 92 | `N = %check(DIGITS:STRING:2);`, `*IN92 = (N > 0);`, A |
+| `' ' CHEKR STRING LEN 3 0` | `LEN = %checkr(' ':STRING);`, A |
+| `3 SUBST STRING:T OUT 10` | `OUT = %subst(STRING:T:3);`, `dcl-s OUT char(10);`, A |
+| `3 SUBST STRING:T OUT2 10 P` | `OUT2 = %subst(STRING:T:3);`, C |
+| `SUBST STRING:T OUT` | `OUT = %subst(STRING:T);`, A |
+| `SUBST` with error indicator 93 | R (needs MONITOR) |
+| `SCAN` with `P` | R (extender not allowed) |
+| `SCAN` without result field and indicator | R |
+| `CAT` with `*BLANK`, `CAT` with `LAST:N` | R (figurative constant; variable number of blanks) |
+| `XLATE` | R |
 
 ## Embedded SQL (SQLRPG) to free form (FREE-11)
 

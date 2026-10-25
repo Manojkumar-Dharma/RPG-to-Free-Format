@@ -47,5 +47,40 @@
   "use": "operations with an (E) extender",
   "note": "Error",
   "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%SCAN",
+  "since": "V5R1",
+  "use": "SCAN",
+  "note": "Position of a string in another string",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%CHECK",
+  "since": "V5R1",
+  "use": "CHECK",
+  "note": "First character not in a list",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%CHECKR",
+  "since": "V5R1",
+  "use": "CHEKR",
+  "note": "Last character not in a list",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%SUBST",
+  "since": "V5R1",
+  "use": "SUBST",
+  "note": "Part of a string",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%TRIMR",
+  "since": "V5R1",
+  "use": "CAT",
+  "note": "String without trailing blanks",
+  "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
  }
 ]

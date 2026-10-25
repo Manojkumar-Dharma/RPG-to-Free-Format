@@ -952,6 +952,12 @@ dcl-proc CalcLine export;
     ReviewHere(i_line:i_lineNo:l_reason:l_isStructure);
     return;
   endif;
+  // String operations read their own colon operands and the P extender.
+  if l_rule.kind = 'STRING';
+    g_hdrIndex = 0;
+    ConvertString(l_c:l_rule);
+    return;
+  endif;
   l_isSubrOperand = (l_rule.opcode = 'EXSR' or l_rule.opcode = 'BEGSR'
                      or l_rule.opcode = 'ENDSR' or l_rule.kind = 'CASE');
   if not ConvertFactors(l_c:l_isSubrOperand:l_rule:l_reason);
@@ -1768,6 +1774,284 @@ dcl-proc ReportConverted;
     AddReason(l_reason:RulConfig('CYCLE_NOTE':'The RPG cycle is not emulated'));
   endif;
   RptItem(l_status:i_c.lineNo:SpecText(i_c.line):l_reason);
+end-proc;
+
+// ------------------------------------------------------------------
+// Splits an operand at its colon (not inside a literal): STRING:T is the string
+// and its start, 'AB':2 the compare string and its length, TXT:1 the string and
+// its number of blanks.
+dcl-proc SplitColon;
+  dcl-pi *n;
+    i_text varchar(30) const;
+    o_first varchar(30);
+    o_second varchar(30);
+    o_has ind;
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_inLiteral ind inz(*off);
+
+  o_first = i_text;
+  o_second = '';
+  o_has = *off;
+  for l_index = 1 to %len(i_text);
+    if %subst(i_text:l_index:1) = C_QUOTE;
+      l_inLiteral = not l_inLiteral;
+    elseif %subst(i_text:l_index:1) = ':' and not l_inLiteral;
+      if l_index = 1;
+        o_first = '';
+      else;
+        o_first = %subst(i_text:1:l_index - 1);
+      endif;
+      if l_index < %len(i_text);
+        o_second = %subst(i_text:l_index + 1);
+      endif;
+      o_has = *on;
+      leave;
+    endif;
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+// One operand of a string operation as free-form text. Figurative constants
+// cannot be used in these operations.
+dcl-proc StringOperand;
+  dcl-pi *n ind;
+    i_text varchar(30) const;
+    o_text varchar(30);
+    o_reason varchar(150);
+  end-pi;
+
+  if not ConvOperand(i_text:o_text:o_reason);
+    return *off;
+  endif;
+  if %len(o_text) > 0;
+    if %subst(o_text:1:1) = '*';
+      o_reason = 'Figurative constants cannot be used in a string operation: '
+                 + i_text;
+      return *off;
+    endif;
+  endif;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// The free-form name of a resulting indicator, or the reason it cannot be used.
+dcl-proc IndicatorName;
+  dcl-pi *n varchar(150);
+    i_name char(2) const;
+    o_free varchar(20);
+  end-pi;
+
+  dcl-ds l_ind likeds(IAfreeInd_t);
+
+  o_free = '';
+  if not RulIndicator(i_name:l_ind);
+    return 'Indicator ' + %trim(i_name) + ' is not known';
+  endif;
+  if l_ind.cycle = 'Y';
+    return %trim(l_ind.reason);
+  endif;
+  o_free = %trim(l_ind.freeForm);
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// RPG III string operations (SC09-1817 chapter 11): CAT, SCAN, SUBST, CHECK and
+// CHEKR. The colon operands of factor 1 and factor 2 are read here. A line that
+// cannot be converted is reported R (the error indicator in columns 56-57 needs
+// MONITOR, a figurative constant or a variable number of blanks has no form).
+dcl-proc ConvertString;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-ds l_rule likeds(IAfreeOpc_t);
+  dcl-s l_op varchar(5);
+  dcl-s l_f1a varchar(30);
+  dcl-s l_f1b varchar(30);
+  dcl-s l_f2a varchar(30);
+  dcl-s l_f2b varchar(30);
+  dcl-s l_has1 ind;
+  dcl-s l_has2 ind;
+  dcl-s l_c1a varchar(30);
+  dcl-s l_c1b varchar(30);
+  dcl-s l_c2a varchar(30);
+  dcl-s l_c2b varchar(30);
+  dcl-s l_res varchar(30);
+  dcl-s l_left varchar(30);
+  dcl-s l_cmp varchar(80);
+  dcl-s l_expr varchar(200);
+  dcl-s l_found varchar(20);
+  dcl-s l_reason varchar(150) inz('');
+  dcl-s l_note varchar(190) inz('');
+  dcl-s l_pad ind;
+  dcl-s l_numeric ind;
+  dcl-s l_blanks int(10);
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+  dcl-s l_count int(10) inz(0);
+
+  l_op = i_rule.opcode;
+  l_numeric = (l_op = 'SCAN' or l_op = 'CHECK' or l_op = 'CHEKR');
+  l_pad = (i_c.halfAdjust = 'P');
+
+  // Indicators and the operation extender.
+  select;
+    when i_c.result1 <> '  ';
+      l_reason = 'Resulting indicator in columns 54-55 is not used by ' + l_op;
+    when i_c.result2 <> '  ';
+      l_reason = 'The error indicator (columns 56-57) needs MONITOR: not converted';
+    when i_c.result3 <> '  ' and not l_numeric;
+      l_reason = 'Resulting indicator in columns 58-59 is not used by ' + l_op;
+    when i_c.halfAdjust <> ' ' and not (l_pad and not l_numeric);
+      l_reason = 'Operation extender ' + i_c.halfAdjust + ' is not allowed for '
+                 + l_op;
+  endsl;
+
+  // Colon operands.
+  if l_reason = '';
+    SplitColon(i_c.factor1:l_f1a:l_f1b:l_has1);
+    SplitColon(i_c.factor2:l_f2a:l_f2b:l_has2);
+    select;
+      when l_has1 and l_op <> 'SCAN';
+        l_reason = 'Factor 1 of ' + l_op + ' has no colon operand';
+      when (l_has1 and l_f1b = '') or (l_has2 and l_f2b = '')
+           or (l_has1 and l_f1a = '') or l_f2a = '';
+        l_reason = 'A colon operand is not complete';
+    endsl;
+  endif;
+
+  // The operands as free-form text (a failing operand sets l_reason).
+  if l_reason = '' and l_f1a <> '';
+    StringOperand(l_f1a:l_c1a:l_reason);
+  endif;
+  if l_reason = '' and l_f1b <> '';
+    StringOperand(l_f1b:l_c1b:l_reason);
+  endif;
+  if l_reason = '';
+    StringOperand(l_f2a:l_c2a:l_reason);
+  endif;
+  if l_reason = '' and l_f2b <> '';
+    StringOperand(l_f2b:l_c2b:l_reason);
+  endif;
+  if l_reason = '';
+    if i_c.result <> '';
+      if %subst(i_c.result:1:1) = C_QUOTE or IsNumberLiteral(i_c.result);
+        l_reason = 'The result field ' + i_c.result + ' is not a field name';
+      else;
+        StringOperand(i_c.result:l_res:l_reason);
+      endif;
+    endif;
+  endif;
+  if l_reason = '' and i_rule.bifs <> '';
+    l_expr = LateBif(i_rule.bifs);
+    if l_expr <> '';
+      l_reason = 'Built-in function ' + l_expr + ' is newer than the target release';
+    endif;
+  endif;
+
+  // The found indicator (columns 58-59) of SCAN, CHECK and CHEKR.
+  l_found = '';
+  if l_reason = '' and l_numeric;
+    if i_c.result3 <> '  ';
+      l_reason = IndicatorName(i_c.result3:l_found);
+    endif;
+    if l_reason = '' and i_c.result = '' and l_found = '';
+      l_reason = 'A result field or a found indicator is required for ' + l_op;
+    endif;
+  endif;
+
+  // The expression.
+  if l_reason = '';
+    select;
+      when l_op = 'SCAN' or l_op = 'CHECK' or l_op = 'CHEKR';
+        l_cmp = l_c1a;
+        if l_has1;
+          l_cmp = '%subst(' + l_c1a + ':1:' + l_c1b + ')';
+        endif;
+        select;
+          when l_op = 'SCAN';
+            l_expr = '%scan(';
+          when l_op = 'CHECK';
+            l_expr = '%check(';
+          other;
+            l_expr = '%checkr(';
+        endsl;
+        l_expr += l_cmp + ':' + l_c2a;
+        if l_has2;
+          l_expr += ':' + l_c2b;
+        endif;
+        l_expr += ')';
+      when l_op = 'SUBST';
+        l_expr = '%subst(' + l_c2a + ':';
+        if l_has2;
+          l_expr += l_c2b;
+        else;
+          l_expr += '1';
+        endif;
+        if l_c1a <> '';
+          l_expr += ':' + l_c1a;
+        endif;
+        l_expr += ')';
+      other;
+        // CAT: factor 1, or the result field when factor 1 is blank.
+        l_left = l_c1a;
+        if l_left = '';
+          l_left = l_res;
+        endif;
+        if l_has2;
+          if %check(C_DIGITS:l_c2b) > 0 or %len(l_c2b) > 2;
+            l_reason = 'The number of blanks must be a numeric literal up to 10';
+          else;
+            l_blanks = %int(l_c2b);
+            if l_blanks > 10;
+              l_reason = 'The number of blanks must be a numeric literal up to 10';
+            endif;
+          endif;
+          l_expr = '%trimr(' + l_left + ')';
+          if l_blanks > 0 and l_reason = '';
+            l_expr += ' + ' + C_QUOTE + %subst('          ':1:l_blanks) + C_QUOTE;
+          endif;
+          l_expr += ' + ' + l_c2a;
+        else;
+          l_expr = l_left + ' + ' + l_c2a;
+        endif;
+    endsl;
+  endif;
+
+  // The field a result field defines.
+  if l_reason = '' and i_c.result <> '';
+    l_reason = DeclareResult(l_res:i_c.length:i_c.decimals:l_numeric);
+  endif;
+
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  // The statements.
+  if i_c.result <> '';
+    l_count += 1;
+    l_statements(l_count) = l_res + ' = ' + l_expr;
+    if l_found <> '';
+      l_count += 1;
+      l_statements(l_count) = l_found + ' = (' + l_res + ' > 0)';
+    endif;
+  else;
+    l_count = 1;
+    l_statements(1) = l_found + ' = (' + l_expr + ' > 0)';
+  endif;
+
+  // The status: A with the note of the table, C when P was given.
+  l_rule = i_rule;
+  if (l_op = 'CAT' or l_op = 'SUBST') and l_pad;
+    l_rule.status = C_STS_CONVERTED;
+    l_rule.reason = '';
+  else;
+    l_rule.status = C_STS_ASSUMPTION;
+  endif;
+  EmitStatements(i_c:l_rule:l_statements:l_count:l_note);
 end-proc;
 
 // ------------------------------------------------------------------

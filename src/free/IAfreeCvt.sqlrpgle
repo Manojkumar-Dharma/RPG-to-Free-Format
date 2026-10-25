@@ -181,7 +181,7 @@ dcl-proc ConvertSource;
       when %subst(l_line:7:1) = '*';
         AddOut('//' + %trimr(%subst(l_line:8:73)):l_lineNo);
       // SQLRPG: C/EXEC SQL, C+ lines and C/END-EXEC become EXEC SQL statements.
-      when l_form = 'C' and g_dialect = '3' and CalcSqlLine(l_line:l_lineNo);
+      when SqlHere(l_form:l_line:l_lineNo);
       when %subst(l_line:7:1) = '/';
         ConvertDirective(l_lineNo:l_line);
       when l_form = 'H';
@@ -212,6 +212,25 @@ dcl-proc ConvertSource;
 
     l_index += 1 + l_extra;
   enddo;
+end-proc;
+
+// ------------------------------------------------------------------
+// An SQLRPG line of an embedded SQL statement (RPG III dialect, C specification
+// type): handled by IAfreeCalc. Returns *off for every other line.
+dcl-proc SqlHere;
+  dcl-pi *n ind;
+    i_form char(1) const;
+    i_line char(100) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  if i_form <> 'C';
+    return *off;
+  endif;
+  if g_dialect <> '3';
+    return *off;
+  endif;
+  return CalcSqlLine(i_line:i_lineNo);
 end-proc;
 
 // ------------------------------------------------------------------

@@ -41,6 +41,7 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-05 | IACNVFREE | C specifications to free-form calculations, on JSON rule tables loaded into Db2 (`rules/`, `docs/RPG-MAPPING.md`) | Written | Not tested | `samples/FREEC.rpg36`; `rules/IACNVRULES.sql` needs JSON_TABLE; `TAG`, `GOTO`, `CABxx` reported R; file operations and MOVE wait for FREE-08 and the E specifications |
 | FREE-09 | IACNVFREE | RPG III (`RPG38`, `RPG`): dialect column on `IACNVOPC`, column map `IACNVLAY`, F (external files, `UC`), I (`inz`), structured operations (`SELEC`, `WHxx`, `ANDxx`, `ORxx`, `ENDyy`, `ITER`, `LEAVE`), `CLEAR`, `RESET` | Written | Not tested | `samples/FREE3.rpg38`; `SQLRPG` accepted, its embedded SQL reported R; string operations, `CABxx` and file operations reported R |
 | FREE-11 | IACNVFREE | Embedded SQL of `SQLRPG` (`C/EXEC SQL`, `C+`, `C/END-EXEC`) to free-form `exec sql ...;` | Written | Not tested | `samples/FREESQL.sqlrpg`; needs a compile and test; `WHENEVER ... GOTO` is A (TAG not converted); SQL in a `/COPY` member is not possible in RPG/400 |
+| FREE-12 | IACNVFREE | RPG III string operations `CAT`, `SCAN`, `SUBST`, `CHECK`, `CHEKR` to `+`, `%scan`, `%subst`, `%check`, `%checkr` (`XLATE` stays R) | Written | Not tested | `samples/FREESTR.rpg38`; needs a compile and test; decision: no `P` is converted with the padded form and marked A; error indicator R; `rules/IACNVRULES.sql` must be run again (new rows and BIFs) |
 | FREE-10 | IACNVFREE | RPG IV fixed form (`RPGLE`, `SQLRPGLE`): H, F, D, I, C, O, P specifications read through `IACNVLAY`; extended factor 2 and the free-form syntax lines of SC09-2508 as templates | Planned | Not started | 7.3 manuals are in `docs/ref` |
 | FREE-06 | IACNVFREE | O specifications to an externally described printer file (DDS) and `WRITE`/`EXCEPT` | Planned | Not started |  |
 | FREE-07 | IACNVFREE | E specifications (arrays and tables) to `dcl-s`/`dcl-ds`, compile-time data | Planned | Not started |  |
@@ -50,7 +51,7 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-08 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-12 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.
@@ -71,9 +72,8 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 - Comments in the converted source use `RulDialectLabel()` (`// RPG III: ...`).
 - Open decisions and gaps: `SQLRPG` embedded SQL is converted (FREE-11, written in
   `CalcSqlLine` of `IAfreeCalc`, needs a compile and test); string
-  operations (`CAT`, `SCAN`, `SUBST`, `CHECK`, `CHEKR`, `XLATE`) are reported R
-  (decision pending: temporary field for the no-`P` case, or wait for real
-  sources); file operations, `KLIST`/`KFLD` and `OPEN`/`CLOSE` wait for FREE-08;
+  operations `CAT`, `SCAN`, `SUBST`, `CHECK`, `CHEKR` are converted (FREE-12, no `P`
+  gives the padded form with status A); `XLATE` is reported R; file operations, `KLIST`/`KFLD` and `OPEN`/`CLOSE` wait for FREE-08;
   RPG III I specifications of externally described files (renames) are
   reported R.
 - Hot spots for merge conflicts: `IAfreeCalc.sqlrpgle` (`CalcLine`, dispatch in
