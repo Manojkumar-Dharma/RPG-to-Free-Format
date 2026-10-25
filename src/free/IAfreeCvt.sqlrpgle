@@ -5,9 +5,10 @@
 // lines and the compiler directives /EJECT, /TITLE and /SPACE.
 // FREE-04: input (I) specifications, as data structures.
 // FREE-05: calculation (C) specifications, converted by module IAfreeCalc with
-// the rule tables read by IAfreeRul (rules/*.json). Everything else (E, L, O
-// specifications, compile-time data) is kept as a comment and reported R;
-// those are later items (FREE-06, FREE-07). The rules are in
+// the rule tables read by IAfreeRul (rules/*.json).
+// FREE-07: extension (E) specifications for arrays and tables, and their
+// compile-time data. Everything else (L, O specifications) is kept as a comment
+// and reported R; those are later items (FREE-06). The rules are in
 // docs/RPG-MAPPING.md. Module of program IACNVFREE. Target release V7R3.
 
 ctl-opt nomain option(*srcstmt:*nodebugio);
@@ -21,6 +22,7 @@ dcl-c C_MAXOUT 40000;
 dcl-c C_MAXFILES 100;
 dcl-c C_MAXNAMES 3000;
 dcl-c C_MAXBLOCK 600;
+dcl-c C_MAXCT 200;
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 dcl-c C_DIGITS '0123456789';
@@ -50,6 +52,11 @@ dcl-s g_nameCount int(10);
 dcl-s g_blockText varchar(200) dim(C_MAXBLOCK);
 dcl-s g_blockLineNos int(10) dim(C_MAXBLOCK);
 dcl-s g_blockCount int(10);
+// Compile-time arrays and tables in the order of the E specifications ('' for one
+// that was not converted) and the number of ** data sections met so far.
+dcl-s g_ctNames varchar(6) dim(C_MAXCT);
+dcl-s g_ctCount int(10);
+dcl-s g_ctSection int(10);
 
 // ------------------------------------------------------------------
 dcl-proc FreeConvert export;
@@ -73,6 +80,8 @@ dcl-proc FreeConvert export;
   g_fileCount = 0;
   g_nameCount = 0;
   g_blockCount = 0;
+  g_ctCount = 0;
+  g_ctSection = 0;
 
   select;
     when %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPG36';
@@ -168,14 +177,13 @@ dcl-proc ConvertSource;
     l_extra = 0;
 
     select;
-      // After the ** record everything is compile-time data: copied as is.
-      when l_data;
-        AddOut(%trimr(l_line):l_lineNo);
+      // A ** record starts the data of the next compile-time array or table; the
+      // records after it are compile-time data, copied as is.
       when %subst(l_line:1:2) = '**';
         l_data = *on;
+        ConvertDataHeader(l_lineNo:l_line);
+      when l_data;
         AddOut(%trimr(l_line):l_lineNo);
-        RptItem(C_STS_REVIEW:l_lineNo:%trimr(l_line)
-                :'Compile-time data is kept as is; arrays are not converted yet');
       when %trim(%subst(l_line:6:75)) = '';
         AddOut('':l_lineNo);
       when %subst(l_line:7:1) = '*';
@@ -190,10 +198,10 @@ dcl-proc ConvertSource;
         l_extra = ConvertFile(l_index:l_lineNo:l_line);
       when l_form = 'I';
         l_extra = ConvertInput(l_index:l_lineNo:l_line);
+      when l_form = 'E';
+        ConvertExtension(l_lineNo:l_line);
       other;
         select;
-          when l_form = 'E';
-            l_reason = 'E (extension) specification not converted yet';
           when l_form = 'L';
             l_reason = 'L (line counter) specification not converted yet';
           when l_form = 'C';
@@ -212,6 +220,220 @@ dcl-proc ConvertSource;
 
     l_index += 1 + l_extra;
   enddo;
+end-proc;
+
+// ------------------------------------------------------------------
+// E: extension specifications (RPG II guide, chapter 20; RPG/400 reference,
+// chapter 9) for arrays and tables. Columns: 11-18 from file, 19-26 to file,
+// 27-32 name, 33-35 entries per record, 36-39 entries per array, 40-42 length of
+// an entry, 43 packed/binary, 44 decimal positions, 45 sequence; 46-51 name of
+// the second array of an alternating pair with 52-54 length, 55 packed/binary,
+// 56 decimal positions, 57 sequence.
+//   dcl-s NAME char(len) dim(n);                      run-time array
+//   dcl-s NAME zoned(len:dec) dim(n) perrcd(k) ctdata; compile-time array
+//   dcl-s ALT type dim(n) alt(NAME);                   alternating array
+// The data of a compile-time array stays after the source, under a **CTDATA
+// record (see ConvertDataHeader). Arrays loaded from a file (columns 11-18), arrays
+// written at the end of the job (19-26), record address files, packed or
+// binary data and the other data formats are reported R.
+dcl-proc ConvertExtension;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_up char(100);
+  dcl-s l_name varchar(6);
+  dcl-s l_alt varchar(6);
+  dcl-s l_ent varchar(3);
+  dcl-s l_dim varchar(4);
+  dcl-s l_type varchar(30);
+  dcl-s l_altType varchar(30);
+  dcl-s l_stmt varchar(200);
+  dcl-s l_altStmt varchar(200);
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_note varchar(190) inz('');
+  dcl-s l_status char(1);
+  dcl-s l_compile ind inz(*off);
+
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  l_name = %trim(%subst(l_up:27:6));
+  l_alt = %trim(%subst(l_up:46:6));
+  l_ent = %trim(%subst(l_up:33:3));
+  l_dim = %trim(%subst(l_up:36:4));
+
+  select;
+    when %trim(%subst(l_up:11:8)) <> '' or %trim(%subst(l_up:19:8)) <> '';
+      l_reason = 'Record address files, arrays loaded from a file and arrays '
+                 + 'written to a file are not converted';
+    when not IsRpgName(l_name:6) or IsReservedName(l_name);
+      l_reason = 'Array or table name (columns 27-32) is not valid';
+    when FindName(l_name) > 0;
+      l_reason = 'Name ' + l_name + ' is already defined at line '
+                 + %char(FindName(l_name));
+    when not IsNumber(l_dim) or ToInt(l_dim) < 1;
+      l_reason = 'Number of entries per array (columns 36-39) is not valid';
+    when l_ent <> '' and (not IsNumber(l_ent) or ToInt(l_ent) < 1);
+      l_reason = 'Number of entries per record (columns 33-35) is not valid';
+    when %subst(l_up:43:1) <> ' ' or %subst(l_up:55:1) <> ' ';
+      l_reason = 'Packed, binary and other data formats (columns 43 and 55) '
+                 + 'are not converted';
+  endsl;
+
+  // The type of the entries; the alternating array has its own type.
+  if l_reason = '';
+    l_reason = ArrayType(%subst(l_up:40:3):%subst(l_up:44:1):%subst(l_up:45:1)
+                         :l_type);
+  endif;
+  if l_reason = '' and l_alt <> '';
+    select;
+      when l_ent = '';
+        l_reason = 'An alternating array needs the entries per record (columns '
+                   + '33-35)';
+      when not IsRpgName(l_alt:6) or IsReservedName(l_alt) or l_alt = l_name;
+        l_reason = 'Alternating array name (columns 46-51) is not valid';
+      when FindName(l_alt) > 0;
+        l_reason = 'Name ' + l_alt + ' is already defined at line '
+                   + %char(FindName(l_alt));
+      other;
+        l_reason = ArrayType(%subst(l_up:52:3):%subst(l_up:56:1)
+                             :%subst(l_up:57:1):l_altType);
+    endsl;
+  endif;
+
+  if l_reason <> '';
+    ReviewSpec(i_lineNo:i_line:l_reason);
+    // A compile-time array that is not converted still owns a data section.
+    if %trim(%subst(l_up:11:8)) = '' and %trim(%subst(l_up:19:8)) = ''
+       and l_ent <> '';
+      AddCompileTime('');
+    endif;
+    return;
+  endif;
+
+  l_compile = (l_ent <> '');
+  l_stmt = 'dcl-s ' + l_name + ' ' + l_type + ' dim(' + %trim(%char(ToInt(l_dim)))
+           + ')';
+  if l_compile;
+    l_stmt += ' perrcd(' + %trim(%char(ToInt(l_ent))) + ') ctdata';
+    AddCompileTime(l_name);
+  endif;
+  select;
+    when %subst(l_up:45:1) = 'A';
+      l_stmt += ' ascend';
+    when %subst(l_up:45:1) = 'D';
+      l_stmt += ' descend';
+  endsl;
+  AddOut(l_stmt + ';':i_lineNo);
+  DefineName(l_name:i_lineNo);
+
+  if l_alt <> '';
+    l_altStmt = 'dcl-s ' + l_alt + ' ' + l_altType + ' dim('
+                + %trim(%char(ToInt(l_dim))) + ')';
+    select;
+      when %subst(l_up:57:1) = 'A';
+        l_altStmt += ' ascend';
+      when %subst(l_up:57:1) = 'D';
+        l_altStmt += ' descend';
+    endsl;
+    l_altStmt += ' alt(' + l_name + ')';
+    AddOut(l_altStmt + ';':i_lineNo);
+    DefineName(l_alt:i_lineNo);
+  endif;
+
+  l_status = C_STS_CONVERTED;
+  if %subst(l_name:1:3) = 'TAB';
+    l_status = C_STS_ASSUMPTION;
+    l_note = 'Table ' + l_name + ' is declared as an array. In RPG II the table '
+             + 'name in a calculation means the entry found by the last LOKUP; '
+             + 'that is not converted';
+  endif;
+  RptItem(l_status:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
+end-proc;
+
+// ------------------------------------------------------------------
+// The free-form type of the entries of an array: char(length) when the decimal
+// positions are blank, zoned(length:decimals) otherwise, and the sequence entry.
+// Returns the reason when the entries cannot be converted, '' otherwise.
+dcl-proc ArrayType;
+  dcl-pi *n varchar(190);
+    i_length char(3) const;
+    i_decimals char(1) const;
+    i_sequence char(1) const;
+    o_type varchar(30);
+  end-pi;
+
+  dcl-s l_len varchar(3);
+  dcl-s l_numeric ind;
+
+  o_type = '';
+  l_len = %trim(i_length);
+  l_numeric = (i_decimals <> ' ');
+  if not IsNumber(l_len);
+    return 'Length of entry is not valid';
+  endif;
+  if ToInt(l_len) < 1;
+    return 'Length of entry is not valid';
+  endif;
+  if i_sequence <> ' ' and i_sequence <> 'A' and i_sequence <> 'D';
+    return 'Sequence (A or D) is not valid';
+  endif;
+
+  if l_numeric;
+    if %check(C_DIGITS:i_decimals) > 0;
+      return 'Decimal positions are not valid';
+    endif;
+    if ToInt(l_len) > 15;
+      return 'A numeric entry is longer than 15 digits';
+    endif;
+    if %int(i_decimals) > ToInt(l_len);
+      return 'Decimal positions are more than the length';
+    endif;
+    o_type = 'zoned(' + %trim(%char(ToInt(l_len))) + ':' + i_decimals + ')';
+  else;
+    if ToInt(l_len) > 256;
+      return 'An alphanumeric entry is longer than 256 characters';
+    endif;
+    o_type = 'char(' + %trim(%char(ToInt(l_len))) + ')';
+  endif;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc AddCompileTime;
+  dcl-pi *n;
+    i_name varchar(6) const;
+  end-pi;
+
+  if g_ctCount >= C_MAXCT;
+    return;
+  endif;
+  g_ctCount += 1;
+  g_ctNames(g_ctCount) = i_name;
+end-proc;
+
+// ------------------------------------------------------------------
+// A ** record (the first one separates the source from the compile-time data):
+// the data records after it belong to the next compile-time array or table in the
+// order of the E specifications. It becomes **CTDATA name. The data records are
+// copied as they are.
+dcl-proc ConvertDataHeader;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+  end-pi;
+
+  g_ctSection += 1;
+  if g_ctSection <= g_ctCount and g_ctNames(g_ctSection) <> '';
+    AddOut('**CTDATA ' + g_ctNames(g_ctSection):i_lineNo);
+    RptItem(C_STS_CONVERTED:i_lineNo:%trimr(i_line)
+            :'');
+  else;
+    AddOut(%trimr(i_line):i_lineNo);
+    RptItem(C_STS_REVIEW:i_lineNo:%trimr(i_line)
+            :'This data section belongs to no converted compile-time array or '
+             + 'table: kept as is');
+  endif;
 end-proc;
 
 // ------------------------------------------------------------------

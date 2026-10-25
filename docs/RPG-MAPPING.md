@@ -39,8 +39,8 @@ safely; not attempted.)
   sequence number or date prefix) is not documented in the guide, and the
   `.rpg36` files in `samples/OCL Examples` are placeholders (for example
   `SETON` at position 13, where RPG II has the operation in columns 28-32).
-- Arrays and tables (E specifications), data structures, edit codes and
-  compile-time data: mapping not written yet.
+- Edit codes and the O specifications: mapping not written yet (FREE-06). Arrays and
+  tables are in "Arrays and tables (FREE-07)" below.
 
 ## Where to look in the manuals
 
@@ -168,7 +168,8 @@ The F specifications at the start of the sample set up the files; the blocks are
 | Comment (`*` in column 7) | `//` and the text of columns 8-80 | - (not reported) |
 | `/EJECT`, `/TITLE`, `/SPACE` | kept (valid in free-form) | C |
 | Other directives such as `/COPY` | comment | R |
-| E, L, O specifications | `// RPG II:` and the line | R (FREE-06, FREE-07) |
+| L, O specifications | `// RPG II:` and the line | R (FREE-06) |
+| E specifications | see "Arrays and tables (FREE-07)" | C, A or R |
 | I specifications | see "Input specification (I) to data structures" | C, A or R |
 | C specifications | see "Calculation specifications (C)" | C, A or R |
 | `**` record and the data after it | kept as is | R: arrays are not converted yet |
@@ -321,6 +322,34 @@ from the design and not from a run:
 | `CLEAR WORK`, `RESET FLAG` | `clear WORK;`, `reset FLAG;` |
 | `CABEQ`, `OPEN`, extra `ENDSL` | Reported R |
 | `FIRST CAT LAST:1 NAME 30` | `dcl-s NAME char(30);` and `NAME = %trimr(FIRST) + ' ' + LAST;`, A (no `P`) |
+
+## Arrays and tables (FREE-07)
+
+Source: SC09-1818 chapter 20 (RPG II), SC09-1817 chapter 9 (RPG III), ILE RPG reference (`dcl-s` keywords `DIM`, `PERRCD`, `CTDATA`, `ALT`, `ASCEND`, `DESCEND`; compile-time data, "Coding a Compile-Time Array"). Columns of the E specification: 11-18 from file, 19-26 to file, 27-32 name, 33-35 entries per record, 36-39 entries per array, 40-42 length, 43 packed or binary, 44 decimal positions, 45 sequence, 46-51 second array of an alternating pair with 52-54 length, 55 packed or binary, 56 decimal positions, 57 sequence.
+
+| Source | Becomes | Status |
+|---|---|---|
+| Run-time array (columns 33-35 blank) | `dcl-s NAME char(len) dim(n);`, `zoned(len:dec)` when column 44 has decimal positions | C |
+| Compile-time array (columns 33-35 filled, no file) | `dcl-s NAME type dim(n) perrcd(k) ctdata;` | C |
+| Sequence A or D (column 45) | `ascend` or `descend` | C |
+| Alternating pair (columns 46-57) | the main array as above, and `dcl-s ALT type dim(n) alt(NAME);` for the second array (`ALT` is on the alternating array, `PERRCD` and `CTDATA` only on the main one) | C |
+| Table (name starts with `TAB`) | declared as an array | A: in RPG II the table name in a calculation means the entry found by the last `LOKUP`; that is not converted |
+| The `**` record before compile-time data | `**CTDATA NAME`, the name of the next compile-time array or table in the order of the E specifications; the data records are copied as they are | C |
+| A `**` section with no converted array | kept as it is | R |
+| From file (11-18), to file (19-26), record address files, packed or binary format (43, 55), a name or length that is not valid, a name already defined | line kept as `// RPG II:` comment; a compile-time array that is not converted still owns its data section, so the sections stay in order | R |
+
+Numeric entries are declared `zoned`, the format of the data records. Entries of a numeric array are limited to 15 digits and alphanumeric entries to 256 characters, as in the source. The C specifications keep their own rules: `SORTA` and `XFOOT` were already converted and now find their array; `LOKUP` and `MOVEA` are still reported R (their conversion is not written yet, the array definitions they need are now declared).
+
+`samples/FREEE.rpg36` has one case for each row. Expected result, written from the design and not from a run:
+
+| Lines | Expected |
+|---|---|
+| `WORK` 10 entries of 5 | `dcl-s WORK char(5) dim(10);` |
+| `DAYS` 7 per record, 7 entries of 3 | `dcl-s DAYS char(3) dim(7) perrcd(7) ctdata;` |
+| `TABCOD` 3 digits, A, with `TABAMT` 6 digits 2 decimals | `dcl-s TABCOD zoned(3:0) dim(10) perrcd(5) ctdata ascend;` (A: table) and `dcl-s TABAMT zoned(6:2) dim(10) alt(TABCOD);` |
+| `AMT` 5 digits 2 decimals, D | `dcl-s AMT zoned(5:2) dim(8) perrcd(4) ctdata descend;` |
+| `FILARR` with a from file, `PCKARR` with P, `BADLEN` length 300, a second `DAYS` | each kept as comment, R; `PCKARR` still owns a data section |
+| the four `**` sections | `**CTDATA DAYS`, `**CTDATA TABCOD`, `**CTDATA AMT`, and the fourth kept as `**`, R |
 
 ## String operations (FREE-12)
 

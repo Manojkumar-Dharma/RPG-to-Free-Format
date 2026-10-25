@@ -509,7 +509,7 @@
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "LOKUP needs the array or table definition (FREE-07)",
+  "reason": "LOKUP is not converted yet; the array or table definition comes from the E specification (FREE-07)",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -623,7 +623,7 @@
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "MOVEA depends on array definitions (FREE-07)",
+  "reason": "MOVEA is not converted yet; the array definitions come from the E specifications (FREE-07)",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {

@@ -1,0 +1,21 @@
+      * RPG II extension specifications: arrays, tables and compile-time data
+     H
+     E                    WORK       10  5
+     E                    DAYS    7   7  3
+     E                    TABCOD  5  10  3 0ATABAMT  6 2
+     E                    AMT     4   8  5 2D
+      * Not converted
+     E    ARRFILE         FILARR  4   8  5 0
+     E                    PCKARR  4   8  5P2
+     E                    BADLEN     10300
+     E                    DAYS        3  2
+**
+MONTUEWEDTHUFRISATSUN
+**
+001012345002023456003034567004045678005056789
+006067890007078901008089012009090123010001234
+**
+00850007500065000550
+00450003500025000100
+**
+1234512345
