@@ -18,6 +18,7 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 /copy qcpysrc,IAcnvSrvP
 /copy qcpysrc,IAfreeRulP
 /copy qcpysrc,IAfreeCalcP
+/copy qcpysrc,IAfreeFx4P
 
 dcl-c C_MAXSRC 20000;
 dcl-c C_MAXOUT 40000;
@@ -93,10 +94,13 @@ dcl-proc FreeConvert export;
          or %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPG'
          or %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'SQLRPG';
       g_dialect = '3';
+    when %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPGLE'
+         or %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'SQLRPGLE';
+      g_dialect = '4';
     other;
       o_msgId = 'IAC0103';
       o_msgData = %trim(i_source.type)
-                  + ' (only RPG36, RPG38, RPG and SQLRPG are converted so far)';
+                  + ' (only RPG36, RPG38, RPG, SQLRPG, RPGLE and SQLRPGLE are converted)';
       return 1;
   endsl;
 
@@ -129,10 +133,16 @@ dcl-proc FreeConvert export;
 
   AddOut('**FREE':0);
   CalcStart();
-  for l_index = 1 to g_sourceCount;
-    CalcPrescan(g_sourceLines(l_index));
-  endfor;
+  Fx4Start();
+  if g_dialect <> '4';
+    for l_index = 1 to g_sourceCount;
+      CalcPrescan(g_sourceLines(l_index));
+    endfor;
+  endif;
   ConvertSource();
+  if g_dialect = '4';
+    Fx4Flush();
+  endif;
   CalcFinish();
   if g_overflow;
     o_msgId = 'IAC0101';
@@ -194,6 +204,9 @@ dcl-proc ConvertSource;
         AddOut('':l_lineNo);
       when %subst(l_line:7:1) = '*';
         AddOut('//' + %trimr(%subst(l_line:8:73)):l_lineNo);
+      // RPG IV fixed form: H, F, D and P specifications, directives, /FREE blocks.
+      when g_dialect = '4';
+        Fx4Line(l_index:l_lineNo:l_line:l_extra);
       // SQLRPG: C/EXEC SQL, C+ lines and C/END-EXEC become EXEC SQL statements.
       when SqlHere(l_form:l_line:l_lineNo);
       when %subst(l_line:7:1) = '/';
@@ -430,7 +443,11 @@ dcl-proc ConvertDataHeader;
   end-pi;
 
   g_ctSection += 1;
-  if g_ctSection <= g_ctCount and g_ctNames(g_ctSection) <> '';
+  if g_dialect = '4';
+    AddOut(%trimr(i_line):i_lineNo);
+    RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(i_line)
+            :'Compile-time data section kept as is: check its name');
+  elseif g_ctSection <= g_ctCount and g_ctNames(g_ctSection) <> '';
     AddOut('**CTDATA ' + g_ctNames(g_ctSection):i_lineNo);
     RptItem(C_STS_CONVERTED:i_lineNo:%trimr(i_line)
             :'');
@@ -1004,6 +1021,31 @@ dcl-proc CountContinuations;
     endif;
   enddo;
   return l_count;
+end-proc;
+
+// ------------------------------------------------------------------
+// Source access for IAfreeFx4.
+dcl-proc SrcCount export;
+  dcl-pi *n int(10);
+  end-pi;
+
+  return g_sourceCount;
+end-proc;
+
+dcl-proc SrcLine export;
+  dcl-pi *n char(100);
+    i_index int(10) const;
+  end-pi;
+
+  return g_sourceLines(i_index);
+end-proc;
+
+dcl-proc SrcLineNo export;
+  dcl-pi *n int(10);
+    i_index int(10) const;
+  end-pi;
+
+  return g_sourceLineNos(i_index);
 end-proc;
 
 // ------------------------------------------------------------------

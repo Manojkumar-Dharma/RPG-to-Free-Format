@@ -1,0 +1,46 @@
+**FREE
+// IAfreeFx4P - prototypes of IAfreeFx4, the RPG IV fixed-form specification
+// converter of IACNVFREE (H, F, D and P specifications, compiler directives and
+// /FREE blocks), and of the source access procedures of IAfreeCvt it uses.
+// Include with: /copy qcpysrc,IAfreeFx4P (member IAfreeFx4P of file QCPYSRC).
+// Target release V7R3.
+
+/if defined(IAFREEFX4P)
+/eof
+/endif
+/define IAFREEFX4P
+
+// ---- IAfreeFx4 -------------------------------------------------------
+// Resets the state (open data structure, /FREE block).
+dcl-pr Fx4Start;
+end-pr;
+
+// One source line of an RPGLE or SQLRPGLE member that is not blank, not a
+// comment line and not compile-time data. Returns *on when the line was handled
+// here (o_extra is the number of following lines that were consumed with it),
+// *off for a specification that the caller must handle (C, and the I and O
+// specifications).
+dcl-pr Fx4Line ind;
+  i_index int(10) const;
+  i_lineNo int(10) const;
+  i_line char(100) const;
+  o_extra int(10);
+end-pr;
+
+// Closes a data structure, prototype or procedure interface that is still open.
+// Called before every specification that is not a D specification, and at the
+// end of the source.
+dcl-pr Fx4Flush;
+end-pr;
+
+// ---- IAfreeCvt (source access) ------------------------------------------
+dcl-pr SrcCount int(10);
+end-pr;
+
+dcl-pr SrcLine char(100);
+  i_index int(10) const;
+end-pr;
+
+dcl-pr SrcLineNo int(10);
+  i_index int(10) const;
+end-pr;

@@ -76,6 +76,14 @@ dcl-pr RulLayout ind;
   o_len int(10);
 end-pr;
 
+// The text (not trimmed) of a field of a specification line, or '' when the
+// dialect has no such field.
+dcl-pr RulText varchar(100);
+  i_spec char(1) const;
+  i_field varchar(12) const;
+  i_line char(100) const;
+end-pr;
+
 // The dialect given to RulLoad.
 dcl-pr RulDialect char(1) end-pr;
 

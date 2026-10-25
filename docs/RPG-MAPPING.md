@@ -363,6 +363,38 @@ Reported R: a file that is not declared by a converted F specification (a record
 | `KLIST` and `KFLD` lines | reported C, nothing written |
 | `WRITE` with `EOF` 98; `CHAIN` with the list `KEYBAD` (a `KFLD` with a literal) | R |
 
+## RPG IV fixed form (RPGLE, SQLRPGLE) to free form (FREE-10)
+
+Source: SC09-2508 (7.3), free-form equivalents of the H, F, D and P
+specifications. Module `IAfreeFx4`; columns come from `IACNVLAY` (dialect 4). The
+C, I and O specifications are not converted yet and are reported R (the C
+specification is the second part of FREE-10).
+
+| Fixed form | Free form |
+|------------|-----------|
+| H keywords (lines joined) | `ctl-opt keywords;` |
+| F, type I + designation F | `dcl-f NAME disk(len) usage(*input);` (device keyword carries the record length; externally described: no length) |
+| F, I + A / U / U + A / O / C | `usage(*input : *output)` / `*update : *delete` / `*update : *delete : *output` / `*output` / `*input : *output` |
+| F, record address type K or A with key length | `keyed` / `keyed(*char : len)` |
+| F, designation P, S, R, T; sequence; limits; output + A | R: not supported in free form |
+| D, DS | `dcl-ds NAME ... ;` with subfields `dcl-subf`, `end-ds;` (none for LIKEDS or LIKEREC) |
+| D, S | `dcl-s NAME type;` |
+| D, C | `dcl-c NAME value;` |
+| D, PR / PI | `dcl-pr`, `dcl-pi` with `dcl-parm`, `end-pr;`, `end-pi;` |
+| D, DS type S / U | `psds` / `dtaara(*auto)` |
+| D, from-to positions | length in digits, `pos(from)` for a subfield |
+| D, internal type blank + decimals | `packed` (standalone, parameter) or `zoned` (subfield) |
+| D, VARYING / DATFMT / TIMFMT / PROCPTR | `varchar(len)` / `date(fmt)` / `time(fmt)` / `pointer(*proc)` |
+| D, OVERLAY(ds:pos) | `pos(pos)` |
+| D, EXT / EXTNAME / EXTFLD | first keyword, names written as literals (reported A) |
+| P, B / E | `dcl-proc NAME;` / `end-proc;` |
+| /COPY, /INCLUDE and other directives | kept (A for /COPY: the member has to be free-form too) |
+| /FREE ... /END-FREE | lines copied from column 8, markers dropped |
+
+Reported R: names ending in `...`, keyword literals continued with `+` or `-`,
+FROMFILE, TOFILE, CLASS, PACKEVEN, object types, invalid entries. `**` compile-time
+data sections are kept as is (A). Sample: `samples/FREE4.rpgle`.
+
 ## Arrays and tables (FREE-07)
 
 Source: SC09-1818 chapter 20 (RPG II), SC09-1817 chapter 9 (RPG III), ILE RPG reference (`dcl-s` keywords `DIM`, `PERRCD`, `CTDATA`, `ALT`, `ASCEND`, `DESCEND`; compile-time data, "Coding a Compile-Time Array"). Columns of the E specification: 11-18 from file, 19-26 to file, 27-32 name, 33-35 entries per record, 36-39 entries per array, 40-42 length, 43 packed or binary, 44 decimal positions, 45 sequence, 46-51 second array of an alternating pair with 52-54 length, 55 packed or binary, 56 decimal positions, 57 sequence.

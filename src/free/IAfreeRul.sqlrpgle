@@ -272,7 +272,7 @@ dcl-proc RulLoad export;
   enddo;
   exec sql close cfgCursor;
 
-  if g_opcCount = 0 or g_indCount = 0 or g_layCount = 0;
+  if (g_opcCount = 0 and g_dialect <> '4') or g_indCount = 0 or g_layCount = 0;
     o_msgId = 'IAC0104';
     o_msgData = 'The tables are empty: run rules/IACNVRULES.sql';
     return 1;
@@ -303,6 +303,25 @@ dcl-proc RulLayout export;
   o_from = 0;
   o_len = 0;
   return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+// The text of a field of a specification line ('' when the dialect has no such
+// field), not trimmed.
+dcl-proc RulText export;
+  dcl-pi *n varchar(100);
+    i_spec char(1) const;
+    i_field varchar(12) const;
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_from int(10);
+  dcl-s l_len int(10);
+
+  if not RulLayout(i_spec:i_field:l_from:l_len);
+    return '';
+  endif;
+  return %subst(i_line:l_from:l_len);
 end-proc;
 
 // ------------------------------------------------------------------

@@ -334,5 +334,269 @@
   "from": 18,
   "length": 42,
   "source": "SC09-1817 chapter 9, Table 30 (combined range)"
+ },
+ {
+  "dialect": "4",
+  "spec": "H",
+  "field": "KEYWORDS",
+  "from": 7,
+  "length": 74,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', control specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "NAME",
+  "from": 7,
+  "length": 10,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "TYPE",
+  "from": 17,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "DESIG",
+  "from": 18,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "EOF",
+  "from": 19,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "ADD",
+  "from": 20,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "SEQ",
+  "from": 21,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "FORMAT",
+  "from": 22,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "RECLEN",
+  "from": 23,
+  "length": 5,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "LIMITS",
+  "from": 28,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "KEYLEN",
+  "from": 29,
+  "length": 5,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "ADDRTYPE",
+  "from": 34,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "ORG",
+  "from": 35,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "DEVICE",
+  "from": 36,
+  "length": 7,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "CONTBLANK",
+  "from": 7,
+  "length": 37,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "KEYWORDS",
+  "from": 44,
+  "length": 37,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "F",
+  "field": "COMMENT",
+  "from": 81,
+  "length": 20,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', file description specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "D",
+  "field": "NAME",
+  "from": 7,
+  "length": 15,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', definition specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "D",
+  "field": "EXT",
+  "from": 22,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', definition specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "D",
+  "field": "DSTYPE",
+  "from": 23,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', definition specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "D",
+  "field": "DEFTYPE",
+  "from": 24,
+  "length": 2,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', definition specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "D",
+  "field": "FROM",
+  "from": 26,
+  "length": 7,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', definition specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "D",
+  "field": "TO",
+  "from": 33,
+  "length": 7,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', definition specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "D",
+  "field": "DTYPE",
+  "from": 40,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', definition specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "D",
+  "field": "DEC",
+  "from": 41,
+  "length": 2,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', definition specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "D",
+  "field": "CONTBLANK",
+  "from": 7,
+  "length": 37,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', definition specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "D",
+  "field": "KEYWORDS",
+  "from": 44,
+  "length": 37,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', definition specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "D",
+  "field": "COMMENT",
+  "from": 81,
+  "length": 20,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', definition specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "P",
+  "field": "NAME",
+  "from": 7,
+  "length": 15,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', procedure specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "P",
+  "field": "BEGEND",
+  "from": 24,
+  "length": 1,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', procedure specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "P",
+  "field": "CONTBLANK",
+  "from": 7,
+  "length": 37,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', procedure specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "P",
+  "field": "KEYWORDS",
+  "from": 44,
+  "length": 37,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', procedure specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "P",
+  "field": "COMMENT",
+  "from": 81,
+  "length": 20,
+  "source": "SC09-2508 (7.3) chapter 'Specifications', procedure specification"
  }
 ]
