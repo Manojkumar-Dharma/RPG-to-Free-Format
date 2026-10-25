@@ -2,6 +2,9 @@
      DCount            S        5      I
      DTotal            S        9       2
      DKey              S        6       0
+     DName             S        10     A
+     DShort            S        4      A
+     DFlag             S               N
      C*Main loop
      C     Init          BEGSR
      C                   EVAL      Count = 0
@@ -23,7 +26,6 @@
      C     Count         DOWLT     5
      C                   ADD       1             Count
      C                   ENDDO
-     C     X             MOVE      Total         Name
      C                   EVAL      *inlr = *on
      C     Key           SETLL     ORDERS                             90  89
      C     Key           CHAIN     ORDERS                             9192
@@ -36,3 +38,8 @@
      C     Total         SUB       1             Total                707172
      C  N90              ADD       1             Count
      C   91              SETON                                          9293
+     C                   MOVE      Short         Name
+     C                   MOVEL     'ABC'         Name
+     C                   MOVE      '1'           *IN50
+     C                   MOVE      *BLANKS       Name
+     C                   MOVE      Count         Name

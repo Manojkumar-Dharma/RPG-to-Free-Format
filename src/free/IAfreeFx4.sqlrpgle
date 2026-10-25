@@ -37,6 +37,10 @@ dcl-s g_klName varchar(14) dim(50);     // KLIST names and their key fields
 dcl-s g_klKeys varchar(200) dim(50);
 dcl-s g_klCount int(10) inz(0);
 dcl-s g_klDone ind inz(*off);
+dcl-c C_MAXSYM 1500;
+dcl-s g_symName varchar(45) dim(C_MAXSYM);   // declared fields and their types
+dcl-s g_symType varchar(60) dim(C_MAXSYM);
+dcl-s g_symCount int(10) inz(0);
 dcl-s g_quoted ind inz(*off);           // a name was written as a literal
 dcl-s g_constName varchar(21) dim(C_MAXCONST);
 dcl-s g_constCount int(10) inz(0);
@@ -107,6 +111,7 @@ dcl-proc Fx4Start export;
   g_depth = 0;
   g_klCount = 0;
   g_klDone = *off;
+  g_symCount = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1256,6 +1261,20 @@ dcl-proc ConvertD;
   endfor;
   l_stmt += ';';
 
+  // Remember the type for MOVE and MOVEL (C specifications).
+  if l_name <> '' and (l_head = 'dcl-s' or l_head = 'dcl-subf' or l_head = 'dcl-parm');
+    l_k = KwFind('LIKE');
+    if l_typeText = '' and l_k > 0;
+      l_typeText = SymType(KwParam(l_k));
+    endif;
+    if l_typeText <> '';
+      AddSym(l_name:l_typeText);
+      if l_isSub and g_blockName <> '';
+        AddSym(g_blockName + '.' + l_name:l_typeText);
+      endif;
+    endif;
+  endif;
+
   // LIKEDS and LIKEREC data structures have no END-DS.
   if l_defType = 'DS' and (KwFind('LIKEDS') > 0 or KwFind('LIKEREC') > 0);
     l_opensBlock = *off;
@@ -1410,6 +1429,217 @@ dcl-proc IsArith;
 
   return i_op = 'ADD' or i_op = 'SUB' or i_op = 'MULT' or i_op = 'DIV'
          or i_op = 'Z-ADD' or i_op = 'Z-SUB';
+end-proc;
+
+
+// ------------------------------------------------------------------
+dcl-proc AddSym;
+  dcl-pi *n;
+    i_name varchar(45) const;
+    i_type varchar(60) const;
+  end-pi;
+
+  if g_symCount < C_MAXSYM;
+    g_symCount += 1;
+    g_symName(g_symCount) = Up(i_name);
+    g_symType(g_symCount) = i_type;
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// The free-form type text of a declared field, '' when it is not known.
+dcl-proc SymType;
+  dcl-pi *n varchar(60);
+    i_name varchar(100) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+
+  for l_k = g_symCount downto 1;
+    if g_symName(l_k) = Up(i_name);
+      return g_symType(l_k);
+    endif;
+  endfor;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// Splits a type text such as packed(9 : 2): o_kind C char, V varchar, N numeric
+// (packed, zoned, int, uns, bindec), I indicator, O other; o_len length or digits,
+// o_dec decimals.
+dcl-proc ParseType;
+  dcl-pi *n;
+    i_text varchar(60) const;
+    o_kind char(1);
+    o_len int(10);
+    o_dec int(10);
+  end-pi;
+
+  dcl-s l_word varchar(20);
+  dcl-s l_paren int(10);
+  dcl-s l_arg varchar(40);
+  dcl-s l_colon int(10);
+
+  o_kind = 'O';
+  o_len = 0;
+  o_dec = 0;
+  l_paren = %scan('(':i_text);
+  if l_paren = 0;
+    l_word = i_text;
+    l_arg = '';
+  else;
+    l_word = %subst(i_text:1:l_paren - 1);
+    l_arg = %trim(%subst(i_text:l_paren + 1:%len(i_text) - l_paren - 1));
+  endif;
+  l_colon = %scan(':':l_arg);
+  if l_word = 'ind';
+    o_kind = 'I';
+    return;
+  endif;
+  if l_arg = '' or %check(C_DIGITS + ': ':l_arg) > 0;
+    return;
+  endif;
+  if l_colon > 0;
+    o_len = %int(%trim(%subst(l_arg:1:l_colon - 1)));
+    o_dec = %int(%trim(%subst(l_arg:l_colon + 1)));
+  else;
+    o_len = %int(l_arg);
+  endif;
+  select;
+    when l_word = 'char';
+      o_kind = 'C';
+    when l_word = 'varchar';
+      o_kind = 'V';
+    when l_word = 'packed' or l_word = 'zoned' or l_word = 'int' or l_word = 'uns'
+         or l_word = 'bindec';
+      o_kind = 'N';
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+// MOVE and MOVEL (SC09-2508, the operation codes): converted only when both
+// fields are declared in this source, have a known type and the result is the
+// same as an assignment or a %SUBST of it. Returns the statement, or '' with
+// o_reason set.
+dcl-proc MoveStmt;
+  dcl-pi *n varchar(300);
+    i_op varchar(10) const;
+    i_pad ind const;
+    i_f2 varchar(14) const;
+    i_res varchar(14) const;
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_rKind char(1);
+  dcl-s l_rLen int(10);
+  dcl-s l_rDec int(10);
+  dcl-s l_sKind char(1);
+  dcl-s l_sLen int(10);
+  dcl-s l_sDec int(10);
+  dcl-s l_rType varchar(60);
+  dcl-s l_sType varchar(60);
+  dcl-s l_k int(10);
+  dcl-s l_pairs int(10);
+  dcl-s l_isIndRes ind inz(*off);
+  dcl-s l_up varchar(14);
+
+  o_reason = '';
+  l_up = Up(i_f2);
+  l_rType = SymType(i_res);
+
+  // Indicators: MOVE '1' *IN90, MOVE *ON ind.
+  if %len(i_res) = 5 and Up(%subst(i_res:1:3)) = '*IN'
+     and %check(C_DIGITS:%subst(i_res:4:2)) = 0;
+    l_isIndRes = *on;
+  endif;
+  if l_isIndRes or (l_rType = 'ind');
+    select;
+      when i_f2 = '''1''' or l_up = '*ON';
+        return i_res + ' = *on';
+      when i_f2 = '''0''' or l_up = '*OFF';
+        return i_res + ' = *off';
+    endsl;
+    o_reason = 'MOVE to an indicator needs the literal 1 or 0, *ON or *OFF';
+    return '';
+  endif;
+
+  // Figurative constants.
+  if l_up = '*BLANK' or l_up = '*BLANKS' or l_up = '*ZERO' or l_up = '*ZEROS'
+     or l_up = '*HIVAL' or l_up = '*LOVAL';
+    if l_rType = '';
+      o_reason = 'The result field ' + i_res + ' is not declared in this source';
+      return '';
+    endif;
+    if l_up = '*ZERO' or l_up = '*ZEROS';
+      ParseType(l_rType:l_rKind:l_rLen:l_rDec);
+      if l_rKind = 'N';
+        return i_res + ' = 0';
+      endif;
+    endif;
+    return i_res + ' = ' + Low(i_f2);
+  endif;
+
+  if l_rType = '';
+    o_reason = 'The result field ' + i_res + ' is not declared in this source';
+    return '';
+  endif;
+  ParseType(l_rType:l_rKind:l_rLen:l_rDec);
+
+  // The source: a literal or a declared field.
+  select;
+    when %subst(i_f2:1:1) = C_QUOTE;
+      l_sKind = 'C';
+      l_pairs = 0;
+      l_k = %scan('''''':i_f2:2);
+      dow l_k > 0 and l_k < %len(i_f2);
+        l_pairs += 1;
+        l_k = %scan('''''':i_f2:l_k + 2);
+      enddo;
+      l_sLen = %len(i_f2) - 2 - l_pairs;
+      l_sDec = 0;
+    when %check('0123456789':i_f2) = 0;
+      l_sKind = 'N';
+      l_sLen = %len(i_f2);
+      l_sDec = 0;
+    other;
+      l_sType = SymType(i_f2);
+      if l_sType = '';
+        o_reason = 'Factor 2 ' + i_f2 + ' is not declared in this source';
+        return '';
+      endif;
+      ParseType(l_sType:l_sKind:l_sLen:l_sDec);
+  endsl;
+
+  select;
+    when l_rKind = 'C' and l_sKind = 'C';
+      if i_pad and i_op = 'MOVEL';
+        return i_res + ' = ' + i_f2;
+      endif;
+      if i_pad;
+        o_reason = 'MOVE(P) is not converted';
+        return '';
+      endif;
+      if l_sLen = l_rLen;
+        return i_res + ' = ' + i_f2;
+      endif;
+      if i_op = 'MOVEL';
+        if l_sLen > l_rLen;
+          return i_res + ' = %subst(' + i_f2 + ':1:' + %char(l_rLen) + ')';
+        endif;
+        return '%subst(' + i_res + ':1:' + %char(l_sLen) + ') = ' + i_f2;
+      endif;
+      if l_sLen > l_rLen;
+        return i_res + ' = %subst(' + i_f2 + ':' + %char(l_sLen - l_rLen + 1) + ')';
+      endif;
+      return '%subst(' + i_res + ':' + %char(l_rLen - l_sLen + 1) + ':'
+             + %char(l_sLen) + ') = ' + i_f2;
+    when l_rKind = 'N' and l_sKind = 'N' and not i_pad
+         and l_sDec = l_rDec and l_sLen <= l_rLen
+         and (l_sLen = l_rLen or i_op = 'MOVE');
+      return i_res + ' = ' + i_f2;
+  endsl;
+  o_reason = i_op + ' between these field types is not converted';
+  return '';
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1890,6 +2120,18 @@ dcl-proc ConvertC;
           endif;
           if l_op = 'DIV';
             l_note = 'DIV followed by MVR needs a review';
+          endif;
+        endif;
+      when l_op = 'MOVE' or l_op = 'MOVEL';
+        if l_f1 <> '' or l_f2 = '' or l_res = ''
+           or Txt('C':'LENGTH':i_line) <> '' or Txt('C':'DECIMALS':i_line) <> ''
+           or (l_ext <> '' and l_ext <> '(p)');
+          l_reason = l_op + ' with factor 1, extender, length or without both '
+                     + 'fields is not converted';
+        else;
+          l_stmt = MoveStmt(l_op:l_ext = '(p)':l_f2:l_res:l_reason);
+          if l_reason = '' and l_stmt <> '';
+            l_note = l_op + ' converted from the declared field types: check';
           endif;
         endif;
       when l_op = 'COMP';

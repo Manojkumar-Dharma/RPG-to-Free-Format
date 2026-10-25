@@ -410,6 +410,7 @@ C specifications (part 2, `ConvertC` in `IAfreeFx4`, sample `samples/FREE4C.rpgl
 | `+`, `-`, `Z` of the arithmetic operations; `HI`, `LO`, `EQ` of `COMP` | `*in70 = (res > 0);` `*in71 = (res < 0);` `*in72 = (res = 0);` / compare of the two factors |
 | `IFxx` / `WHxx` / `DOWxx` / `DOUxx` followed by `ANDxx` / `ORxx` | `if (a = b) and (c < d) or (e = f);` |
 
+| `MOVE`, `MOVEL` between declared fields (type table filled from the D specifications of the same source) | char to char: `res = f2` when the lengths are equal, `%subst` of the longer or `%subst(res:...) = f2` for the shorter; `MOVEL(P)`: `res = f2`; numeric to numeric with equal decimals and enough digits: `res = f2`; literal `'1'`/`'0'` or `*ON`/`*OFF` to `*INnn` or an indicator: `*on`/`*off`; `*BLANKS`, `*ZEROS` and the like: assigned. Reported A (check). Other type pairs, undeclared fields, `MOVE(P)`, a result with length or decimals: R |
 | Conditioning indicator (columns 9-11) on a simple operation | `if *in90;` or `if not *in90;`, the statement indented, `endif;` |
 
 R: level indicators (columns 7-8), a conditioning indicator on a group operation (`IF`, `DOW`, `BEGSR`...) or on `RT`, resulting indicators of other operations,
