@@ -14,6 +14,12 @@
 dcl-pr CalcStart;
 end-pr;
 
+// Looks at every source line before the conversion: the KLIST and KFLD lines
+// are collected, so a key list can be used before it is defined.
+dcl-pr CalcPrescan;
+  i_line char(100) const;
+end-pr;
+
 // One C specification line (columns as in the RPG II coding form).
 dcl-pr CalcLine;
   i_line char(100) const;
@@ -41,6 +47,15 @@ dcl-pr ReviewSpec;
   i_lineNo int(10) const;
   i_line char(100) const;
   i_reason varchar(190) const;
+end-pr;
+
+// A file declared by a converted F specification (see IAfreeCvt FileInfo).
+dcl-pr FileInfo ind;
+  i_name varchar(8) const;
+  o_device char(1);
+  o_type char(1);
+  o_recDs varchar(12);
+  o_keyed ind;
 end-pr;
 
 dcl-pr OutCount int(10);

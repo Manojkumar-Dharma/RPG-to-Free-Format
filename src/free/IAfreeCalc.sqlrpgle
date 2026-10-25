@@ -34,6 +34,7 @@ dcl-c C_MAXGROUP 8;
 dcl-c C_MAXCONDLINES 16;
 dcl-c C_MAXSTMT 8;
 dcl-c C_MAXSQL 200;
+dcl-c C_MAXKL 100;
 
 // The parts of one C specification line.
 dcl-ds Calc_t qualified template;
@@ -91,6 +92,15 @@ dcl-s g_declCount int(10);
 dcl-s g_declAt int(10);
 dcl-s g_doCount int(10);
 
+// Key lists (KLIST and KFLD), collected before the conversion: the name, the key
+// fields joined with ':', their number and whether a KFLD was not a plain name.
+dcl-s g_klName varchar(10) dim(C_MAXKL);
+dcl-s g_klFields varchar(200) dim(C_MAXKL);
+dcl-s g_klNumber int(10) dim(C_MAXKL);
+dcl-s g_klBad ind dim(C_MAXKL);
+dcl-s g_klCount int(10);
+dcl-s g_klOpen ind;
+
 // An embedded SQL statement (C/EXEC SQL, C+ lines, C/END-EXEC) being read. Text
 // is kept from column 16 of the first line and columns 8 to 74 of the others.
 dcl-s g_sqlOpen ind;
@@ -120,6 +130,8 @@ dcl-proc CalcStart export;
   g_sqlOpen = *off;
   g_sqlTooLong = *off;
   g_sqlCount = 0;
+  g_klCount = 0;
+  g_klOpen = *off;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1017,6 +1029,10 @@ dcl-proc CalcLine export;
       ConvertCompare(l_c:l_rule);
     when l_rule.kind = 'TIME';
       ConvertTime(l_c:l_rule);
+    when l_rule.kind = 'FILE';
+      ConvertFileOp(l_c:l_rule);
+    when l_rule.kind = 'KEY';
+      ConvertKeyList(l_c);
     other;
       ConvertTemplate(l_c:l_rule);
   endsl;
@@ -1854,6 +1870,261 @@ dcl-proc IndicatorName;
   endif;
   o_free = %trim(l_ind.freeForm);
   return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// Before the conversion: collects the key lists, so one can be used before it is
+// defined. KLIST has its name in factor 1; the KFLD lines after it name the key
+// fields in the result field.
+dcl-proc CalcPrescan export;
+  dcl-pi *n;
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_up char(100);
+  dcl-s l_op varchar(5);
+  dcl-s l_field varchar(30);
+
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  if %subst(l_up:6:1) <> 'C';
+    return;
+  endif;
+  if %subst(l_up:7:1) = '*' or %subst(l_up:7:1) = '/' or %subst(l_up:7:1) = '+';
+    return;
+  endif;
+  l_op = %trim(Fld(l_up:'OPERATION'));
+  select;
+    when l_op = 'KLIST';
+      g_klOpen = *off;
+      if g_klCount < C_MAXKL and %trim(Fld(l_up:'FACTOR1')) <> '';
+        g_klCount += 1;
+        g_klName(g_klCount) = %trim(Fld(l_up:'FACTOR1'));
+        g_klFields(g_klCount) = '';
+        g_klNumber(g_klCount) = 0;
+        g_klBad(g_klCount) = *off;
+        g_klOpen = *on;
+      endif;
+    when l_op = 'KFLD';
+      if g_klOpen;
+        l_field = %trim(Fld(l_up:'RESULT'));
+        if l_field = '' or %scan(' ':l_field) > 0 or %scan(',':l_field) > 0
+           or %scan(C_QUOTE:l_field) > 0;
+          g_klBad(g_klCount) = *on;
+        else;
+          if g_klNumber(g_klCount) > 0;
+            g_klFields(g_klCount) += ':';
+          endif;
+          g_klFields(g_klCount) += l_field;
+          g_klNumber(g_klCount) += 1;
+        endif;
+      endif;
+    when l_op <> '';
+      g_klOpen = *off;
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+// The search argument of a file operation: the key list when factor 1 names one,
+// (F1:F2:...) for several key fields, the converted factor 1 otherwise.
+dcl-proc KeyArgument;
+  dcl-pi *n varchar(190);
+    i_factor1 varchar(30) const;
+    i_factor1C varchar(80) const;
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_name varchar(30);
+
+  o_reason = '';
+  l_name = %xlate(C_LOWER:C_UPPER:i_factor1);
+  for l_index = 1 to g_klCount;
+    if g_klName(l_index) = l_name;
+      if g_klBad(l_index) or g_klNumber(l_index) = 0;
+        o_reason = 'Key list ' + l_name + ' has a KFLD that is not a field name '
+                   + 'or no KFLD';
+        return '';
+      endif;
+      if g_klNumber(l_index) = 1;
+        return g_klFields(l_index);
+      endif;
+      return '(' + g_klFields(l_index) + ')';
+    endif;
+  endfor;
+  return i_factor1C;
+end-proc;
+
+// ------------------------------------------------------------------
+// KLIST and KFLD write nothing: the key list is written where a file operation
+// uses it (see CalcPrescan and KeyArgument).
+dcl-proc ConvertKeyList;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+  end-pi;
+
+  RptItem(C_STS_CONVERTED:i_c.lineNo:SpecText(i_c.line)
+          :'');
+end-proc;
+
+// ------------------------------------------------------------------
+// File operations on DISK files declared by converted F specifications (RPG II
+// guide chapter 27; RPG/400 reference chapter 11; free-form operations in the
+// ILE RPG reference): CHAIN, READ, READE, READP, REDPE, SETLL, SETGT, WRITE,
+// UPDAT, DELET, OPEN, CLOSE, FEOD and UNLCK. The resulting indicators become
+// *INnn = %found, %eof or %error tests; an error indicator adds the (e)
+// extender. A program-described file reads and writes its record layout data
+// structure FILE_REC (the I specifications, FREE-04) or the data structure
+// named in the result field; an externally described file needs none.
+dcl-proc ConvertFileOp;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-ds l_rule likeds(IAfreeOpc_t);
+  dcl-s l_op varchar(5);
+  dcl-s l_free varchar(8);
+  dcl-s l_name varchar(8);
+  dcl-s l_device char(1);
+  dcl-s l_type char(1);
+  dcl-s l_recDs varchar(12);
+  dcl-s l_keyed ind;
+  dcl-s l_keyOp ind;
+  dcl-s l_dsOp ind;
+  dcl-s l_key varchar(190) inz('');
+  dcl-s l_ds varchar(30) inz('');
+  dcl-s l_ext varchar(3) inz('');
+  dcl-s l_stmt varchar(250);
+  dcl-s l_ind varchar(250);
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_note varchar(190) inz('');
+  dcl-s l_slot int(10);
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+  dcl-s l_count int(10) inz(0);
+
+  l_op = i_rule.opcode;
+  select;
+    when l_op = 'CHAIN';
+      l_free = 'chain';
+    when l_op = 'READ';
+      l_free = 'read';
+    when l_op = 'READE';
+      l_free = 'reade';
+    when l_op = 'READP';
+      l_free = 'readp';
+    when l_op = 'REDPE';
+      l_free = 'readpe';
+    when l_op = 'SETLL';
+      l_free = 'setll';
+    when l_op = 'SETGT';
+      l_free = 'setgt';
+    when l_op = 'WRITE';
+      l_free = 'write';
+    when l_op = 'UPDAT';
+      l_free = 'update';
+    when l_op = 'DELET';
+      l_free = 'delete';
+    when l_op = 'OPEN';
+      l_free = 'open';
+    when l_op = 'CLOSE';
+      l_free = 'close';
+    when l_op = 'FEOD';
+      l_free = 'feod';
+    when l_op = 'UNLCK';
+      l_free = 'unlock';
+    other;
+      l_reason = l_op + ' is not converted';
+  endsl;
+  l_keyOp = (l_op = 'CHAIN' or l_op = 'READE' or l_op = 'REDPE' or l_op = 'SETLL'
+             or l_op = 'SETGT' or l_op = 'DELET');
+  l_dsOp = (l_op = 'CHAIN' or l_op = 'READ' or l_op = 'READE' or l_op = 'READP'
+            or l_op = 'REDPE' or l_op = 'UPDAT' or l_op = 'WRITE');
+
+  // The file.
+  if l_reason = '';
+    l_name = %trim(%xlate(C_LOWER:C_UPPER:i_c.factor2));
+    if not FileInfo(l_name:l_device:l_type:l_recDs:l_keyed);
+      l_reason = 'File ' + i_c.factor2 + ' is not declared by a converted file '
+                 + 'description (a record format name is not converted)';
+    elseif l_device <> 'D' and l_device <> 'X';
+      l_reason = 'File ' + l_name + ' is not a DISK file';
+    endif;
+  endif;
+
+  // The search argument and the data structure.
+  if l_reason = '' and l_keyOp and i_c.factor1 <> '';
+    l_key = KeyArgument(i_c.factor1:i_c.factor1C:l_reason);
+  endif;
+  if l_reason = '' and l_dsOp;
+    select;
+      when i_c.result <> '';
+        l_ds = i_c.resultC;
+      when l_device = 'D' and l_recDs = '';
+        l_reason = 'File ' + l_name + ' has no record layout: a program-described '
+                   + 'file needs the I specification of its record';
+      when l_device = 'D';
+        l_ds = l_recDs;
+    endsl;
+  endif;
+  if l_reason = '' and not l_dsOp and i_c.result <> '';
+    l_reason = 'The result field is not used by ' + l_op;
+  endif;
+
+  // The error extender, and the indicators written after the operation.
+  if l_reason = '';
+    if (i_c.result1 <> '  ' and i_rule.ind1 = 'ER')
+       or (i_c.result2 <> '  ' and i_rule.ind2 = 'ER')
+       or (i_c.result3 <> '  ' and i_rule.ind3 = 'ER');
+      l_ext = '(e)';
+    endif;
+    if l_op = 'WRITE' and i_c.result3 <> '  ';
+      l_reason = 'The end of file indicator of WRITE (file full) is not converted';
+    endif;
+  endif;
+
+  if l_reason = '';
+    l_stmt = l_free + l_ext;
+    if l_key <> '';
+      l_stmt += ' ' + l_key;
+    endif;
+    l_stmt += ' ' + i_c.factor2C;
+    if l_ds <> '';
+      l_stmt += ' ' + l_ds;
+    endif;
+    l_count = 1;
+    l_statements(1) = l_stmt;
+    for l_slot = 1 to 3;
+      l_reason = ResultStatement(i_c:i_rule:l_slot:l_ind);
+      if l_reason <> '';
+        leave;
+      endif;
+      if l_ind <> '';
+        l_count += 1;
+        l_statements(l_count) = l_ind;
+      endif;
+    endfor;
+  endif;
+
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  // The note: a character key of a program-described file.
+  if l_keyOp and l_device = 'D' and l_keyed and l_key <> '';
+    if %subst(l_key:1:1) <> C_QUOTE;
+      AddReason(l_note:'The key of file ' + l_name + ' is declared as a '
+                + 'character key: a numeric search argument must be converted');
+    endif;
+  endif;
+  l_rule = i_rule;
+  l_rule.reason = l_note;
+  if l_note = '';
+    l_rule.status = C_STS_CONVERTED;
+  else;
+    l_rule.status = C_STS_ASSUMPTION;
+  endif;
+  EmitStatements(i_c:l_rule:l_statements:l_count:'');
 end-proc;
 
 // ------------------------------------------------------------------

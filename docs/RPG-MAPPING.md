@@ -323,6 +323,46 @@ from the design and not from a run:
 | `CABEQ`, `OPEN`, extra `ENDSL` | Reported R |
 | `FIRST CAT LAST:1 NAME 30` | `dcl-s NAME char(30);` and `NAME = %trimr(FIRST) + ' ' + LAST;`, A (no `P`) |
 
+## File operations (FREE-08)
+
+Source: SC09-1818 chapter 27 and SC09-1817 chapter 11 (the operation codes and their resulting indicators), the ILE RPG reference (`CHAIN`, `READ`, `READE`, `READP`, `READPE`, `SETLL`, `SETGT`, `WRITE`, `UPDATE`, `DELETE`, `OPEN`, `CLOSE`, `FEOD`, `UNLOCK`, `%FOUND`, `%EOF`, `%ERROR`, the operation extender `(E)`). Done in `ConvertFileOp` of `IAfreeCalc`, which asks `IAfreeCvt` for the file (`FileInfo`): device, type, record layout, keyed. Only DISK files declared by a converted F specification (FREE-03) are handled.
+
+| Source | Becomes |
+|---|---|
+| `CHAIN`, `READE`, `REDPE`, `SETLL`, `SETGT`, `DELET` with factor 1 | `chain KEY FILE REC;`, `reade KEY FILE REC;`, `readpe KEY FILE REC;`, `setll KEY FILE;`, `setgt KEY FILE;`, `delete KEY FILE;` |
+| `READ`, `READP` | `read FILE REC;`, `readp FILE REC;` |
+| `WRITE`, `UPDAT` | `write FILE REC;`, `update FILE REC;` |
+| `OPEN`, `CLOSE`, `FEOD`, `UNLCK` | `open FILE;`, `close FILE;`, `feod FILE;`, `unlock FILE;` |
+| `REC` for a program-described file | the data structure `FILE_REC` of the I specifications (FREE-04), or the data structure named in the result field; a file with no I specification is R |
+| `REC` for an externally described file | nothing, or the data structure named in the result field |
+| Error indicator (`ER`) | the extender: `chain(e) ...;`, then `*INnn = %error;` |
+| `NR` (no record) | `*INnn = not %found(FILE);` after `CHAIN`, `SETGT`, `DELET` |
+| `EOF`, `BOF` | `*INnn = %eof(FILE);` after `READ`, `READE`, `READP`, `REDPE` |
+| `KLIST` name in factor 1 | `(F1:F2:...)` for several `KFLD` fields, the field for one |
+| `KLIST` and `KFLD` lines | nothing is written, they are reported C |
+
+The key lists are collected from the whole source before the conversion, so a `KLIST` after its use works. A numeric search argument for the key of a program-described keyed file is reported A: the key is declared `keyed(*char:n)` (FREE-03) and the free-form search argument must be a character value.
+
+Reported R: a file that is not declared by a converted F specification (a record format name in factor 2 is not converted), a printer file, a program-described file with no record layout, a `KFLD` that is not a plain field name, a resulting indicator that the operation does not have, `WRITE` with the end of file indicator (file full), and the operations still R in the table (`READC`, `EXFMT`, `COMIT`, `ROLBK`, `IN`, `OUT`, `OCUR`, `EXCPT` and the WORKSTN operations). `EXCPT` waits for the O specifications (FREE-06); `MOVE` and `MOVEL` still wait for the field types.
+
+`samples/FREEFIL.rpg36` (RPG II) and `samples/FREEFIL3.rpg38` (RPG III) have one line for each row. Expected result, written from the design and not from a run:
+
+| Line | Expected |
+|---|---|
+| `CUSTNO CHAIN CUSTMAS`, `NR` 90 | `chain CUSTNO CUSTMAS CUSTMAS_REC;` and `*IN90 = (not %found(CUSTMAS));`, A (character key) |
+| `SETLL`, `READE` with `EOF` 91 | `setll CUSTNO CUSTMAS;`, `reade CUSTNO CUSTMAS CUSTMAS_REC;`, `*IN91 = (%eof(CUSTMAS));` |
+| `READ DEMAND1`, `ER` 92, `EOF` 93 | `read(e) DEMAND1 DEMAND1_REC;`, `*IN92 = (%error);`, `*IN93 = (%eof(DEMAND1));` |
+| `READ DEMAND1` | `read DEMAND1 DEMAND1_REC;` |
+| `CHAIN` of `NOFILE`, `READ` of `NOLAYT` (no I specification), `READ` of the printer file, `CHAIN` with an `ER` indicator | each kept as comment, R |
+| `KEYORD CHAIN ORDERS`, `NR` 90 (before the `KLIST`) | `chain (CUSTNO:ORDNO) ORDERS;` and `*IN90 = (not %found(ORDERS));` |
+| `UPDAT`, `ER` 92 | `update(e) ORDERS;`, `*IN92 = (%error);` |
+| `SETGT`, `NR` 93 | `setgt (CUSTNO:ORDNO) ORDERS;`, `*IN93 = (not %found(ORDERS));` |
+| `READP`, `EOF`... `BOF` 94; `REDPE`, 95 | `readp ORDERS;`, `*IN94 = (%eof(ORDERS));`, `readpe CUSTNO ORDERS;`, `*IN95 = (%eof(ORDERS));` |
+| `DELET`, `NR` 96; `WRITE`; `OPEN` with `ER` 97; `CHAIN CUSTMAS`; `CLOSE`; `FEOD`; `UNLCK` | `delete (CUSTNO:ORDNO) ORDERS;` ..., `write ORDERS;`, `open(e) CUSTMAS;` ..., `close CUSTMAS;`, `feod ORDERS;`, `unlock ORDERS;` |
+| `ONEKEY SETLL ORDERS` | `setll CUSTNO ORDERS;` |
+| `KLIST` and `KFLD` lines | reported C, nothing written |
+| `WRITE` with `EOF` 98; `CHAIN` with the list `KEYBAD` (a `KFLD` with a literal) | R |
+
 ## Arrays and tables (FREE-07)
 
 Source: SC09-1818 chapter 20 (RPG II), SC09-1817 chapter 9 (RPG III), ILE RPG reference (`dcl-s` keywords `DIM`, `PERRCD`, `CTDATA`, `ALT`, `ASCEND`, `DESCEND`; compile-time data, "Coding a Compile-Time Array"). Columns of the E specification: 11-18 from file, 19-26 to file, 27-32 name, 33-35 entries per record, 36-39 entries per array, 40-42 length, 43 packed or binary, 44 decimal positions, 45 sequence, 46-51 second array of an alternating pair with 52-54 length, 55 packed or binary, 56 decimal positions, 57 sequence.

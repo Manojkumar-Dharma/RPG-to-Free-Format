@@ -1,0 +1,25 @@
+      * RPG II file operations: CHAIN, READ, READE, SETLL (FREE-08)
+     H
+     FCUSTMAS IF         80  6AI     1 DISK
+     FDEMAND1 ID         100            DISK
+     FNOLAYT  ID         100            DISK
+     FREPORT1 O         132            PRINTER
+     ICUSTMAS AA
+     I                                        1   60CUSTNO
+     I                                        7  26 NAME
+     IDEMAND1 BB
+     I                                        1  10 DMD1
+      * CHAIN with no-record indicator
+     C           CUSTNO    CHAINCUSTMAS              90
+      * SETLL and READE with end of file indicator
+     C           CUSTNO    SETLLCUSTMAS
+     C           CUSTNO    READECUSTMAS                  91
+      * READ with error and end of file indicators
+     C                     READ DEMAND1                9293
+      * READ with no indicators
+     C                     READ DEMAND1
+      * Not converted
+     C           CUSTNO    CHAINNOFILE               90
+     C                     READ NOLAYT                   91
+     C                     READ REPORT1
+     C           CUSTNO    CHAINCUSTMAS                94

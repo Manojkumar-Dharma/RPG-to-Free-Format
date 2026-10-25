@@ -6,6 +6,8 @@
 // FREE-04: input (I) specifications, as data structures.
 // FREE-05: calculation (C) specifications, converted by module IAfreeCalc with
 // the rule tables read by IAfreeRul (rules/*.json).
+// FREE-08: file operations of the C specifications (module IAfreeCalc), which
+// need the files declared here (FileInfo).
 // FREE-07: extension (E) specifications for arrays and tables, and their
 // compile-time data. Everything else (L, O specifications) is kept as a comment
 // and reported R; those are later items (FREE-06). The rules are in
@@ -43,6 +45,7 @@ dcl-s g_fileLens int(10) dim(C_MAXFILES);
 dcl-s g_fileDevices char(1) dim(C_MAXFILES);
 dcl-s g_fileTypes char(1) dim(C_MAXFILES);
 dcl-s g_fileHasLayout ind dim(C_MAXFILES);
+dcl-s g_fileKeyed ind dim(C_MAXFILES);
 dcl-s g_fileCount int(10);
 // Names defined so far (files, data structures, fields) and the line of each.
 dcl-s g_nameList varchar(12) dim(C_MAXNAMES);
@@ -126,6 +129,9 @@ dcl-proc FreeConvert export;
 
   AddOut('**FREE':0);
   CalcStart();
+  for l_index = 1 to g_sourceCount;
+    CalcPrescan(g_sourceLines(l_index));
+  endfor;
   ConvertSource();
   CalcFinish();
   if g_overflow;
@@ -898,9 +904,9 @@ dcl-proc ConvertFile;
 
   AddOut(l_stmt:i_lineNo);
   if l_fmt = 'E';
-    RegisterFile(l_name:0:'X':l_type:i_lineNo);
+    RegisterFile(l_name:0:'X':l_type:i_lineNo:(l_addr = 'K'));
   else;
-    RegisterFile(l_name:ToInt(l_recLen):'D':l_type:i_lineNo);
+    RegisterFile(l_name:ToInt(l_recLen):'D':l_type:i_lineNo:(l_org = 'I'));
   endif;
   if l_note = '';
     RptItem(C_STS_CONVERTED:i_lineNo:%trimr(%subst(i_line:6:69)):'');
@@ -970,7 +976,7 @@ dcl-proc ConvertPrinterFile;
   AppendText(l_note:'declared externally described: the printer file comes from the O '
              + 'specifications (FREE-06)');
   AddOut(l_stmt:i_lineNo);
-  RegisterFile(i_name:0:'P':i_type:i_lineNo);
+  RegisterFile(i_name:0:'P':i_type:i_lineNo:*off);
   RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
 end-proc;
 
@@ -1605,6 +1611,7 @@ dcl-proc RegisterFile;
     i_device char(1) const;
     i_type char(1) const;
     i_lineNo int(10) const;
+    i_keyed ind const;
   end-pi;
 
   if g_fileCount >= C_MAXFILES;
@@ -1616,7 +1623,38 @@ dcl-proc RegisterFile;
   g_fileDevices(g_fileCount) = i_device;
   g_fileTypes(g_fileCount) = i_type;
   g_fileHasLayout(g_fileCount) = *off;
+  g_fileKeyed(g_fileCount) = i_keyed;
   DefineName(i_name:i_lineNo);
+end-proc;
+
+// ------------------------------------------------------------------
+// What the file operations of IAfreeCalc need to know about a file declared by a
+// converted F specification: device (D disk, X externally described disk, P
+// printer), type, the name of its record layout data structure ('' when it has
+// none) and whether it is keyed. Returns *off for a file that is not declared.
+dcl-proc FileInfo export;
+  dcl-pi *n ind;
+    i_name varchar(8) const;
+    o_device char(1);
+    o_type char(1);
+    o_recDs varchar(12);
+    o_keyed ind;
+  end-pi;
+
+  dcl-s l_file int(10);
+
+  l_file = FindFile(i_name);
+  if l_file = 0;
+    return *off;
+  endif;
+  o_device = g_fileDevices(l_file);
+  o_type = g_fileTypes(l_file);
+  o_recDs = '';
+  if g_fileHasLayout(l_file);
+    o_recDs = i_name + '_REC';
+  endif;
+  o_keyed = g_fileKeyed(l_file);
+  return *on;
 end-proc;
 
 // ------------------------------------------------------------------

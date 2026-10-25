@@ -144,11 +144,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout from the I specifications (FREE-04)",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -771,11 +771,11 @@
   "ind2": "ER",
   "ind3": "EOF",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout from the I specifications (FREE-04)",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -790,11 +790,11 @@
   "ind2": "",
   "ind3": "EOF",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout from the I specifications (FREE-04)",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -809,11 +809,11 @@
   "ind2": "",
   "ind3": "BOF",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout from the I specifications (FREE-04)",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -904,11 +904,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout from the I specifications (FREE-04)",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -1607,11 +1607,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "KLIST/KFLD are converted with the file operations (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1626,11 +1626,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "KLIST/KFLD are converted with the file operations (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1645,11 +1645,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1664,11 +1664,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1721,11 +1721,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1759,11 +1759,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1854,11 +1854,11 @@
   "ind2": "ER",
   "ind3": "BOF",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1873,11 +1873,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1892,11 +1892,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1911,11 +1911,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1930,11 +1930,11 @@
   "ind2": "ER",
   "ind3": "EOF",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  }
 ]

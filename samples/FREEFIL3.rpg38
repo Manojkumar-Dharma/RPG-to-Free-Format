@@ -1,0 +1,28 @@
+      * RPG III file operations and KLIST (FREE-08)
+     H
+     FORDERS  UF  E           K        DISK
+     FCUSTMAS IF  E           K        DISK                           UC
+      * KLIST is used where it is defined later too
+     C           KEYORD    CHAINORDERS               90
+     C                     UPDATORDERS                 92
+     C           KEYORD    SETGTORDERS               93
+     C                     READPORDERS                   94
+     C           CUSTNO    REDPEORDERS                   95
+     C           KEYORD    DELETORDERS               96
+     C                     WRITEORDERS
+     C                     OPEN CUSTMAS                97
+     C           CUSTNO    CHAINCUSTMAS
+     C                     CLOSECUSTMAS
+     C                     FEOD ORDERS
+     C                     UNLCKORDERS
+     C           KEYORD    KLIST
+     C                     KFLD           CUSTNO
+     C                     KFLD           ORDNO
+     C           ONEKEY    KLIST
+     C                     KFLD           CUSTNO
+     C           ONEKEY    SETLLORDERS
+      * Not converted
+     C                     WRITEORDERS                   98
+     C           KEYBAD    CHAINORDERS
+     C           KEYBAD    KLIST
+     C                     KFLD           'X'
