@@ -410,7 +410,9 @@ C specifications (part 2, `ConvertC` in `IAfreeFx4`, sample `samples/FREE4C.rpgl
 | `+`, `-`, `Z` of the arithmetic operations; `HI`, `LO`, `EQ` of `COMP` | `*in70 = (res > 0);` `*in71 = (res < 0);` `*in72 = (res = 0);` / compare of the two factors |
 | `IFxx` / `WHxx` / `DOWxx` / `DOUxx` followed by `ANDxx` / `ORxx` | `if (a = b) and (c < d) or (e = f);` |
 
-R: level or conditioning indicators, resulting indicators of other operations,
+| Conditioning indicator (columns 9-11) on a simple operation | `if *in90;` or `if not *in90;`, the statement indented, `endif;` |
+
+R: level indicators (columns 7-8), a conditioning indicator on a group operation (`IF`, `DOW`, `BEGSR`...) or on `RT`, resulting indicators of other operations,
 `ANDxx` and `ORxx` with indicators or after a comment line, traditional `DO`, `MOVE`,
 `MOVEL`, `CALL`/`PARM`, string and other operations, a result field defined by
 length and decimals, a literal continued with `+` or `-`. Statements of a

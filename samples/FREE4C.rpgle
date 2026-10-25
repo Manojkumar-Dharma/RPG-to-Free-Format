@@ -34,3 +34,5 @@
      C                   ENDIF
      C     Total         COMP      100                                808182
      C     Total         SUB       1             Total                707172
+     C  N90              ADD       1             Count
+     C   91              SETON                                          9293

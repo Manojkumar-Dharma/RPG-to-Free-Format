@@ -1635,6 +1635,8 @@ dcl-proc ConvertC;
   dcl-s l_andF1 varchar(14);
   dcl-s l_andF2 varchar(14);
   dcl-s l_hasInd ind inz(*off);
+  dcl-s l_cond varchar(30) inz('');
+  dcl-s l_base int(10);
 
   if not g_klDone;
     PrescanKlist();
@@ -1670,9 +1672,15 @@ dcl-proc ConvertC;
   // ---- what cannot be converted here ----
   select;
     when l_reason <> '';
-    when Txt('C':'LEVEL':i_line) <> '' or Txt('C':'NOT1':i_line) <> ''
-         or Txt('C':'IND1':i_line) <> '';
-      l_reason = 'Level or conditioning indicator on a calculation';
+    when Txt('C':'LEVEL':i_line) <> '';
+      l_reason = 'Level indicator (columns 7-8) on a calculation';
+    when Txt('C':'NOT1':i_line) <> '' and Txt('C':'IND1':i_line) = '';
+      l_reason = 'N in column 9 without an indicator';
+    when Txt('C':'IND1':i_line) <> '' and
+         %check(C_UPPER + C_DIGITS:Up(Txt('C':'IND1':i_line))) > 0;
+      l_reason = 'Conditioning indicator is not valid';
+    when Txt('C':'IND1':i_line) <> '' and Up(Txt('C':'IND1':i_line)) = 'RT';
+      l_reason = 'Indicator RT is not converted';
     when (Txt('C':'HI':i_line) <> '' or Txt('C':'LO':i_line) <> ''
          or Txt('C':'EQ':i_line) <> '') and l_op <> 'SETON' and l_op <> 'SETOFF';
       l_post = ResultInds(l_op:l_f1:l_f2:l_res:i_line:l_err:l_reason);
@@ -1934,6 +1942,19 @@ dcl-proc ConvertC;
     endsl;
   endif;
 
+  // A conditioning indicator wraps the statement in IF ... ENDIF; a group
+  // operation cannot be wrapped this way.
+  if l_reason = '' and Txt('C':'IND1':i_line) <> '';
+    if l_kind <> ' ' and l_kind <> 'k';
+      l_reason = 'Conditioning indicator on ' + l_op + ' is not converted';
+    else;
+      l_cond = '*in' + Up(Txt('C':'IND1':i_line));
+      if Up(Txt('C':'NOT1':i_line)) = 'N';
+        l_cond = 'not ' + l_cond;
+      endif;
+    endif;
+  endif;
+
   if l_reason <> '';
     ReviewWithContinuations(i_index:i_lineNo:i_line:l_extra:l_reason);
     return l_extra;
@@ -1956,14 +1977,15 @@ dcl-proc ConvertC;
   if l_dedent and l_indent >= 2;
     l_indent -= 2;
   endif;
-  // SETON and SETOFF may give several statements.
+  // SETON and SETOFF give several statements: written like the indicator tests.
   if l_op = 'SETON' or l_op = 'SETOFF';
-    l_k = %scan('; ':l_stmt);
-    dow l_k > 0;
-      EmitStatement(l_indent:%subst(l_stmt:1:l_k - 1) + ';':i_lineNo);
-      l_stmt = %subst(l_stmt:l_k + 2);
-      l_k = %scan('; ':l_stmt);
-    enddo;
+    l_post = l_stmt;
+    l_stmt = '';
+  endif;
+  l_base = l_indent;
+  if l_cond <> '' and (l_stmt <> '' or l_post <> '');
+    EmitStatement(l_base:'if ' + l_cond + ';':i_lineNo);
+    l_indent += 2;
   endif;
   if l_stmt <> '';
     EmitStatement(l_indent:l_stmt + ';':i_lineNo);
@@ -1979,6 +2001,9 @@ dcl-proc ConvertC;
     endif;
     l_k = %scan('; ':l_post);
   enddo;
+  if l_indent > l_base;
+    EmitStatement(l_base:'endif;':i_lineNo);
+  endif;
   select;
     when l_kind = 'I' or l_kind = 'L';
       CPush(l_kind);
