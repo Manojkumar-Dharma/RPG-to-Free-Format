@@ -598,5 +598,125 @@
   "from": 81,
   "length": 20,
   "source": "SC09-2508 (7.3) chapter 'Specifications', procedure specification"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "LEVEL",
+  "from": 7,
+  "length": 2,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "NOT1",
+  "from": 9,
+  "length": 1,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "IND1",
+  "from": 10,
+  "length": 2,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "FACTOR1",
+  "from": 12,
+  "length": 14,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "OPERATION",
+  "from": 26,
+  "length": 10,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "FACTOR2",
+  "from": 36,
+  "length": 14,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "RESULT",
+  "from": 50,
+  "length": 14,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "LENGTH",
+  "from": 64,
+  "length": 5,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "DECIMALS",
+  "from": 69,
+  "length": 2,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "HI",
+  "from": 71,
+  "length": 2,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "LO",
+  "from": 73,
+  "length": 2,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "EQ",
+  "from": 75,
+  "length": 2,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "EXTF2",
+  "from": 36,
+  "length": 45,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "CONTBLANK",
+  "from": 7,
+  "length": 29,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
+ },
+ {
+  "dialect": "4",
+  "spec": "C",
+  "field": "COMMENT",
+  "from": 81,
+  "length": 20,
+  "source": "SC09-2508 (7.3), calculation specification (fixed form)"
  }
 ]

@@ -204,11 +204,11 @@ dcl-proc ConvertSource;
         AddOut('':l_lineNo);
       when %subst(l_line:7:1) = '*';
         AddOut('//' + %trimr(%subst(l_line:8:73)):l_lineNo);
-      // RPG IV fixed form: H, F, D and P specifications, directives, /FREE blocks.
+      // SQLRPG, SQLRPGLE: C/EXEC SQL, C+ lines and C/END-EXEC become EXEC SQL.
+      when SqlHere(l_form:l_line:l_lineNo);
+      // RPG IV fixed form: H, F, D, P, C specifications, directives, /FREE blocks.
       when g_dialect = '4';
         Fx4Line(l_index:l_lineNo:l_line:l_extra);
-      // SQLRPG: C/EXEC SQL, C+ lines and C/END-EXEC become EXEC SQL statements.
-      when SqlHere(l_form:l_line:l_lineNo);
       when %subst(l_line:7:1) = '/';
         ConvertDirective(l_lineNo:l_line);
       when l_form = 'H';
@@ -472,7 +472,7 @@ dcl-proc SqlHere;
   if i_form <> 'C';
     return *off;
   endif;
-  if g_dialect <> '3';
+  if g_dialect <> '3' and g_dialect <> '4';
     return *off;
   endif;
   return CalcSqlLine(i_line:i_lineNo);

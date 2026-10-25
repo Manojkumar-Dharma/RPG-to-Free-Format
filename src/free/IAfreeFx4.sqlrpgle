@@ -31,6 +31,12 @@ dcl-s g_block char(2) inz('');          // DS, PR or PI that is still open
 dcl-s g_blockName varchar(21) inz('');
 dcl-s g_inFree ind inz(*off);           // inside /FREE ... /END-FREE
 dcl-s g_lastLineNo int(10) inz(0);
+dcl-s g_stack char(1) dim(60);          // open C groups: I, L, S, W, M, E, R
+dcl-s g_depth int(10) inz(0);
+dcl-s g_klName varchar(14) dim(50);     // KLIST names and their key fields
+dcl-s g_klKeys varchar(200) dim(50);
+dcl-s g_klCount int(10) inz(0);
+dcl-s g_klDone ind inz(*off);
 dcl-s g_quoted ind inz(*off);           // a name was written as a literal
 dcl-s g_constName varchar(21) dim(C_MAXCONST);
 dcl-s g_constCount int(10) inz(0);
@@ -98,6 +104,9 @@ dcl-proc Fx4Start export;
   g_lastLineNo = 0;
   g_constCount = 0;
   g_kwCount = 0;
+  g_depth = 0;
+  g_klCount = 0;
+  g_klDone = *off;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1312,6 +1321,506 @@ dcl-proc ConvertDirective4;
   endsl;
 end-proc;
 
+
+// ------------------------------------------------------------------
+// C specifications, part 1 (FREE-10): extended factor 2 operations, operations
+// without operands, IFxx/DOWxx/DOUxx/WHxx, arithmetic, SETON/SETOFF, CLEAR/RESET
+// and the file operations without resulting indicators. Everything else is
+// kept as a comment and reported R.
+dcl-proc PrescanKlist;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_line char(100);
+  dcl-s l_cur int(10) inz(0);
+
+  g_klDone = *on;
+  for l_k = 1 to SrcCount();
+    l_line = SrcLine(l_k);
+    if %subst(%xlate(C_LOWER:C_UPPER:l_line):6:1) <> 'C'
+       or %subst(l_line:7:1) = '*';
+      iter;
+    endif;
+    select;
+      when Up(Txt('C':'OPERATION':l_line)) = 'KLIST' and g_klCount < 50;
+        g_klCount += 1;
+        l_cur = g_klCount;
+        g_klName(l_cur) = Up(Txt('C':'FACTOR1':l_line));
+        g_klKeys(l_cur) = '';
+      when Up(Txt('C':'OPERATION':l_line)) = 'KFLD' and l_cur > 0;
+        if g_klKeys(l_cur) <> '';
+          g_klKeys(l_cur) += ' : ';
+        endif;
+        g_klKeys(l_cur) += Txt('C':'RESULT':l_line);
+      when Txt('C':'OPERATION':l_line) <> '';
+        l_cur = 0;
+    endsl;
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+// A key operand: a KLIST name becomes its list of fields.
+dcl-proc KeyText;
+  dcl-pi *n varchar(220);
+    i_key varchar(100) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+
+  for l_k = 1 to g_klCount;
+    if g_klName(l_k) = Up(i_key) and g_klKeys(l_k) <> '';
+      return '(' + g_klKeys(l_k) + ')';
+    endif;
+  endfor;
+  return i_key;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc CPush;
+  dcl-pi *n;
+    i_kind char(1) const;
+  end-pi;
+
+  if g_depth < 60;
+    g_depth += 1;
+    g_stack(g_depth) = i_kind;
+  endif;
+end-proc;
+
+dcl-proc CPop;
+  dcl-pi *n;
+    i_kind char(1) const;
+  end-pi;
+
+  // Leaves a WHEN or ON-ERROR body first, then the group itself.
+  if g_depth > 0 and (g_stack(g_depth) = 'W' or g_stack(g_depth) = 'E');
+    g_depth -= 1;
+  endif;
+  if g_depth > 0;
+    g_depth -= 1;
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc IsArith;
+  dcl-pi *n ind;
+    i_op varchar(10) const;
+  end-pi;
+
+  return i_op = 'ADD' or i_op = 'SUB' or i_op = 'MULT' or i_op = 'DIV'
+         or i_op = 'Z-ADD' or i_op = 'Z-SUB';
+end-proc;
+
+// ------------------------------------------------------------------
+// ANDxx or ORxx with a valid xx.
+dcl-proc IsAndOr;
+  dcl-pi *n ind;
+    i_op varchar(10) const;
+  end-pi;
+
+  if %len(i_op) = 5 and %subst(i_op:1:3) = 'AND';
+    return CompareSymbol(%subst(i_op:4:2)) <> '';
+  endif;
+  if %len(i_op) = 4 and %subst(i_op:1:2) = 'OR';
+    return CompareSymbol(%subst(i_op:3:2)) <> '';
+  endif;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc IsExtF2Op;
+  dcl-pi *n ind;
+    i_op varchar(10) const;
+  end-pi;
+
+  return i_op = 'EVAL' or i_op = 'EVALR' or i_op = 'EVAL-CORR' or i_op = 'IF'
+         or i_op = 'DOW' or i_op = 'DOU' or i_op = 'WHEN' or i_op = 'ELSEIF'
+         or i_op = 'FOR' or i_op = 'RETURN' or i_op = 'CALLP' or i_op = 'SORTA'
+         or i_op = 'ON-ERROR';
+end-proc;
+
+// ------------------------------------------------------------------
+// The compare symbol of the xx of IFxx, DOWxx, DOUxx and WHxx.
+dcl-proc CompareSymbol;
+  dcl-pi *n varchar(2);
+    i_xx varchar(2) const;
+  end-pi;
+
+  select;
+    when i_xx = 'EQ';
+      return '=';
+    when i_xx = 'NE';
+      return '<>';
+    when i_xx = 'GT';
+      return '>';
+    when i_xx = 'LT';
+      return '<';
+    when i_xx = 'GE';
+      return '>=';
+    when i_xx = 'LE';
+      return '<=';
+  endsl;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// *ON when a following C line continues the extended factor 2.
+dcl-proc IsCContinuation;
+  dcl-pi *n ind;
+    i_line char(100) const;
+  end-pi;
+
+  if %subst(%xlate(C_LOWER:C_UPPER:i_line):6:1) <> 'C'
+     or %subst(i_line:7:1) = '*' or %subst(i_line:7:1) = '/'
+     or %subst(i_line:7:1) = '+';
+    return *off;
+  endif;
+  return Txt('C':'CONTBLANK':i_line) = '' and Txt('C':'OPERATION':i_line) = ''
+         and Txt('C':'EXTF2':i_line) <> '';
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc IsCOp;
+  dcl-pi *n ind;
+    i_line char(100) const;
+  end-pi;
+
+  return %subst(%xlate(C_LOWER:C_UPPER:i_line):6:1) = 'C'
+         and %subst(i_line:7:1) <> '*' and %subst(i_line:7:1) <> '/'
+         and %subst(i_line:7:1) <> '+'
+         and Txt('C':'OPERATION':i_line) <> '';
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc ConvertC;
+  dcl-pi *n int(10);
+    i_index int(10) const;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_opText varchar(10);
+  dcl-s l_op varchar(10);
+  dcl-s l_ext varchar(6) inz('');
+  dcl-s l_paren int(10);
+  dcl-s l_f1 varchar(14);
+  dcl-s l_f2 varchar(14);
+  dcl-s l_res varchar(14);
+  dcl-s l_ef2 varchar(400) inz('');
+  dcl-s l_extra int(10) inz(0);
+  dcl-s l_next int(10);
+  dcl-s l_stmt varchar(600) inz('');
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_note varchar(190) inz('');
+  dcl-s l_xx varchar(2);
+  dcl-s l_sym varchar(2);
+  dcl-s l_indent int(10);
+  dcl-s l_kind char(1) inz(' ');
+  dcl-s l_dedent ind inz(*off);
+  dcl-s l_sets varchar(200);
+  dcl-s l_ind varchar(2);
+  dcl-s l_k int(10);
+  dcl-s l_val varchar(5);
+  dcl-s l_half ind inz(*off);
+  dcl-s l_expr varchar(100);
+  dcl-s l_args varchar(300);
+  dcl-s l_open ind inz(*off);
+
+  if not g_klDone;
+    PrescanKlist();
+  endif;
+
+  l_opText = Up(Txt('C':'OPERATION':i_line));
+  l_paren = %scan('(':l_opText);
+  if l_paren > 0;
+    l_op = %subst(l_opText:1:l_paren - 1);
+    l_ext = Low(%subst(l_opText:l_paren));
+  else;
+    l_op = l_opText;
+  endif;
+  l_f1 = Txt('C':'FACTOR1':i_line);
+  l_f2 = Txt('C':'FACTOR2':i_line);
+  l_res = Txt('C':'RESULT':i_line);
+
+  // Extended factor 2 and its continuation lines.
+  if IsExtF2Op(l_op);
+    l_ef2 = Txt('C':'EXTF2':i_line);
+    l_next = i_index + 1;
+    dow l_next <= SrcCount() and IsCContinuation(SrcLine(l_next));
+      if %len(l_ef2) > 0 and (%subst(l_ef2:%len(l_ef2):1) = '+'
+         or %subst(l_ef2:%len(l_ef2):1) = '-');
+        l_reason = 'A literal continued with + or - is not converted';
+      endif;
+      l_ef2 += ' ' + Txt('C':'EXTF2':SrcLine(l_next));
+      l_extra += 1;
+      l_next += 1;
+    enddo;
+  endif;
+
+  // ---- what cannot be converted here ----
+  select;
+    when l_reason <> '';
+    when Txt('C':'LEVEL':i_line) <> '' or Txt('C':'NOT1':i_line) <> ''
+         or Txt('C':'IND1':i_line) <> '';
+      l_reason = 'Level or conditioning indicator on a calculation';
+    when (Txt('C':'HI':i_line) <> '' or Txt('C':'LO':i_line) <> ''
+         or Txt('C':'EQ':i_line) <> '') and l_op <> 'SETON' and l_op <> 'SETOFF';
+      l_reason = 'Resulting indicators are not converted yet';
+    when IsAndOr(l_op);
+      l_reason = 'ANDxx and ORxx are not converted yet';
+  endsl;
+  if l_reason = '' and l_op <> 'BEGSR' and l_op <> 'ENDSR' and l_f1 <> ''
+     and l_op <> 'KLIST'
+     and not IsArith(l_op) and not (l_op = 'CHAIN' or l_op = 'SETLL'
+     or l_op = 'SETGT' or l_op = 'READE' or l_op = 'READPE' or l_op = 'DELETE')
+     and %subst(l_op:1:2) <> 'IF' and %subst(l_op:1:3) <> 'DOW'
+     and %subst(l_op:1:3) <> 'DOU' and %subst(l_op:1:2) <> 'WH'
+     and not (l_op = 'SETON' or l_op = 'SETOFF');
+    l_reason = 'Factor 1 on ' + l_op + ' is not converted';
+  endif;
+  if l_reason = '' and l_ef2 = '' and IsExtF2Op(l_op) and l_op <> 'RETURN'
+     and l_op <> 'ON-ERROR';
+    l_reason = 'Extended factor 2 is missing';
+  endif;
+
+  // ---- the statement ----
+  if l_reason = '';
+    select;
+      when IsExtF2Op(l_op);
+        l_stmt = Low(l_op) + l_ext;
+        if l_ef2 <> '';
+          l_stmt += ' ' + l_ef2;
+        endif;
+        select;
+          when l_op = 'IF' or l_op = 'DOW' or l_op = 'DOU' or l_op = 'FOR';
+            l_kind = 'I';
+            if l_op <> 'IF';
+              l_kind = 'L';
+            endif;
+          when l_op = 'WHEN';
+            l_kind = 'w';
+          when l_op = 'ELSEIF';
+            l_dedent = *on;
+          when l_op = 'ON-ERROR';
+            l_kind = 'e';
+        endsl;
+      when l_op = 'ELSE';
+        l_stmt = 'else';
+        l_dedent = *on;
+      when l_op = 'OTHER';
+        l_stmt = 'other';
+        l_kind = 'w';
+      when l_op = 'SELECT';
+        l_stmt = 'select';
+        l_kind = 'S';
+      when l_op = 'MONITOR';
+        l_stmt = 'monitor';
+        l_kind = 'M';
+      when l_op = 'ENDIF' or l_op = 'ENDDO' or l_op = 'ENDFOR' or l_op = 'ENDSL'
+           or l_op = 'ENDMON';
+        if l_f2 <> '' and l_op = 'ENDDO';
+          l_reason = 'ENDDO with an increment (factor 2) is not converted';
+        endif;
+        l_stmt = Low(l_op);
+        l_kind = '-';
+      when l_op = 'ITER' or l_op = 'LEAVE' or l_op = 'LEAVESR';
+        l_stmt = Low(l_op);
+      when l_op = 'BEGSR';
+        if l_f1 = '';
+          l_reason = 'BEGSR without a name';
+        endif;
+        l_stmt = 'begsr ' + l_f1;
+        l_kind = 'R';
+      when l_op = 'ENDSR';
+        if l_f2 <> '' or l_res <> '';
+          l_reason = 'ENDSR with a return point is not converted';
+        endif;
+        l_stmt = 'endsr';
+        l_kind = '-';
+      when l_op = 'KLIST' or l_op = 'KFLD';
+        l_stmt = '';
+        l_kind = 'k';
+      when %subst(l_op:1:2) = 'IF' or %subst(l_op:1:3) = 'DOW'
+           or %subst(l_op:1:3) = 'DOU' or %subst(l_op:1:2) = 'WH';
+        select;
+          when %subst(l_op:1:2) = 'IF';
+            l_xx = %subst(l_op:3);
+            l_stmt = 'if';
+            l_kind = 'I';
+          when %subst(l_op:1:3) = 'DOW';
+            l_xx = %subst(l_op:4);
+            l_stmt = 'dow';
+            l_kind = 'L';
+          when %subst(l_op:1:3) = 'DOU';
+            l_xx = %subst(l_op:4);
+            l_stmt = 'dou';
+            l_kind = 'L';
+          other;
+            l_xx = %subst(l_op:3);
+            l_stmt = 'when';
+            l_kind = 'w';
+        endsl;
+        l_sym = CompareSymbol(l_xx);
+        if l_sym = '' or l_f1 = '' or l_f2 = '';
+          l_reason = 'Operation ' + l_op + ' is not converted';
+        else;
+          l_stmt += ' ' + l_f1 + ' ' + l_sym + ' ' + l_f2;
+        endif;
+      when l_op = 'SETON' or l_op = 'SETOFF';
+        if l_op = 'SETON';
+          l_val = '*on';
+        else;
+          l_val = '*off';
+        endif;
+        l_sets = '';
+        for l_k = 1 to 3;
+          select;
+            when l_k = 1;
+              l_ind = Txt('C':'HI':i_line);
+            when l_k = 2;
+              l_ind = Txt('C':'LO':i_line);
+            other;
+              l_ind = Txt('C':'EQ':i_line);
+          endsl;
+          if l_ind <> '';
+            if %len(l_sets) > 0;
+              l_sets += '; ';
+            endif;
+            l_sets += '*in' + l_ind + ' = ' + l_val;
+          endif;
+        endfor;
+        if l_sets = '';
+          l_reason = l_op + ' without indicators';
+        endif;
+        l_stmt = l_sets;
+      when IsArith(l_op);
+        if l_res = '' or Txt('C':'LENGTH':i_line) <> ''
+           or Txt('C':'DECIMALS':i_line) <> '';
+          l_reason = 'The result field is not declared here (length or decimals '
+                     + 'given, or no result)';
+        elseif l_f2 = '';
+          l_reason = 'Factor 2 is missing';
+        elseif l_ext <> '' and l_ext <> '(h)';
+          l_reason = 'Operation extender ' + l_ext + ' is not converted';
+        else;
+          l_half = (l_ext = '(h)');
+          select;
+            when l_op = 'Z-ADD';
+              l_expr = l_f2;
+            when l_op = 'Z-SUB';
+              l_expr = '-' + l_f2;
+            when l_op = 'ADD' and l_f1 = '';
+              l_expr = l_res + ' + ' + l_f2;
+            when l_op = 'SUB' and l_f1 = '';
+              l_expr = l_res + ' - ' + l_f2;
+            when l_op = 'MULT' and l_f1 = '';
+              l_expr = l_res + ' * ' + l_f2;
+            when l_op = 'DIV' and l_f1 = '';
+              l_expr = l_res + ' / ' + l_f2;
+            when l_op = 'ADD';
+              l_expr = l_f1 + ' + ' + l_f2;
+            when l_op = 'SUB';
+              l_expr = l_f1 + ' - ' + l_f2;
+            when l_op = 'MULT';
+              l_expr = l_f1 + ' * ' + l_f2;
+            other;
+              l_expr = l_f1 + ' / ' + l_f2;
+          endsl;
+          if l_half;
+            l_stmt = 'eval(h) ' + l_res + ' = ' + l_expr;
+          else;
+            l_stmt = l_res + ' = ' + l_expr;
+          endif;
+          if l_op = 'DIV';
+            l_note = 'DIV followed by MVR needs a review';
+          endif;
+        endif;
+      when l_op = 'CLEAR' or l_op = 'RESET';
+        if l_f1 <> '' or l_f2 <> '' or l_res = '';
+          l_reason = l_op + ' with factors is not converted';
+        endif;
+        l_stmt = Low(l_op) + ' ' + l_res;
+      when l_op = 'CHAIN' or l_op = 'READE' or l_op = 'READPE' or l_op = 'SETLL'
+           or l_op = 'SETGT' or l_op = 'DELETE' or l_op = 'READ' or l_op = 'READP'
+           or l_op = 'WRITE' or l_op = 'UPDATE' or l_op = 'OPEN' or l_op = 'CLOSE'
+           or l_op = 'UNLOCK' or l_op = 'FEOD' or l_op = 'EXFMT';
+        l_stmt = Low(l_op) + l_ext;
+        l_args = '';
+        if l_op = 'CHAIN' or l_op = 'READE' or l_op = 'READPE' or l_op = 'SETLL'
+           or l_op = 'SETGT' or l_op = 'DELETE';
+          if l_f1 <> '';
+            l_args = KeyText(l_f1) + ' ';
+          elseif l_op = 'CHAIN' or l_op = 'SETLL' or l_op = 'SETGT';
+            l_reason = l_op + ' without a key in factor 1';
+          endif;
+        elseif l_f1 <> '';
+          l_reason = 'Factor 1 on ' + l_op + ' is not converted';
+        endif;
+        if l_f2 = '';
+          l_reason = l_op + ' without a file or record in factor 2';
+        endif;
+        l_args += l_f2;
+        if l_res <> '' and (l_op = 'CHAIN' or l_op = 'READE' or l_op = 'READPE'
+           or l_op = 'READ' or l_op = 'READP' or l_op = 'WRITE' or l_op = 'UPDATE'
+           or l_op = 'EXFMT');
+          l_args += ' ' + l_res;
+        elseif l_res <> '';
+          l_reason = 'Result field on ' + l_op + ' is not converted';
+        endif;
+        l_stmt += ' ' + l_args;
+      other;
+        l_reason = 'Operation ' + l_op + ' is not converted yet (RPG IV)';
+    endsl;
+  endif;
+
+  if l_reason <> '';
+    ReviewWithContinuations(i_index:i_lineNo:i_line:l_extra:l_reason);
+    return l_extra;
+  endif;
+
+  // ---- indentation and output ----
+  if l_kind = 'k';
+    RptItem(C_STS_CONVERTED:i_lineNo:%trimr(%subst(i_line:6:75)):'');
+    return l_extra;
+  endif;
+  select;
+    when l_kind = '-';
+      CPop(' ');
+    when l_kind = 'w' or l_kind = 'e';
+      if g_depth > 0 and (g_stack(g_depth) = 'W' or g_stack(g_depth) = 'E');
+        g_depth -= 1;
+      endif;
+  endsl;
+  l_indent = 2 * g_depth;
+  if l_dedent and l_indent >= 2;
+    l_indent -= 2;
+  endif;
+  // SETON and SETOFF may give several statements.
+  if l_op = 'SETON' or l_op = 'SETOFF';
+    l_k = %scan('; ':l_stmt);
+    dow l_k > 0;
+      EmitStatement(l_indent:%subst(l_stmt:1:l_k - 1) + ';':i_lineNo);
+      l_stmt = %subst(l_stmt:l_k + 2);
+      l_k = %scan('; ':l_stmt);
+    enddo;
+  endif;
+  EmitStatement(l_indent:l_stmt + ';':i_lineNo);
+  select;
+    when l_kind = 'I' or l_kind = 'L';
+      CPush(l_kind);
+    when l_kind = 'S' or l_kind = 'M' or l_kind = 'R';
+      CPush(l_kind);
+    when l_kind = 'w';
+      CPush('W');
+    when l_kind = 'e';
+      CPush('E');
+  endsl;
+  g_lastLineNo = i_lineNo;
+  ReportWithContinuations(i_index:i_lineNo:i_line:l_extra:l_note);
+  return l_extra;
+end-proc;
+
 // ------------------------------------------------------------------
 dcl-proc Fx4Line export;
   dcl-pi *n ind;
@@ -1365,8 +1874,7 @@ dcl-proc Fx4Line export;
                  + '(FREE-06)');
     when l_form = 'C';
       Fx4Flush();
-      ReviewSpec(i_lineNo:i_line:'RPG IV calculation specification is not '
-                 + 'converted yet (FREE-10, second part)');
+      o_extra = ConvertC(i_index:i_lineNo:i_line);
     other;
       Fx4Flush();
       ReviewSpec(i_lineNo:i_line:'Unknown specification type in column 6');

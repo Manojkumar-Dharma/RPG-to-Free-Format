@@ -391,6 +391,25 @@ specification is the second part of FREE-10).
 | /COPY, /INCLUDE and other directives | kept (A for /COPY: the member has to be free-form too) |
 | /FREE ... /END-FREE | lines copied from column 8, markers dropped |
 
+C specifications (part 2, `ConvertC` in `IAfreeFx4`, sample `samples/FREE4C.rpgle`):
+
+| Fixed form | Free form |
+|------------|-----------|
+| `EVAL`, `EVALR`, `EVAL-CORR`, `IF`, `DOW`, `DOU`, `WHEN`, `ELSEIF`, `FOR`, `RETURN`, `CALLP`, `SORTA`, `ON-ERROR` (extended factor 2, with continuation lines) | same keyword in lower case with the extender, `;` added |
+| `ELSE`, `OTHER`, `SELECT`, `MONITOR`, `ENDIF`, `ENDDO`, `ENDFOR`, `ENDSL`, `ENDMON`, `ITER`, `LEAVE`, `LEAVESR`, `BEGSR name`, `ENDSR` | keyword; statements are indented two blanks per open group |
+| `IFxx`, `DOWxx`, `DOUxx`, `WHxx` | `if f1 = f2;` with `=`, `<>`, `>`, `<`, `>=`, `<=` |
+| `ADD`, `SUB`, `MULT`, `DIV`, `Z-ADD`, `Z-SUB` (result declared elsewhere; `(H)` gives `eval(h)`) | `res = f1 + f2;`; factor 1 blank gives `res = res + f2;`; DIV is A (MVR) |
+| `SETON`, `SETOFF` | `*in01 = *on;` / `*off` |
+| `CLEAR`, `RESET` with a result | `clear res;` |
+| `CHAIN`, `READE`, `READPE`, `SETLL`, `SETGT`, `DELETE`, `READ`, `READP`, `WRITE`, `UPDATE`, `OPEN`, `CLOSE`, `UNLOCK`, `FEOD`, `EXFMT` without resulting indicators | `chain(e) key file;`; a `KLIST` name becomes `(k1 : k2)`; `KLIST` and `KFLD` lines write nothing |
+| `/EXEC SQL` ... (SQLRPGLE) | as for SQLRPG (FREE-11) |
+
+R: level or conditioning indicators, resulting indicators (file operations with
+`%found`/`%eof` are the next step), `ANDxx` and `ORxx`, traditional `DO`, `MOVE`,
+`MOVEL`, `CALL`/`PARM`, string and other operations, a result field defined by
+length and decimals, a literal continued with `+` or `-`. Statements of a
+converted `/EXEC SQL` are not indented with the groups.
+
 Reported R: names ending in `...`, keyword literals continued with `+` or `-`,
 FROMFILE, TOFILE, CLASS, PACKEVEN, object types, invalid entries. `**` compile-time
 data sections are kept as is (A). Sample: `samples/FREE4.rpgle`.
