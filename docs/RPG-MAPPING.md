@@ -424,6 +424,37 @@ Reported R: names ending in `...`, keyword literals continued with `+` or `-`,
 FROMFILE, TOFILE, CLASS, PACKEVEN, object types, invalid entries. `**` compile-time
 data sections are kept as is (A). Sample: `samples/FREE4.rpgle`.
 
+## MOVE and MOVEL (FREE-08)
+
+Source: SC09-1818 chapter 27 and SC09-1817 chapter 11 (the move operations), the ILE RPG reference (`%SUBST` as the target of an assignment). `MOVE` moves right-justified, `MOVEL` left-justified; the rest of the result field keeps its old value (no `P`), so both lengths must be known. `IAfreeCvt` gives `IAfreeCalc` the length and type of the fields of the I specifications and of the arrays of the E specifications (`CalcDefineField`); a field that a result field defines is known as well. Only these fields, literals and figurative constants are converted; a field of any other origin (data structure subfields, external fields) is R. Lengths below are the lengths `LR` of the result and `LF` of factor 2.
+
+| Source | Becomes | Status |
+|---|---|---|
+| alphanumeric to alphanumeric, `LF = LR` | `R = F2;` | C |
+| `MOVE`, `LF > LR` | `R = %subst(F2:LF-LR+1);` (the right end of factor 2) | C |
+| `MOVE`, `LF < LR` | `%subst(R:LR-LF+1:LF) = F2;`; with `P` `R = *blanks;` first | C |
+| `MOVEL`, `LF > LR` | `R = %subst(F2:1:LR);` | C |
+| `MOVEL`, `LF < LR` | `%subst(R:1:LF) = F2;`; with `P` `R = F2;` | C |
+| character literal as factor 2 | the same, with the length of the literal | C |
+| `*BLANK(S)` to an alphanumeric result | `R = *blanks;` | C |
+| `*ZERO(S)` to a numeric or alphanumeric result | `R = 0;` or `R = *zeros;` | C |
+| numeric field to a numeric result with the same digits and decimal positions (any of zoned, packed, binary), or a numeric literal with the digits of the result and no decimals | `R = F2;` | C |
+| a result field with a length (`MOVE X NEWFLD 10`) | declared as for the other operations: alphanumeric without decimal positions, numeric with | C |
+
+Reported R: alphanumeric to numeric and numeric to alphanumeric, numeric of another length or decimal positions (the rest of the result keeps its digits), `P` on a numeric result, other figurative constants, a field of unknown length or type, and resulting indicators. `MOVEA` is still R.
+
+`samples/FREEMOV.rpg36` has one line for each row. Fields: `NAME` char(20), `CODE` char(5), `CUSTNO` and `ACCT` zoned(6:0), `BAL` packed(9:2). Expected result, written from the design and not from a run:
+
+| Line | Expected |
+|---|---|
+| `MOVE NAME NAME2 20` | `dcl-s NAME2 char(20);`, `NAME2 = NAME;` |
+| `MOVE NAME CODE` / `MOVE CODE NAME` / `MOVE CODE NAME` with `P` | `CODE = %subst(NAME:16);` / `%subst(NAME:16:5) = CODE;` / `NAME = *blanks;` and `%subst(NAME:16:5) = CODE;` |
+| `MOVEL NAME CODE` / `MOVEL CODE NAME` / with `P` | `CODE = %subst(NAME:1:5);` / `%subst(NAME:1:5) = CODE;` / `NAME = CODE;` |
+| `MOVE 'AB' CODE`, `MOVEL 'ABCDE' CODE` | `%subst(CODE:4:2) = 'AB';`, `CODE = 'ABCDE';` |
+| `MOVE *BLANK NAME`, `MOVE *ZERO ACCT`, `MOVE *ZEROS CODE` | `NAME = *blanks;`, `ACCT = 0;`, `CODE = *zeros;` |
+| `MOVE CUSTNO ACCT` | `ACCT = CUSTNO;` |
+| numeric to alphanumeric and back, `BAL` to `ACCT`, literal `5` to `ACCT`, unknown field, `*HIVAL`, `P` on a numeric result, a resulting indicator | each kept as comment, R |
+
 ## Arrays and tables (FREE-07)
 
 Source: SC09-1818 chapter 20 (RPG II), SC09-1817 chapter 9 (RPG III), ILE RPG reference (`dcl-s` keywords `DIM`, `PERRCD`, `CTDATA`, `ALT`, `ASCEND`, `DESCEND`; compile-time data, "Coding a Compile-Time Array"). Columns of the E specification: 11-18 from file, 19-26 to file, 27-32 name, 33-35 entries per record, 36-39 entries per array, 40-42 length, 43 packed or binary, 44 decimal positions, 45 sequence, 46-51 second array of an alternating pair with 52-54 length, 55 packed or binary, 56 decimal positions, 57 sequence.

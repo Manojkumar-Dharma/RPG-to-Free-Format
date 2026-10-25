@@ -1,0 +1,37 @@
+      * RPG II MOVE and MOVEL (FREE-08)
+     H
+     FCUSTMAS IF         80  6AI     1 DISK
+     ICUSTMAS AA
+     I                                        1   60CUSTNO
+     I                                        7  26 NAME
+     I                                       27  31 CODE
+     I                                       32  370ACCT
+     I                                    P  38  422BAL
+      * Alphanumeric to alphanumeric, same length and a result field with a length
+     C                     MOVE NAME      NAME2  20
+      * MOVE: longer field, shorter field, padding with P
+     C                     MOVE NAME      CODE
+     C                     MOVE CODE      NAME
+     C                     MOVE CODE      NAME      P
+      * MOVEL: longer field, shorter field, padding with P
+     C                     MOVELNAME      CODE
+     C                     MOVELCODE      NAME
+     C                     MOVELCODE      NAME      P
+      * Literals
+     C                     MOVE 'AB'      CODE
+     C                     MOVEL'ABCDE'   CODE
+      * Figurative constants
+     C                     MOVE *BLANK    NAME
+     C                     MOVE *ZERO     ACCT
+     C                     MOVE *ZEROS    CODE
+      * Numeric to numeric, same length and decimal positions
+     C                     MOVE CUSTNO    ACCT
+      * Not converted
+     C                     MOVE CUSTNO    NAME
+     C                     MOVE NAME      CUSTNO
+     C                     MOVE BAL       ACCT
+     C                     MOVE 5         ACCT
+     C                     MOVE UNKNWN    NAME
+     C                     MOVE *HIVAL    NAME
+     C                     MOVE CUSTNO    ACCT      P
+     C                     MOVE CODE      NAME       90

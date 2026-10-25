@@ -345,6 +345,7 @@ dcl-proc ConvertExtension;
   endsl;
   AddOut(l_stmt + ';':i_lineNo);
   DefineName(l_name:i_lineNo);
+  DefineArrayField(l_name:%subst(l_up:40:3):%subst(l_up:44:1));
 
   if l_alt <> '';
     l_altStmt = 'dcl-s ' + l_alt + ' ' + l_altType + ' dim('
@@ -358,6 +359,7 @@ dcl-proc ConvertExtension;
     l_altStmt += ' alt(' + l_name + ')';
     AddOut(l_altStmt + ';':i_lineNo);
     DefineName(l_alt:i_lineNo);
+    DefineArrayField(l_alt:%subst(l_up:52:3):%subst(l_up:56:1));
   endif;
 
   l_status = C_STS_CONVERTED;
@@ -368,6 +370,22 @@ dcl-proc ConvertExtension;
              + 'that is not converted';
   endif;
   RptItem(l_status:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
+end-proc;
+
+// ------------------------------------------------------------------
+// The entries of an array are known to MOVE and MOVEL by their length and type.
+dcl-proc DefineArrayField;
+  dcl-pi *n;
+    i_name varchar(6) const;
+    i_length char(3) const;
+    i_decimals char(1) const;
+  end-pi;
+
+  if i_decimals = ' ';
+    CalcDefineField(i_name:'C':ToInt(%trim(i_length)):0);
+  else;
+    CalcDefineField(i_name:'N':ToInt(%trim(i_length)):%int(i_decimals));
+  endif;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1555,6 +1573,15 @@ dcl-proc ConvertInputField;
 
   o_stmt = '  dcl-subf ' + l_name + ' ' + l_type + ' pos('
            + %trim(%char(l_from)) + ');';
+  // The length and type are needed by MOVE and MOVEL.
+  select;
+    when l_packBin = ' ' and l_dec = ' ';
+      CalcDefineField(l_name:'C':l_len:0);
+    when l_packBin = 'P' or l_packBin = 'B';
+      CalcDefineField(l_name:'N':l_digits:ToInt(%trim(l_dec)));
+    other;
+      CalcDefineField(l_name:'N':l_len:ToInt(%trim(l_dec)));
+  endsl;
   return *on;
 end-proc;
 

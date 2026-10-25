@@ -35,6 +35,7 @@ dcl-c C_MAXCONDLINES 16;
 dcl-c C_MAXSTMT 8;
 dcl-c C_MAXSQL 200;
 dcl-c C_MAXKL 100;
+dcl-c C_MAXFLD 1000;
 
 // The parts of one C specification line.
 dcl-ds Calc_t qualified template;
@@ -92,6 +93,15 @@ dcl-s g_declCount int(10);
 dcl-s g_declAt int(10);
 dcl-s g_doCount int(10);
 
+// The fields whose length and type are known: those of the I and E specifications
+// (defined by IAfreeCvt through CalcDefineField) and the ones a result field
+// defines. Kind C is alphanumeric, N numeric (length in digits).
+dcl-s g_fldName varchar(10) dim(C_MAXFLD);
+dcl-s g_fldKind char(1) dim(C_MAXFLD);
+dcl-s g_fldLen int(10) dim(C_MAXFLD);
+dcl-s g_fldDec int(10) dim(C_MAXFLD);
+dcl-s g_fldCount int(10);
+
 // Key lists (KLIST and KFLD), collected before the conversion: the name, the key
 // fields joined with ':', their number and whether a KFLD was not a plain name.
 dcl-s g_klName varchar(10) dim(C_MAXKL);
@@ -132,6 +142,7 @@ dcl-proc CalcStart export;
   g_sqlCount = 0;
   g_klCount = 0;
   g_klOpen = *off;
+  g_fldCount = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -588,6 +599,11 @@ dcl-proc DeclareResult;
   g_declCount += 1;
   g_declName(g_declCount) = Up(i_name);
   g_declType(g_declCount) = l_type;
+  if i_decimals = ' ' and not i_numeric;
+    CalcDefineField(Up(i_name):'C':l_length:0);
+  else;
+    CalcDefineField(Up(i_name):'N':l_length:l_decimals);
+  endif;
   return '';
 end-proc;
 
@@ -987,7 +1003,8 @@ dcl-proc CalcLine export;
     endif;
   endif;
 
-  if l_c.halfAdjust <> ' ' and (l_c.halfAdjust <> 'H' or l_rule.halfAdjust <> 'Y');
+  if l_c.halfAdjust <> ' ' and (l_c.halfAdjust <> 'H' or l_rule.halfAdjust <> 'Y')
+     and not (l_c.halfAdjust = 'P' and l_rule.kind = 'MOVE');
     ReviewHere(i_line:i_lineNo:'Half adjust is not allowed for ' + l_rule.opcode
                :l_isStructure);
     return;
@@ -1033,6 +1050,8 @@ dcl-proc CalcLine export;
       ConvertFileOp(l_c:l_rule);
     when l_rule.kind = 'KEY';
       ConvertKeyList(l_c);
+    when l_rule.kind = 'MOVE';
+      ConvertMove(l_c:l_rule);
     other;
       ConvertTemplate(l_c:l_rule);
   endsl;
@@ -1870,6 +1889,250 @@ dcl-proc IndicatorName;
   endif;
   o_free = %trim(l_ind.freeForm);
   return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// Defines a field whose length and type are known (called by IAfreeCvt for the
+// fields of the I specifications and the entries of the arrays of the E
+// specifications). Kind C: alphanumeric, length in characters. Kind N: numeric,
+// length in digits.
+dcl-proc CalcDefineField export;
+  dcl-pi *n;
+    i_name varchar(10) const;
+    i_kind char(1) const;
+    i_length int(10) const;
+    i_decimals int(10) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  for l_index = 1 to g_fldCount;
+    if g_fldName(l_index) = Up(i_name);
+      return;
+    endif;
+  endfor;
+  if g_fldCount >= C_MAXFLD;
+    return;
+  endif;
+  g_fldCount += 1;
+  g_fldName(g_fldCount) = Up(i_name);
+  g_fldKind(g_fldCount) = i_kind;
+  g_fldLen(g_fldCount) = i_length;
+  g_fldDec(g_fldCount) = i_decimals;
+end-proc;
+
+// ------------------------------------------------------------------
+// Kind, length and decimal positions of an operand of MOVE or MOVEL as free-form
+// text: a character or numeric literal, a figurative constant (kind F), a field
+// or an array element. Returns *off when the operand is a field of unknown
+// length or type.
+dcl-proc OperandType;
+  dcl-pi *n ind;
+    i_text varchar(30) const;
+    o_kind char(1);
+    o_length int(10);
+    o_decimals int(10);
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_paren int(10);
+  dcl-s l_name varchar(30);
+  dcl-s l_point int(10);
+  dcl-s l_char char(1);
+
+  o_kind = ' ';
+  o_length = 0;
+  o_decimals = 0;
+  if %len(i_text) = 0;
+    return *off;
+  endif;
+
+  select;
+    when %subst(i_text:1:1) = '*';
+      o_kind = 'F';
+      return *on;
+    when %subst(i_text:1:1) = C_QUOTE;
+      // Character literal: a doubled quote is one character.
+      o_kind = 'C';
+      l_index = 2;
+      dow l_index < %len(i_text);
+        o_length += 1;
+        if %subst(i_text:l_index:1) = C_QUOTE;
+          l_index += 1;
+        endif;
+        l_index += 1;
+      enddo;
+      return (o_length > 0);
+    when IsNumberLiteral(i_text);
+      o_kind = 'N';
+      l_point = %scan('.':i_text);
+      for l_index = 1 to %len(i_text);
+        l_char = %subst(i_text:l_index:1);
+        if l_char >= '0' and l_char <= '9';
+          o_length += 1;
+          if l_point > 0 and l_index > l_point;
+            o_decimals += 1;
+          endif;
+        endif;
+      endfor;
+      return *on;
+  endsl;
+
+  // A field or an array element.
+  l_name = i_text;
+  l_paren = %scan('(':l_name);
+  if l_paren > 1;
+    l_name = %subst(l_name:1:l_paren - 1);
+  endif;
+  l_name = Up(l_name);
+  for l_index = 1 to g_fldCount;
+    if g_fldName(l_index) = l_name;
+      o_kind = g_fldKind(l_index);
+      o_length = g_fldLen(l_index);
+      o_decimals = g_fldDec(l_index);
+      return *on;
+    endif;
+  endfor;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+// MOVE and MOVEL (RPG II guide chapter 27; RPG/400 reference chapter 11). The
+// data is moved right-justified (MOVE) or left-justified (MOVEL) and the rest of
+// the result field keeps its old value, so the lengths of both fields must be
+// known (I and E specifications, fields defined by result fields). Converted:
+//   alphanumeric to alphanumeric        R = F2;  %subst(R:..) = F2;  R = %subst(F2:..);
+//   with P (blank padding)              R = *blanks; %subst(R:..) = F2;  or  R = F2;
+//   *BLANK(S), *ZERO(S)                 R = *blanks;  R = 0;  R = *zeros;
+//   numeric to numeric, same length and decimal positions       R = F2;
+// Everything else (alphanumeric to numeric and back, numeric of another length or
+// decimal positions, other figurative constants, a field of unknown length) is R.
+dcl-proc ConvertMove;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-s l_left ind;
+  dcl-s l_pad ind;
+  dcl-s l_kind2 char(1);
+  dcl-s l_len2 int(10);
+  dcl-s l_dec2 int(10);
+  dcl-s l_kindR char(1);
+  dcl-s l_lenR int(10);
+  dcl-s l_decR int(10);
+  dcl-s l_figure varchar(10);
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+  dcl-s l_count int(10) inz(0);
+  dcl-s l_res varchar(40);
+  dcl-s l_f2 varchar(40);
+  dcl-s l_found ind;
+
+  l_left = (i_rule.opcode = 'MOVEL');
+  l_pad = (i_c.halfAdjust = 'P');
+  l_res = i_c.resultC;
+  l_f2 = i_c.factor2C;
+
+  if i_c.result1 <> '  ' or i_c.result2 <> '  ' or i_c.result3 <> '  ';
+    l_reason = 'Resulting indicators are not used by ' + i_rule.opcode;
+  endif;
+
+  // A result field that has a length defines the field (alphanumeric without
+  // decimal positions, numeric with).
+  if l_reason = '' and i_c.length <> '';
+    l_reason = DeclareResult(l_res:i_c.length:i_c.decimals:*off);
+  endif;
+
+  if l_reason = '';
+    l_found = OperandType(l_f2:l_kind2:l_len2:l_dec2);
+    if not l_found;
+      l_reason = 'Length and type of ' + i_c.factor2 + ' are not known: it is not '
+                 + 'defined by an I or E specification or by a result field';
+    endif;
+  endif;
+  if l_reason = '';
+    l_found = OperandType(l_res:l_kindR:l_lenR:l_decR);
+    if not l_found;
+      l_reason = 'Length and type of ' + i_c.result + ' are not known: it is not '
+                 + 'defined by an I or E specification or by a result field';
+    endif;
+  endif;
+
+  if l_reason = '';
+    select;
+      when l_kind2 = 'F';
+        l_figure = Up(l_f2);
+        select;
+          when (l_figure = '*BLANK' or l_figure = '*BLANKS') and l_kindR = 'C';
+            l_count = 1;
+            l_statements(1) = l_res + ' = *blanks';
+          when (l_figure = '*ZERO' or l_figure = '*ZEROS') and l_kindR = 'N';
+            l_count = 1;
+            l_statements(1) = l_res + ' = 0';
+          when (l_figure = '*ZERO' or l_figure = '*ZEROS') and l_kindR = 'C';
+            l_count = 1;
+            l_statements(1) = l_res + ' = *zeros';
+          other;
+            l_reason = 'The figurative constant ' + l_f2 + ' is not converted for '
+                       + 'this result field';
+        endsl;
+
+      when l_kind2 = 'C' and l_kindR = 'C';
+        l_count = 0;
+        select;
+          when l_len2 = l_lenR;
+            l_count = 1;
+            l_statements(1) = l_res + ' = ' + l_f2;
+          when l_len2 > l_lenR and l_left;
+            l_count = 1;
+            l_statements(1) = l_res + ' = %subst(' + l_f2 + ':1:'
+                              + %trim(%char(l_lenR)) + ')';
+          when l_len2 > l_lenR;
+            l_count = 1;
+            l_statements(1) = l_res + ' = %subst(' + l_f2 + ':'
+                              + %trim(%char(l_len2 - l_lenR + 1)) + ')';
+          when l_left and l_pad;
+            l_count = 1;
+            l_statements(1) = l_res + ' = ' + l_f2;
+          when l_left;
+            l_count = 1;
+            l_statements(1) = '%subst(' + l_res + ':1:' + %trim(%char(l_len2))
+                              + ') = ' + l_f2;
+          other;
+            // MOVE of a shorter field: the right end of the result.
+            if l_pad;
+              l_count += 1;
+              l_statements(l_count) = l_res + ' = *blanks';
+            endif;
+            l_count += 1;
+            l_statements(l_count) = '%subst(' + l_res + ':'
+                                    + %trim(%char(l_lenR - l_len2 + 1)) + ':'
+                                    + %trim(%char(l_len2)) + ') = ' + l_f2;
+        endsl;
+
+      when l_kind2 = 'N' and l_kindR = 'N';
+        if l_pad;
+          l_reason = 'The P extender is only for an alphanumeric result field';
+        elseif l_len2 = l_lenR and l_dec2 = l_decR;
+          l_count = 1;
+          l_statements(1) = l_res + ' = ' + l_f2;
+        else;
+          l_reason = 'A numeric ' + i_rule.opcode + ' of another length or decimal '
+                     + 'positions keeps part of the result: not converted';
+        endif;
+
+      other;
+        l_reason = i_rule.opcode + ' between an alphanumeric and a numeric field '
+                   + 'is not converted';
+    endsl;
+  endif;
+
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+  EmitStatements(i_c:i_rule:l_statements:l_count:'');
 end-proc;
 
 // ------------------------------------------------------------------

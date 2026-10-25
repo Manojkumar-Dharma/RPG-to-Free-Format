@@ -20,6 +20,15 @@ dcl-pr CalcPrescan;
   i_line char(100) const;
 end-pr;
 
+// Defines a field of known length and type (kind C alphanumeric, N numeric with
+// the length in digits) for MOVE and MOVEL.
+dcl-pr CalcDefineField;
+  i_name varchar(10) const;
+  i_kind char(1) const;
+  i_length int(10) const;
+  i_decimals int(10) const;
+end-pr;
+
 // One C specification line (columns as in the RPG II coding form).
 dcl-pr CalcLine;
   i_line char(100) const;

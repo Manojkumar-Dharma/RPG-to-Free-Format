@@ -600,11 +600,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "MOVE depends on the lengths and types of both fields (I and E specifications, FREE-04 and FREE-07)",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -638,11 +638,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "MOVEL depends on the lengths and types of both fields (I and E specifications, FREE-04 and FREE-07)",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
