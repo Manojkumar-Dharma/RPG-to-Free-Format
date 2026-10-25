@@ -404,8 +404,14 @@ C specifications (part 2, `ConvertC` in `IAfreeFx4`, sample `samples/FREE4C.rpgl
 | `CHAIN`, `READE`, `READPE`, `SETLL`, `SETGT`, `DELETE`, `READ`, `READP`, `WRITE`, `UPDATE`, `OPEN`, `CLOSE`, `UNLOCK`, `FEOD`, `EXFMT` without resulting indicators | `chain(e) key file;`; a `KLIST` name becomes `(k1 : k2)`; `KLIST` and `KFLD` lines write nothing |
 | `/EXEC SQL` ... (SQLRPGLE) | as for SQLRPG (FREE-11) |
 
-R: level or conditioning indicators, resulting indicators (file operations with
-`%found`/`%eof` are the next step), `ANDxx` and `ORxx`, traditional `DO`, `MOVE`,
+| Resulting indicators (Table 99): `NR` 71-72 of `CHAIN`, `SETGT`, `DELETE`, `SETLL` | `*in91 = (not %found(FILE));` |
+| `ER` 73-74 | the extender `(e)` is added, `*in92 = (%error);` |
+| `EOF` / `BOF` 75-76 of `READ`, `READE`, `READP`, `READPE`; `EQ` of `SETLL` | `*in94 = (%eof(FILE));` / `*in89 = (%equal(FILE));` |
+| `+`, `-`, `Z` of the arithmetic operations; `HI`, `LO`, `EQ` of `COMP` | `*in70 = (res > 0);` `*in71 = (res < 0);` `*in72 = (res = 0);` / compare of the two factors |
+| `IFxx` / `WHxx` / `DOWxx` / `DOUxx` followed by `ANDxx` / `ORxx` | `if (a = b) and (c < d) or (e = f);` |
+
+R: level or conditioning indicators, resulting indicators of other operations,
+`ANDxx` and `ORxx` with indicators or after a comment line, traditional `DO`, `MOVE`,
 `MOVEL`, `CALL`/`PARM`, string and other operations, a result field defined by
 length and decimals, a literal continued with `+` or `-`. Statements of a
 converted `/EXEC SQL` are not indented with the groups.

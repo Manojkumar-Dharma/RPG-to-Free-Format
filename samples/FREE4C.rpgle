@@ -25,3 +25,12 @@
      C                   ENDDO
      C     X             MOVE      Total         Name
      C                   EVAL      *inlr = *on
+     C     Key           SETLL     ORDERS                             90  89
+     C     Key           CHAIN     ORDERS                             9192
+     C                   READ      ORDERS                               9394
+     C     Count         IFGT      1
+     C     Count         ANDLT     9
+     C     Total         OREQ      0
+     C                   ENDIF
+     C     Total         COMP      100                                808182
+     C     Total         SUB       1             Total                707172

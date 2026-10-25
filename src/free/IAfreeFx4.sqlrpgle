@@ -1429,6 +1429,107 @@ dcl-proc IsAndOr;
 end-proc;
 
 // ------------------------------------------------------------------
+// The statements that give the resulting indicators of an operation their value
+// (Table 99 of SC09-2508): '; ' separated, '' when there are none. o_error is
+// *on when an error indicator needs the (E) extender. o_reason is set for an
+// indicator that has no free-form equivalent.
+dcl-proc ResultInds;
+  dcl-pi *n varchar(400);
+    i_op varchar(10) const;
+    i_f1 varchar(14) const;
+    i_f2 varchar(14) const;
+    i_res varchar(14) const;
+    i_line char(100) const;
+    o_error ind;
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_ind varchar(2) dim(3);
+  dcl-s l_k int(10);
+  dcl-s l_out varchar(400) inz('');
+  dcl-s l_test varchar(100);
+  dcl-s l_isFile ind inz(*off);
+  dcl-s l_pos int(10);
+
+  o_error = *off;
+  o_reason = '';
+  l_ind(1) = Txt('C':'HI':i_line);
+  l_ind(2) = Txt('C':'LO':i_line);
+  l_ind(3) = Txt('C':'EQ':i_line);
+  l_isFile = i_op = 'CHAIN' or i_op = 'SETLL' or i_op = 'SETGT'
+             or i_op = 'DELETE' or i_op = 'READ' or i_op = 'READE'
+             or i_op = 'READP' or i_op = 'READPE' or i_op = 'WRITE'
+             or i_op = 'UPDATE' or i_op = 'EXFMT' or i_op = 'OPEN'
+             or i_op = 'CLOSE' or i_op = 'UNLOCK' or i_op = 'FEOD';
+
+  for l_k = 1 to 3;
+    if l_ind(l_k) = '';
+      iter;
+    endif;
+    l_test = '';
+    select;
+      when l_isFile and l_k = 1 and (i_op = 'CHAIN' or i_op = 'SETLL'
+           or i_op = 'SETGT' or i_op = 'DELETE');
+        l_test = 'not %found(' + i_f2 + ')';
+      when l_isFile and l_k = 2;
+        o_error = *on;
+        l_test = '%error';
+      when l_isFile and l_k = 3 and (i_op = 'READ' or i_op = 'READE'
+           or i_op = 'READP' or i_op = 'READPE');
+        l_test = '%eof(' + i_f2 + ')';
+      when l_isFile and l_k = 3 and i_op = 'SETLL';
+        l_test = '%equal(' + i_f2 + ')';
+      when (i_op = 'ADD' or i_op = 'SUB' or i_op = 'MULT' or i_op = 'DIV'
+           or i_op = 'Z-ADD' or i_op = 'Z-SUB') and i_res <> '';
+        select;
+          when l_k = 1;
+            l_test = i_res + ' > 0';
+          when l_k = 2;
+            l_test = i_res + ' < 0';
+          other;
+            l_test = i_res + ' = 0';
+        endsl;
+      when i_op = 'COMP' and i_f1 <> '' and i_f2 <> '';
+        select;
+          when l_k = 1;
+            l_test = i_f1 + ' > ' + i_f2;
+          when l_k = 2;
+            l_test = i_f1 + ' < ' + i_f2;
+          other;
+            l_test = i_f1 + ' = ' + i_f2;
+        endsl;
+      other;
+        o_reason = 'Resulting indicator in columns ' + %char(69 + 2 * l_k) + '-'
+                   + %char(70 + 2 * l_k) + ' of ' + i_op + ' is not converted';
+        return '';
+    endsl;
+    if %len(l_out) > 0;
+      l_out += '; ';
+    endif;
+    l_out += '*in' + l_ind(l_k) + ' = (' + l_test + ')';
+  endfor;
+  return l_out;
+end-proc;
+
+// ------------------------------------------------------------------
+// The operation code of a C line without its extender, in upper case.
+dcl-proc OpOf;
+  dcl-pi *n varchar(10);
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_text varchar(10);
+  dcl-s l_paren int(10);
+
+  l_text = Up(Txt('C':'OPERATION':i_line));
+  l_paren = %scan('(':l_text);
+  if l_paren > 1;
+    return %subst(l_text:1:l_paren - 1);
+  endif;
+  return l_text;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc IsExtF2Op;
   dcl-pi *n ind;
     i_op varchar(10) const;
@@ -1526,6 +1627,14 @@ dcl-proc ConvertC;
   dcl-s l_expr varchar(100);
   dcl-s l_args varchar(300);
   dcl-s l_open ind inz(*off);
+  dcl-s l_post varchar(400) inz('');
+  dcl-s l_err ind inz(*off);
+  dcl-s l_andOp varchar(10);
+  dcl-s l_andSym varchar(2);
+  dcl-s l_andLine char(100);
+  dcl-s l_andF1 varchar(14);
+  dcl-s l_andF2 varchar(14);
+  dcl-s l_hasInd ind inz(*off);
 
   if not g_klDone;
     PrescanKlist();
@@ -1566,12 +1675,13 @@ dcl-proc ConvertC;
       l_reason = 'Level or conditioning indicator on a calculation';
     when (Txt('C':'HI':i_line) <> '' or Txt('C':'LO':i_line) <> ''
          or Txt('C':'EQ':i_line) <> '') and l_op <> 'SETON' and l_op <> 'SETOFF';
-      l_reason = 'Resulting indicators are not converted yet';
+      l_post = ResultInds(l_op:l_f1:l_f2:l_res:i_line:l_err:l_reason);
+      l_hasInd = l_reason = '';
     when IsAndOr(l_op);
       l_reason = 'ANDxx and ORxx are not converted yet';
   endsl;
   if l_reason = '' and l_op <> 'BEGSR' and l_op <> 'ENDSR' and l_f1 <> ''
-     and l_op <> 'KLIST'
+     and l_op <> 'KLIST' and l_op <> 'COMP'
      and not IsArith(l_op) and not (l_op = 'CHAIN' or l_op = 'SETLL'
      or l_op = 'SETGT' or l_op = 'READE' or l_op = 'READPE' or l_op = 'DELETE')
      and %subst(l_op:1:2) <> 'IF' and %subst(l_op:1:3) <> 'DOW'
@@ -1665,7 +1775,45 @@ dcl-proc ConvertC;
         if l_sym = '' or l_f1 = '' or l_f2 = '';
           l_reason = 'Operation ' + l_op + ' is not converted';
         else;
-          l_stmt += ' ' + l_f1 + ' ' + l_sym + ' ' + l_f2;
+          l_open = *off;
+          if i_index < SrcCount();
+            if IsCOp(SrcLine(i_index + 1));
+              l_open = IsAndOr(OpOf(SrcLine(i_index + 1)));
+            endif;
+          endif;
+          if l_open;
+            l_stmt += ' (' + l_f1 + ' ' + l_sym + ' ' + l_f2 + ')';
+          else;
+            l_stmt += ' ' + l_f1 + ' ' + l_sym + ' ' + l_f2;
+          endif;
+          l_next = i_index + 1;
+          dow l_next <= SrcCount() and IsCOp(SrcLine(l_next))
+              and IsAndOr(OpOf(SrcLine(l_next)));
+            l_andLine = SrcLine(l_next);
+            l_andOp = OpOf(l_andLine);
+            l_andF1 = Txt('C':'FACTOR1':l_andLine);
+            l_andF2 = Txt('C':'FACTOR2':l_andLine);
+            if %subst(l_andOp:1:3) = 'AND';
+              l_andSym = CompareSymbol(%subst(l_andOp:4:2));
+            else;
+              l_andSym = CompareSymbol(%subst(l_andOp:3:2));
+            endif;
+            if l_andF1 = '' or l_andF2 = '' or Txt('C':'LEVEL':l_andLine) <> ''
+               or Txt('C':'NOT1':l_andLine) <> '' or Txt('C':'IND1':l_andLine) <> ''
+               or Txt('C':'HI':l_andLine) <> '' or Txt('C':'LO':l_andLine) <> ''
+               or Txt('C':'EQ':l_andLine) <> '';
+              l_reason = 'ANDxx or ORxx with indicators or without factors';
+              leave;
+            endif;
+            if %subst(l_andOp:1:3) = 'AND';
+              l_stmt += ' and (';
+            else;
+              l_stmt += ' or (';
+            endif;
+            l_stmt += l_andF1 + ' ' + l_andSym + ' ' + l_andF2 + ')';
+            l_extra += 1;
+            l_next += 1;
+          enddo;
         endif;
       when l_op = 'SETON' or l_op = 'SETOFF';
         if l_op = 'SETON';
@@ -1736,6 +1884,11 @@ dcl-proc ConvertC;
             l_note = 'DIV followed by MVR needs a review';
           endif;
         endif;
+      when l_op = 'COMP';
+        if not l_hasInd or l_f1 = '' or l_f2 = '';
+          l_reason = 'COMP needs two factors and resulting indicators';
+        endif;
+        l_stmt = '';
       when l_op = 'CLEAR' or l_op = 'RESET';
         if l_f1 <> '' or l_f2 <> '' or l_res = '';
           l_reason = l_op + ' with factors is not converted';
@@ -1745,6 +1898,13 @@ dcl-proc ConvertC;
            or l_op = 'SETGT' or l_op = 'DELETE' or l_op = 'READ' or l_op = 'READP'
            or l_op = 'WRITE' or l_op = 'UPDATE' or l_op = 'OPEN' or l_op = 'CLOSE'
            or l_op = 'UNLOCK' or l_op = 'FEOD' or l_op = 'EXFMT';
+        if l_err and %scan('e':l_ext) = 0;
+          if l_ext = '';
+            l_ext = '(e)';
+          else;
+            l_ext = '(e' + %subst(l_ext:2);
+          endif;
+        endif;
         l_stmt = Low(l_op) + l_ext;
         l_args = '';
         if l_op = 'CHAIN' or l_op = 'READE' or l_op = 'READPE' or l_op = 'SETLL'
@@ -1805,7 +1965,20 @@ dcl-proc ConvertC;
       l_k = %scan('; ':l_stmt);
     enddo;
   endif;
-  EmitStatement(l_indent:l_stmt + ';':i_lineNo);
+  if l_stmt <> '';
+    EmitStatement(l_indent:l_stmt + ';':i_lineNo);
+  endif;
+  l_k = %scan('; ':l_post);
+  dow l_post <> '';
+    if l_k > 0;
+      EmitStatement(l_indent:%subst(l_post:1:l_k - 1) + ';':i_lineNo);
+      l_post = %subst(l_post:l_k + 2);
+    else;
+      EmitStatement(l_indent:l_post + ';':i_lineNo);
+      l_post = '';
+    endif;
+    l_k = %scan('; ':l_post);
+  enddo;
   select;
     when l_kind = 'I' or l_kind = 'L';
       CPush(l_kind);
