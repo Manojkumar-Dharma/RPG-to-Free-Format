@@ -5,6 +5,8 @@
      DName             S        10     A
      DShort            S        4      A
      DFlag             S               N
+     DPos              S        3      P0
+     DFull             S        30     A
      C*Main loop
      C     Init          BEGSR
      C                   EVAL      Count = 0
@@ -43,3 +45,7 @@
      C                   MOVE      '1'           *IN50
      C                   MOVE      *BLANKS       Name
      C                   MOVE      Count         Name
+     C     Name          CAT       Short:1       Full
+     C     'AB'          SCAN      Name:2        Pos
+     C     'AB'          SCAN      Name                                   60
+     C     3             SUBST(P)  Name:2        Full

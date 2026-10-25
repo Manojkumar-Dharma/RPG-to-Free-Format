@@ -1642,6 +1642,184 @@ dcl-proc MoveStmt;
   return '';
 end-proc;
 
+
+// ------------------------------------------------------------------
+// Splits 'a:b' (a colon outside quotes and parentheses) into its two parts;
+// o_second is '' when there is no colon.
+dcl-proc SplitPair;
+  dcl-pi *n;
+    i_text varchar(100) const;
+    o_first varchar(100);
+    o_second varchar(100);
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_depth int(10) inz(0);
+  dcl-s l_inQuote ind inz(*off);
+  dcl-s l_ch char(1);
+
+  o_first = i_text;
+  o_second = '';
+  for l_k = 1 to %len(i_text);
+    l_ch = %subst(i_text:l_k:1);
+    select;
+      when l_ch = C_QUOTE;
+        l_inQuote = not l_inQuote;
+      when l_inQuote;
+      when l_ch = '(';
+        l_depth += 1;
+      when l_ch = ')';
+        l_depth -= 1;
+      when l_ch = ':' and l_depth = 0;
+        o_first = %trim(%subst(i_text:1:l_k - 1));
+        o_second = %trim(%subst(i_text:l_k + 1));
+        return;
+    endsl;
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+// CAT, SCAN, CHECK, CHEKR and SUBST (SC09-2508, the operation codes) to +,
+// %SCAN, %CHECK, %CHECKR and %SUBST. o_found is the statement for the found
+// indicator ('' when none). The result field has to be declared already.
+dcl-proc StringStmt;
+  dcl-pi *n varchar(300);
+    i_op varchar(10) const;
+    i_pad ind const;
+    i_f1 varchar(14) const;
+    i_f2 varchar(14) const;
+    i_res varchar(14) const;
+    i_found varchar(2) const;
+    o_post varchar(100);
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_a varchar(100);
+  dcl-s l_b varchar(100);
+  dcl-s l_c varchar(100);
+  dcl-s l_d varchar(100);
+  dcl-s l_fn varchar(10);
+  dcl-s l_expr varchar(300);
+  dcl-s l_first varchar(120);
+  dcl-s l_blanks varchar(60);
+  dcl-s l_n int(10);
+
+  o_post = '';
+  o_reason = '';
+  SplitPair(i_f1:l_a:l_b);
+  SplitPair(i_f2:l_c:l_d);
+
+  select;
+    when i_op = 'CAT';
+      if i_f2 = '' or i_res = '';
+        o_reason = 'CAT needs factor 2 and a result field';
+        return '';
+      endif;
+      if l_d <> '' and (not IsDigits(l_d) or %int(l_d) > 40);
+        o_reason = 'CAT with a variable number of blanks is not converted';
+        return '';
+      endif;
+      if %subst(l_c:1:1) = '*' or %subst(l_a:1:1) = '*';
+        o_reason = 'CAT with a figurative constant is not converted';
+        return '';
+      endif;
+      if l_b <> '';
+        o_reason = 'CAT with a start in factor 1 is not valid';
+        return '';
+      endif;
+      if l_a = '';
+        l_first = i_res;
+      else;
+        l_first = l_a;
+      endif;
+      l_expr = '';
+      if l_d <> '';
+        if %subst(l_first:1:1) <> C_QUOTE;
+          l_first = '%trimr(' + l_first + ')';
+        endif;
+        l_expr = l_first;
+        if %int(l_d) > 0;
+          l_blanks = C_QUOTE + %subst('                                        '
+                     :1:%int(l_d)) + C_QUOTE;
+          l_expr += ' + ' + l_blanks;
+        endif;
+        l_expr += ' + ' + l_c;
+      else;
+        l_expr = l_first + ' + ' + l_c;
+      endif;
+      return i_res + ' = ' + l_expr;
+
+    when i_op = 'SCAN' or i_op = 'CHECK' or i_op = 'CHEKR';
+      if i_pad;
+        o_reason = 'Operation extender P is not valid on ' + i_op;
+        return '';
+      endif;
+      if i_f1 = '' or i_f2 = '' or (i_res = '' and i_found = '');
+        o_reason = i_op + ' needs factors 1 and 2 and a result field or an '
+                   + 'indicator';
+        return '';
+      endif;
+      select;
+        when i_op = 'SCAN';
+          l_fn = '%scan';
+        when i_op = 'CHECK';
+          l_fn = '%check';
+        other;
+          l_fn = '%checkr';
+      endsl;
+      // Factor 1 with a length takes the left part of the string.
+      if l_b <> '';
+        l_a = '%subst(' + l_a + ':1:' + l_b + ')';
+      endif;
+      l_expr = l_fn + '(' + l_a + ':' + l_c;
+      if l_d <> '';
+        l_expr += ':' + l_d;
+      endif;
+      l_expr += ')';
+      if i_res <> '';
+        if i_found <> '';
+          o_post = '*in' + i_found + ' = (' + i_res + ' > 0)';
+        endif;
+        return i_res + ' = ' + l_expr;
+      endif;
+      o_post = '*in' + i_found + ' = (' + l_expr + ' > 0)';
+      return '';
+
+    when i_op = 'SUBST';
+      if i_f2 = '' or i_res = '';
+        o_reason = 'SUBST needs factor 2 and a result field';
+        return '';
+      endif;
+      if i_found <> '';
+        o_reason = 'SUBST with an indicator needs MONITOR';
+        return '';
+      endif;
+      if l_b <> '';
+        o_reason = 'SUBST with a start in factor 1 is not valid';
+        return '';
+      endif;
+      if l_d = '';
+        l_d = '1';
+      endif;
+      if l_a <> '';
+        return i_res + ' = %subst(' + l_c + ':' + l_d + ':' + l_a + ')';
+      endif;
+      return i_res + ' = %subst(' + l_c + ':' + l_d + ')';
+  endsl;
+  o_reason = 'Operation ' + i_op + ' is not converted';
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc IsStringOp;
+  dcl-pi *n ind;
+    i_op varchar(10) const;
+  end-pi;
+
+  return i_op = 'CAT' or i_op = 'SCAN' or i_op = 'CHECK' or i_op = 'CHEKR'
+         or i_op = 'SUBST';
+end-proc;
+
 // ------------------------------------------------------------------
 // ANDxx or ORxx with a valid xx.
 dcl-proc IsAndOr;
@@ -1912,14 +2090,15 @@ dcl-proc ConvertC;
     when Txt('C':'IND1':i_line) <> '' and Up(Txt('C':'IND1':i_line)) = 'RT';
       l_reason = 'Indicator RT is not converted';
     when (Txt('C':'HI':i_line) <> '' or Txt('C':'LO':i_line) <> ''
-         or Txt('C':'EQ':i_line) <> '') and l_op <> 'SETON' and l_op <> 'SETOFF';
+         or Txt('C':'EQ':i_line) <> '') and l_op <> 'SETON' and l_op <> 'SETOFF'
+         and not IsStringOp(l_op);
       l_post = ResultInds(l_op:l_f1:l_f2:l_res:i_line:l_err:l_reason);
       l_hasInd = l_reason = '';
     when IsAndOr(l_op);
       l_reason = 'ANDxx and ORxx are not converted yet';
   endsl;
   if l_reason = '' and l_op <> 'BEGSR' and l_op <> 'ENDSR' and l_f1 <> ''
-     and l_op <> 'KLIST' and l_op <> 'COMP'
+     and l_op <> 'KLIST' and l_op <> 'COMP' and not IsStringOp(l_op)
      and not IsArith(l_op) and not (l_op = 'CHAIN' or l_op = 'SETLL'
      or l_op = 'SETGT' or l_op = 'READE' or l_op = 'READPE' or l_op = 'DELETE')
      and %subst(l_op:1:2) <> 'IF' and %subst(l_op:1:3) <> 'DOW'
@@ -2120,6 +2299,22 @@ dcl-proc ConvertC;
           endif;
           if l_op = 'DIV';
             l_note = 'DIV followed by MVR needs a review';
+          endif;
+        endif;
+      when IsStringOp(l_op);
+        if Txt('C':'LENGTH':i_line) <> '' or Txt('C':'DECIMALS':i_line) <> ''
+           or Txt('C':'HI':i_line) <> '' or Txt('C':'LO':i_line) <> ''
+           or (l_ext <> '' and l_ext <> '(p)');
+          l_reason = l_op + ' with a declared result, an error indicator, an '
+                     + 'extender or a high/low indicator is not converted';
+        elseif l_res <> '' and SymType(l_res) = '';
+          l_reason = 'The result field ' + l_res + ' is not declared in this source';
+        else;
+          l_stmt = StringStmt(l_op:l_ext = '(p)':l_f1:l_f2:l_res
+                              :Txt('C':'EQ':i_line):l_post:l_reason);
+          if l_reason = '' and not (l_ext = '(p)' and l_op <> 'SCAN');
+            l_note = l_op + ' converted: the unused part of the result is not '
+                     + 'padded the same way, check';
           endif;
         endif;
       when l_op = 'MOVE' or l_op = 'MOVEL';
