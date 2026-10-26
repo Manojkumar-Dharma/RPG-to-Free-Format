@@ -71,3 +71,18 @@
      C                   MVR                     Rem
      C     *LIKE         DEFN      Name          Copy
      C                   TESTN                   Digits               61  62
+      * Conditioned groups and DO without an index (FREE-21)
+     C   01Count         IFEQ      1
+     C     Count         ADD       1             Count
+     C                   ELSE
+     C     Count         SUB       1             Count
+     C                   ENDIF
+     C  N02Count         DOWLT     10
+     C     Count         ADD       1             Count
+     C                   ENDDO
+     C   03              DO        3
+     C     Count         ADD       1             Count
+     C                   ENDDO
+     C                   DO        2
+     C     Count         ADD       1             Count
+     C                   ENDDO

@@ -398,6 +398,8 @@ C specifications (part 2, `ConvertC` in `IAfreeFx4`, sample `samples/FREE4C.rpgl
 | `EVAL`, `EVALR`, `EVAL-CORR`, `IF`, `DOW`, `DOU`, `WHEN`, `ELSEIF`, `FOR`, `RETURN`, `CALLP`, `SORTA`, `ON-ERROR` (extended factor 2, with continuation lines) | same keyword in lower case with the extender, `;` added |
 | `ELSE`, `OTHER`, `SELECT`, `MONITOR`, `ENDIF`, `ENDDO`, `ENDFOR`, `ENDSL`, `ENDMON`, `ITER`, `LEAVE`, `LEAVESR`, `BEGSR name`, `ENDSR` | keyword; statements are indented two blanks per open group |
 | `IFxx`, `DOWxx`, `DOUxx`, `WHxx` | `if f1 = f2;` with `=`, `<>`, `>`, `<`, `>=`, `<=` |
+| a conditioning indicator (columns 9-11) on `IF`, `IFxx`, `DOW`, `DOWxx`, `DOU`, `DOUxx`, `FOR`, `DO` | an outer `if *inNN;` around the whole group, its `endif;` after the `ENDIF` / `ENDDO` / `ENDFOR` (an off indicator skips the group, the `ELSE` branch too); other group operations stay R (FREE-21, RV-52) |
+| `DO` without a result field (index) | `for DOIXnnnn = start to limit;` with the hidden index `dcl-s DOIXnnnn int(10);` (nnnn is the source line of the `DO`) before the first calculation (FREE-21, RV-54) |
 | `ADD`, `SUB`, `MULT`, `DIV`, `Z-ADD`, `Z-SUB` (result declared elsewhere; `(H)` gives `eval(h)`) | `res = f1 + f2;`; factor 1 blank gives `res = res + f2;`; DIV is A (MVR) |
 | `SETON`, `SETOFF` | `*in01 = *on;` / `*off` |
 | `CLEAR`, `RESET` with a result | `clear res;` |

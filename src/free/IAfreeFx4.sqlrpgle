@@ -2022,6 +2022,12 @@ dcl-proc WritePrototypes;
       AddSym(Txt('C':'RESULT':l_line):SymType(Txt('C':'FACTOR2':l_line)));
       iter;
     endif;
+    // DO without an index field: a hidden index, named after the line.
+    if IsCOp(l_line) and OpOf(l_line) = 'DO' and Txt('C':'RESULT':l_line) = ''
+       and Txt('C':'DECIMALS':l_line) = '' and Txt('C':'LENGTH':l_line) = '';
+      AddOut('dcl-s DOIX' + %char(SrcLineNo(l_k)) + ' int(10);':SrcLineNo(l_k));
+      iter;
+    endif;
     if not IsCOp(l_line) or OpOf(l_line) <> 'CALL';
       iter;
     endif;
@@ -2469,6 +2475,7 @@ dcl-proc ConvertC;
   dcl-s l_indent int(10);
   dcl-s l_kind char(1) inz(' ');
   dcl-s l_dedent ind inz(*off);
+  dcl-s l_wrap ind inz(*off);
   dcl-s l_sets varchar(200);
   dcl-s l_ind varchar(2);
   dcl-s l_k int(10);
@@ -2619,6 +2626,11 @@ dcl-proc ConvertC;
         endif;
         if l_limit = '';
           l_limit = '1';
+        endif;
+        if l_res = '' and Txt('C':'LENGTH':i_line) = ''
+           and Txt('C':'DECIMALS':i_line) = '' and l_ext = '';
+          l_res = 'DOIX' + %char(i_lineNo);
+          l_note = 'DO without an index field: hidden index ' + l_res;
         endif;
         if l_res = '' or Txt('C':'LENGTH':i_line) <> ''
            or Txt('C':'DECIMALS':i_line) <> '' or l_ext <> '';
@@ -2941,7 +2953,15 @@ dcl-proc ConvertC;
   // A conditioning indicator wraps the statement in IF ... ENDIF; a group
   // operation cannot be wrapped this way.
   if l_reason = '' and Txt('C':'IND1':i_line) <> '';
-    if l_kind <> ' ' and l_kind <> 'k';
+    if l_kind = 'I' or l_kind = 'L' or l_kind = 'F';
+      // IFxx, DOWxx, DOUxx, DO: an outer IF skips the whole group when the
+      // indicator is off; its ENDIF follows the END of the group.
+      l_wrap = *on;
+      l_cond = '*in' + Up(Txt('C':'IND1':i_line));
+      if Up(Txt('C':'NOT1':i_line)) = 'N';
+        l_cond = 'not ' + l_cond;
+      endif;
+    elseif l_kind <> ' ' and l_kind <> 'k';
       l_reason = 'Conditioning indicator on ' + l_op + ' is not converted';
     else;
       l_cond = '*in' + Up(Txt('C':'IND1':i_line));
@@ -2983,6 +3003,12 @@ dcl-proc ConvertC;
     l_post = l_stmt;
     l_stmt = '';
   endif;
+  if l_wrap;
+    EmitStatement(l_indent:'if ' + l_cond + ';':i_lineNo);
+    CPush('X');
+    l_indent += 2;
+    l_cond = '';
+  endif;
   l_base = l_indent;
   if l_cond <> '' and (l_stmt <> '' or l_post <> '');
     EmitStatement(l_base:'if ' + l_cond + ';':i_lineNo);
@@ -3004,6 +3030,10 @@ dcl-proc ConvertC;
   enddo;
   if l_indent > l_base;
     EmitStatement(l_base:'endif;':i_lineNo);
+  endif;
+  if l_kind = '-' and l_stmt <> 'endsr' and g_depth > 0 and g_stack(g_depth) = 'X';
+    g_depth -= 1;
+    EmitStatement(2 * g_depth:'endif;':i_lineNo);
   endif;
   select;
     when l_kind = 'I' or l_kind = 'L' or l_kind = 'F';

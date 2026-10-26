@@ -54,6 +54,7 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-18 | IACNVFREE | File description continuation records of RPG II and III to `dcl-f` keywords: `COMIT`, `INFDS`, `INFSR`, `RECNO`, `RENAME`, `IGNORE` (RV-32 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEFCN.rpg38`; needs a compile and test; the options of WORKSTN and SPECIAL files and `PRTCTL` stay R; next: RV-35 |
 | FREE-19 | IACNVFREE | Arrays: `L` and `R` sign formats of compile-time arrays to `extfmt`; reasons for arrays from or to a file and packed or binary data (RV-35 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEARR.rpg38`; needs a compile and test; `FROMFILE`, `TOFILE` and `EXTFMT(P/B)` have no free-form form (ILE RPG reference): those lines stay R; a compile-time array with a to-file now keeps its data section |
 | FREE-20 | IACNVFREE | `OCUR` and the number of occurrences of a data structure (columns 44-47) to `occurs(n)` and `%occur` (RV-11 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEOCC.rpg38`; needs a compile and test; `rules/IACNVRULES.sql` must be run again; the error indicator of `OCUR` stays R |
+| FREE-21 | IACNVFREE | RPG IV: conditioning indicators on `IF`, `DOW`, `DOU`, `FOR`, `DO` (outer `if`, RV-52) and `DO` without an index field (hidden index, RV-54) | Written | Not tested | `samples/FREE4C.rpgle`; needs a compile and test; other conditioned group operations and `ANDxx`/`ORxx` with indicators stay R |
 
 ## Notes
 
