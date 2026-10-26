@@ -1,0 +1,17 @@
+      * RPG III extension specifications: sign formats and file arrays (RV-35)
+     H
+      * Compile-time arrays with a sign on the left or right
+     E                    SGN     5   5  3L2
+     E                    SGR     4   4  5R0
+     E                    ARR1    3   6  6 0 ARR2    4R1
+     E                    CHR     7   7  3
+      * Not converted: FROMFILE, TOFILE, packed and binary, record address file
+     E    ARRFIL          PRE    10  10  5 0
+     E            OUTFIL  OUTA    5   5  4
+     E                    PCK     5   5  5P0
+     E                    BIN     5   5  4B0
+     E    RAFILE  DATAF
+      * Not converted: the sign format needs a compile-time numeric array
+     E                    CL      5   5  4L
+     E                    RL          5  4L0
+     E                    SG1     5   5  1L0

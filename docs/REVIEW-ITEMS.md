@@ -51,7 +51,7 @@ Code status and test status follow `PLANNED.md`.
 | RV-32 | Continuation records (`RECNO`, `SUBR` exit, `NUM`, `FMTS`, `INFSR`) | | Convert: `dcl-f` keywords where they exist; done in FREE-18 for DISK and PRINTER files (`COMIT`, `INFDS`, `INFSR`, `RECNO`, `RENAME`, `IGNORE`); WORKSTN, SPECIAL and `PRTCTL` options stay R | Written | Not tested |
 | RV-33 | Alternate collating sequence, file translation, transparent literals | tables | Sample: needs the tables | Planned | Not started |
 | RV-34 | Record address and table files, address output (T), limits processing, direct file load, file addition output, packed key, noncontiguous key | not in free form | No form for most; `EXTK`: R by design | Done | N/A |
-| RV-35 | Arrays from a file (E, columns 11-18), to a file, packed or binary format (columns 43, 55) | not converted | Convert: `fromfile`, `tofile`, `extfmt(P)`, `extfmt(B)` | Planned | Not started |
+| RV-35 | Arrays from a file (E, columns 11-18), to a file, packed or binary format (columns 43, 55) | not converted | Not possible: `FROMFILE` and `TOFILE` are not allowed in a free-form definition, `EXTFMT(P/B)` is only for such arrays (decided in FREE-19, stays R with that reason); `L` and `R` of compile-time arrays converted to `extfmt` | Written | Not tested |
 | RV-36 | Compiler directives (`/COPY`, `/TITLE` etc.) | members are fixed form | Decide: `/copy` only when the member is converted too; the other directives are dropped with a note | Planned | Not started |
 | RV-37 | Embedded SQL: `WHENEVER ... GOTO`, `C/EXEC SQL` with indicators | needs `TAG` (RV-14) | with RV-14 | Planned | Not started |
 
@@ -95,7 +95,7 @@ FREE-06 (module `IAfreeOut`): the R items of the output specifications.
 1. Open items first: RV-01 (written), then FREE-06 (RV-60 to RV-63) and FREE-10
    (RV-50 to RV-59).
 2. The Convert items that need no decision: RV-02, RV-03, RV-07, RV-09 and RV-10
-   are written (FREE-13); RV-04 and RV-05 are written (FREE-14), RV-06 (FREE-15), RV-08 (FREE-16), RV-11 (FREE-17, OCUR still R), RV-32 (FREE-18); RV-35 is next.
+   are written (FREE-13); RV-04 and RV-05 are written (FREE-14), RV-06 (FREE-15), RV-08 (FREE-16), RV-11 (FREE-17, OCUR still R), RV-32 (FREE-18), RV-35 (FREE-19: L and R only, the file arrays have no free-form form). The planned items of this list are done; OCUR waits for `OCCURS`.
 3. The Decide items: RV-14, RV-20/21, RV-30, RV-36.
 4. The Sample items when the members arrive: RV-33, RV-41, RV-42.
 5. RV-12 and RV-31 together with the display file converter.

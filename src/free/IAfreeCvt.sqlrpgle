@@ -268,9 +268,14 @@ end-proc;
 //   dcl-s NAME zoned(len:dec) dim(n) perrcd(k) ctdata; compile-time array
 //   dcl-s ALT type dim(n) alt(NAME);                   alternating array
 // The data of a compile-time array stays after the source, under a **CTDATA
-// record (see ConvertDataHeader). Arrays loaded from a file (columns 11-18), arrays
-// written at the end of the job (19-26), record address files, packed or
-// binary data and the other data formats are reported R.
+// record (see ConvertDataHeader). A sign on the left or right (L or R in column 43
+// or 55) is EXTFMT(L) or EXTFMT(R): the length of the entry includes the sign, the
+// free-form length does not. Arrays loaded from a file (columns 11-18) and
+// arrays written at the end of the job (19-26) need the FROMFILE and TOFILE
+// keywords, which are not allowed in a free-form definition (a fixed-form D
+// specification would be needed); packed and binary data (P, B) is only for
+// such prerun-time arrays; record address files are not supported. All are
+// reported R.
 dcl-proc ConvertExtension;
   dcl-pi *n;
     i_lineNo int(10) const;
@@ -290,17 +295,30 @@ dcl-proc ConvertExtension;
   dcl-s l_note varchar(190) inz('');
   dcl-s l_status char(1);
   dcl-s l_compile ind inz(*off);
+  dcl-s l_from varchar(8);
+  dcl-s l_to varchar(8);
+  dcl-s l_fmt1 char(1);
+  dcl-s l_fmt2 char(1);
+  dcl-s l_len1 char(3);
+  dcl-s l_len2 char(3);
+  dcl-s l_ext1 varchar(14) inz('');
+  dcl-s l_ext2 varchar(14) inz('');
 
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
   l_name = %trim(%subst(l_up:27:6));
   l_alt = %trim(%subst(l_up:46:6));
   l_ent = %trim(%subst(l_up:33:3));
   l_dim = %trim(%subst(l_up:36:4));
+  l_from = %trim(%subst(l_up:11:8));
+  l_to = %trim(%subst(l_up:19:8));
+  l_fmt1 = %subst(l_up:43:1);
+  l_fmt2 = %subst(l_up:55:1);
+  l_len1 = %subst(l_up:40:3);
+  l_len2 = %subst(l_up:52:3);
 
   select;
-    when %trim(%subst(l_up:11:8)) <> '' or %trim(%subst(l_up:19:8)) <> '';
-      l_reason = 'Record address files, arrays loaded from a file and arrays '
-                 + 'written to a file are not converted';
+    when l_name = '' and (l_from <> '' or l_to <> '');
+      l_reason = 'Record address files are not supported in free-form';
     when not IsRpgName(l_name:6) or IsReservedName(l_name);
       l_reason = 'Array or table name (columns 27-32) is not valid';
     when FindName(l_name) > 0;
@@ -310,15 +328,55 @@ dcl-proc ConvertExtension;
       l_reason = 'Number of entries per array (columns 36-39) is not valid';
     when l_ent <> '' and (not IsNumber(l_ent) or ToInt(l_ent) < 1);
       l_reason = 'Number of entries per record (columns 33-35) is not valid';
-    when %subst(l_up:43:1) <> ' ' or %subst(l_up:55:1) <> ' ';
-      l_reason = 'Packed, binary and other data formats (columns 43 and 55) '
-                 + 'are not converted';
+    when l_from <> '';
+      l_reason = 'FROMFILE (an array loaded from file ' + l_from + ' at the start of '
+                 + 'the program) is not allowed in a free-form definition: it needs '
+                 + 'a fixed-form D specification, or the array must be loaded by '
+                 + 'READ operations';
+    when l_to <> '';
+      l_reason = 'TOFILE (an array written to file ' + l_to + ' at the end of the '
+                 + 'program) is not allowed in a free-form definition: it needs '
+                 + 'a fixed-form D specification, or the array must be written by '
+                 + 'WRITE operations';
+    when l_fmt1 = 'P' or l_fmt1 = 'B' or l_fmt2 = 'P' or l_fmt2 = 'B';
+      l_reason = 'Packed and binary data (columns 43 and 55) is only for arrays '
+                 + 'loaded from a file, which are not allowed in free-form';
+    when (l_fmt1 <> ' ' and l_fmt1 <> 'L' and l_fmt1 <> 'R')
+         or (l_fmt2 <> ' ' and l_fmt2 <> 'L' and l_fmt2 <> 'R');
+      l_reason = 'The data format (columns 43 and 55) must be blank, L or R';
+    when (l_fmt1 <> ' ' or l_fmt2 <> ' ') and l_ent = '';
+      l_reason = 'A sign on the left or right (L, R) is only for compile-time '
+                 + 'arrays and tables';
+    when l_fmt1 <> ' ' and %subst(l_up:44:1) = ' ';
+      l_reason = 'A sign on the left or right (L, R) is only for numeric arrays';
+    when l_fmt2 <> ' ' and %subst(l_up:56:1) = ' ';
+      l_reason = 'A sign on the left or right (L, R) is only for numeric arrays';
   endsl;
+
+  // L and R: the length of the entry includes the sign; EXTFMT(L) and EXTFMT(R)
+  // give the digits only.
+  if l_reason = '' and l_fmt1 <> ' ';
+    if not IsNumber(%trim(l_len1)) or ToInt(%trim(l_len1)) < 2;
+      l_reason = 'The length of an entry with a sign (columns 40-42) must be 2 or '
+                 + 'more';
+    else;
+      l_len1 = %trim(%char(ToInt(%trim(l_len1)) - 1));
+      l_ext1 = ' extfmt(' + l_fmt1 + ')';
+    endif;
+  endif;
+  if l_reason = '' and l_fmt2 <> ' ';
+    if not IsNumber(%trim(l_len2)) or ToInt(%trim(l_len2)) < 2;
+      l_reason = 'The length of an entry with a sign (columns 52-54) must be 2 or '
+                 + 'more';
+    else;
+      l_len2 = %trim(%char(ToInt(%trim(l_len2)) - 1));
+      l_ext2 = ' extfmt(' + l_fmt2 + ')';
+    endif;
+  endif;
 
   // The type of the entries; the alternating array has its own type.
   if l_reason = '';
-    l_reason = ArrayType(%subst(l_up:40:3):%subst(l_up:44:1):%subst(l_up:45:1)
-                         :l_type);
+    l_reason = ArrayType(l_len1:%subst(l_up:44:1):%subst(l_up:45:1):l_type);
   endif;
   if l_reason = '' and l_alt <> '';
     select;
@@ -331,7 +389,7 @@ dcl-proc ConvertExtension;
         l_reason = 'Name ' + l_alt + ' is already defined at line '
                    + %char(FindName(l_alt));
       other;
-        l_reason = ArrayType(%subst(l_up:52:3):%subst(l_up:56:1)
+        l_reason = ArrayType(l_len2:%subst(l_up:56:1)
                              :%subst(l_up:57:1):l_altType);
     endsl;
   endif;
@@ -339,8 +397,7 @@ dcl-proc ConvertExtension;
   if l_reason <> '';
     ReviewSpec(i_lineNo:i_line:l_reason);
     // A compile-time array that is not converted still owns a data section.
-    if %trim(%subst(l_up:11:8)) = '' and %trim(%subst(l_up:19:8)) = ''
-       and l_ent <> '';
+    if l_from = '' and l_ent <> '';
       AddCompileTime('');
     endif;
     return;
@@ -350,7 +407,7 @@ dcl-proc ConvertExtension;
   l_stmt = 'dcl-s ' + l_name + ' ' + l_type + ' dim(' + %trim(%char(ToInt(l_dim)))
            + ')';
   if l_compile;
-    l_stmt += ' perrcd(' + %trim(%char(ToInt(l_ent))) + ') ctdata';
+    l_stmt += ' perrcd(' + %trim(%char(ToInt(l_ent))) + ')' + l_ext1 + ' ctdata';
     AddCompileTime(l_name);
   endif;
   select;
@@ -361,7 +418,7 @@ dcl-proc ConvertExtension;
   endsl;
   AddOut(l_stmt + ';':i_lineNo);
   DefineName(l_name:i_lineNo);
-  DefineArrayField(l_name:%subst(l_up:40:3):%subst(l_up:44:1));
+  DefineArrayField(l_name:l_len1:%subst(l_up:44:1));
   CalcDefineArray(l_name:%subst(l_up:45:1):ToInt(l_dim):l_alt);
 
   if l_alt <> '';
@@ -373,17 +430,26 @@ dcl-proc ConvertExtension;
       when %subst(l_up:57:1) = 'D';
         l_altStmt += ' descend';
     endsl;
-    l_altStmt += ' alt(' + l_name + ')';
+    l_altStmt += l_ext2 + ' alt(' + l_name + ')';
     AddOut(l_altStmt + ';':i_lineNo);
     DefineName(l_alt:i_lineNo);
-    DefineArrayField(l_alt:%subst(l_up:52:3):%subst(l_up:56:1));
+    DefineArrayField(l_alt:l_len2:%subst(l_up:56:1));
     CalcDefineArray(l_alt:%subst(l_up:57:1):ToInt(l_dim):'');
   endif;
 
   l_status = C_STS_CONVERTED;
+  if l_ext1 <> '' or l_ext2 <> '';
+    l_status = C_STS_ASSUMPTION;
+    l_note = 'EXTFMT: the length of the entry in columns 40-42 (or 52-54) includes '
+             + 'the sign, the declared digits are one less; the data records are '
+             + 'kept as they are';
+  endif;
   if %subst(l_name:1:3) = 'TAB';
     l_status = C_STS_ASSUMPTION;
-    l_note = 'Table ' + l_name + ' is declared as an array with the index field '
+    if l_note <> '';
+      l_note += '; ';
+    endif;
+    l_note += 'Table ' + l_name + ' is declared as an array with the index field '
              + l_name + '_IDX: the table name in a calculation means the entry '
              + 'found by the last LOKUP, written ' + l_name + '(' + l_name
              + '_IDX)';

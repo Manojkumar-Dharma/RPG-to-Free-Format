@@ -551,6 +551,21 @@ Reported R, with the whole file kept as comments (the main line and its records)
 
 `samples/FREEFCN.rpg38`: one file for each converted option (also `COMIT` on the main line), then the R files. Expected result, written from the design and not from a run: `dcl-f CUSTMAS disk usage(*input) keyed commit;`, `dcl-f ORDERS disk usage(*update:*delete) keyed recno(RRN) infds(ORDDS) infsr(*pssr);`, `dcl-f ITEMS disk usage(*input) keyed rename(ITEMREC:ITEMR) ignore(OLDREC);`, `dcl-f QPRINT printer infsr(PRTERR);`.
 
+## Arrays: sign format, files and data format (FREE-19, review item RV-35)
+
+Source: SC09-1817 chapter 6 (E specification: positions 11-26, 43, 55), the ILE RPG reference (`EXTFMT`, `FROMFILE`, `TOFILE`, "Free-form equivalents for keywords that are not supported in free-form definitions"). Code: `ConvertExtension` in `IAfreeCvt`.
+
+**The planned conversion of RV-35 (`fromfile`, `tofile`, `extfmt(P)`, `extfmt(B)`) is not possible**: the ILE RPG reference says the `FROMFILE` and `TOFILE` keywords are not allowed in a free-form definition (a fixed-form D specification is needed), and `EXTFMT` P and B are only for arrays loaded from a file. These stay R, with that reason. What can be converted is the sign format of compile-time arrays:
+
+| Source | Becomes | Status |
+|---|---|---|
+| Compile-time array, `L` or `R` in column 43 (numeric, length 3 with 2 decimals) | `dcl-s SGN zoned(2:2) dim(5) perrcd(5) extfmt(L) ctdata;` (the length of the entry includes the sign, the declared digits are one less) | A |
+| Alternating array, `L` or `R` in column 55 | `dcl-s ARR2 zoned(3:1) dim(6) extfmt(R) alt(ARR1);` | A |
+
+Reported R: an array with a file in columns 11-18 (FROMFILE) or 19-26 (TOFILE), packed or binary data (`P`, `B`), a record address file (name blank), a sign format for a character array, a run-time array (columns 33-35 blank) or an entry shorter than 2, a data format other than blank, `L` or `R`. A compile-time array that is not converted (also one with a to-file) still takes its data section, so the next arrays keep their `**CTDATA` names. To convert such an array, load it with `READ` operations and write it with `WRITE` operations, or keep a fixed-form D specification (the source then is not fully free-form).
+
+`samples/FREEARR.rpg38`: the converted sign arrays, then the R lines. Expected result, written from the design and not from a run: `SGN zoned(2:2) ... extfmt(L)`, `SGR zoned(4:0) ... extfmt(R)`, `ARR1 zoned(6:0) ...` with `ARR2 zoned(3:1) dim(6) extfmt(R) alt(ARR1)`.
+
 ## LOKUP and MOVEA (FREE-08, arrays and tables of FREE-07)
 
 Source: SC09-1818 chapter 27 and SC09-1817 chapter 11 (LOKUP: the search argument, the high, low and equal indicators, the index, the second table), the ILE RPG reference (`%LOOKUP`, `%LOOKUPGT`, `%LOOKUPGE`, `%LOOKUPLT`, `%LOOKUPLE`). `IAfreeCvt` gives `IAfreeCalc` the arrays and tables of the E specifications (`CalcDefineArray`: name, sequence, number of entries, alternating array). The statements use the hidden field `LOKUP_IX` (declared once).
