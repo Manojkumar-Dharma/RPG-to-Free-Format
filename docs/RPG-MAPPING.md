@@ -414,6 +414,7 @@ C specifications (part 2, `ConvertC` in `IAfreeFx4`, sample `samples/FREE4C.rpgl
 | `CAT`, `SCAN`, `CHECK`, `CHEKR`, `SUBST` (result declared in the source; found indicator in 75-76) | as the table of FREE-12: `res = %trimr(f1) + ' ' + f2;`, `pos = %scan(a:b:start);`, `*in60 = (%scan(a:b) > 0);`, `res = %subst(s:start:len);`. A; `(P)` is C. R: error indicator or `(E)`, figurative constants, a variable number of blanks, undeclared result |
 | `DO` with a declared index field, `ENDDO` with an increment | `for IDX = start to limit;` (start and limit default to 1), then `for IDX = start to limit by inc;` | C |
 | `DSPLY`, `COMIT`/`COMMIT`, `ROLBK`, `DUMP`, `TIME` (6-digit field) | `dsply msg queue resp;`, `commit;`, `rolbk;`, `dump(a);`, `now = %dec(%time() : *hms);` | C |
+| `CALL 'PGM'` with its `PARM` lines or a `PLIST` named in the result field | before the first calculation `dcl-pr PGM extpgm('PGM'); dcl-parm *n type; ... end-pr;` (types of the declared parameter fields), then `result = factor1; callp(e) PGM(p1 : p2); factor2 = result;` | A. R: a program name that is not a literal without library, a parameter that is not declared in this source, the same program with other parameter types, `ER`/`LR` indicators, `PLIST *ENTRY`, `PARM` without a `CALL` |
 | Conditioning indicator (columns 9-11) on a simple operation | `if *in90;` or `if not *in90;`, the statement indented, `endif;` |
 
 R: level indicators (columns 7-8), a conditioning indicator on a group operation (`IF`, `DOW`, `BEGSR`...) or on `RT`, resulting indicators of other operations,

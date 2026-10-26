@@ -57,3 +57,9 @@
      C                   TIME                    Now
      C                   COMMIT
      C                   DUMP(A)
+     C                   CALL(E)   'MYPGM'
+     C     'X'           PARM                    Name
+     C                   PARM      Total         Total
+     C                   CALL      'OTHER'       PL1
+     C     PL1           PLIST
+     C                   PARM                    Count

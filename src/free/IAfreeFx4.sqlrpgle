@@ -43,6 +43,16 @@ dcl-c C_MAXSYM 1500;
 dcl-s g_symName varchar(45) dim(C_MAXSYM);   // declared fields and their types
 dcl-s g_symType varchar(60) dim(C_MAXSYM);
 dcl-s g_symCount int(10) inz(0);
+// CALL, PARM and PLIST: the parameters read last and the prototypes written.
+dcl-c C_MAXPARM 20;
+dcl-s g_pF1 varchar(14) dim(C_MAXPARM);
+dcl-s g_pF2 varchar(14) dim(C_MAXPARM);
+dcl-s g_pRes varchar(14) dim(C_MAXPARM);
+dcl-s g_pCount int(10) inz(0);
+dcl-s g_protoName varchar(10) dim(40);
+dcl-s g_protoSig varchar(300) dim(40);
+dcl-s g_protoCount int(10) inz(0);
+dcl-s g_cStarted ind inz(*off);
 dcl-s g_quoted ind inz(*off);           // a name was written as a literal
 dcl-s g_constName varchar(21) dim(C_MAXCONST);
 dcl-s g_constCount int(10) inz(0);
@@ -114,6 +124,8 @@ dcl-proc Fx4Start export;
   g_klCount = 0;
   g_klDone = *off;
   g_symCount = 0;
+  g_cStarted = *off;
+  g_protoCount = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1822,6 +1834,294 @@ dcl-proc IsStringOp;
          or i_op = 'SUBST';
 end-proc;
 
+
+// ------------------------------------------------------------------
+// CALL, PARM and PLIST (FREE-10): a CALL of a literal program name with its
+// PARM lines (or the PARM lines of a PLIST) becomes a prototype with EXTPGM,
+// written before the first calculation, and a CALLP.
+
+// The PARM lines that follow the line at i_index (consecutive C lines). Returns
+// their number; the entries are in g_pF1, g_pF2 and g_pRes.
+dcl-proc ReadParms;
+  dcl-pi *n int(10);
+    i_index int(10) const;
+  end-pi;
+
+  dcl-s l_next int(10);
+  dcl-s l_line char(100);
+
+  g_pCount = 0;
+  l_next = i_index + 1;
+  dow l_next <= SrcCount();
+    l_line = SrcLine(l_next);
+    if not IsCOp(l_line) or OpOf(l_line) <> 'PARM';
+      leave;
+    endif;
+    if g_pCount < C_MAXPARM;
+      g_pCount += 1;
+      g_pF1(g_pCount) = Txt('C':'FACTOR1':l_line);
+      g_pF2(g_pCount) = Txt('C':'FACTOR2':l_line);
+      g_pRes(g_pCount) = Txt('C':'RESULT':l_line);
+    endif;
+    l_next += 1;
+  enddo;
+  return l_next - i_index - 1;
+end-proc;
+
+// ------------------------------------------------------------------
+// The source index of the first line after the PLIST with this name, or 0.
+dcl-proc FindPlist;
+  dcl-pi *n int(10);
+    i_name varchar(14) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_line char(100);
+
+  for l_k = 1 to SrcCount();
+    l_line = SrcLine(l_k);
+    if IsCOp(l_line) and OpOf(l_line) = 'PLIST'
+       and Up(Txt('C':'FACTOR1':l_line)) = Up(i_name);
+      return l_k;
+    endif;
+  endfor;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// Reads the parameters of the CALL at i_index (its own PARM lines, or the
+// PLIST named in the result field). Returns '' or the reason it fails.
+dcl-proc CallParms;
+  dcl-pi *n varchar(150);
+    i_index int(10) const;
+    i_plist varchar(14) const;
+    o_extra int(10);
+  end-pi;
+
+  dcl-s l_pl int(10);
+
+  o_extra = 0;
+  if i_plist = '';
+    o_extra = ReadParms(i_index);
+    return '';
+  endif;
+  l_pl = FindPlist(i_plist);
+  if l_pl = 0;
+    return 'PLIST ' + i_plist + ' is not defined';
+  endif;
+  if Up(Txt('C':'FACTOR1':SrcLine(l_pl))) = '*ENTRY';
+    return 'The PLIST *ENTRY is not a parameter list for CALL';
+  endif;
+  ReadParms(l_pl);
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// Program name of a CALL (a literal without library), as a free-form name.
+dcl-proc ProgramName;
+  dcl-pi *n varchar(10);
+    i_f2 varchar(14) const;
+  end-pi;
+
+  dcl-s l_name varchar(14);
+
+  if %len(i_f2) < 3 or %subst(i_f2:1:1) <> C_QUOTE
+     or %subst(i_f2:%len(i_f2):1) <> C_QUOTE;
+    return '';
+  endif;
+  l_name = Up(%subst(i_f2:2:%len(i_f2) - 2));
+  if %len(l_name) > 10 or %check(C_UPPER + C_DIGITS + '_#@$':l_name) > 0
+     or %check(C_UPPER + '#@$':%subst(l_name:1:1)) > 0;
+    return '';
+  endif;
+  return l_name;
+end-proc;
+
+// ------------------------------------------------------------------
+// The parameter types of the parameters read last: '' with o_reason when a type
+// is not known. The signature is the types joined with ';'.
+dcl-proc ParmSignature;
+  dcl-pi *n varchar(300);
+    o_reason varchar(150);
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_type varchar(60);
+  dcl-s l_sig varchar(300) inz('');
+
+  o_reason = '';
+  for l_k = 1 to g_pCount;
+    if g_pRes(l_k) = '';
+      o_reason = 'PARM without a result field';
+      return '';
+    endif;
+    l_type = SymType(g_pRes(l_k));
+    if l_type = '';
+      o_reason = 'Parameter ' + g_pRes(l_k) + ' is not declared in this source';
+      return '';
+    endif;
+    if l_k > 1;
+      l_sig += ';';
+    endif;
+    l_sig += l_type;
+  endfor;
+  return l_sig;
+end-proc;
+
+// ------------------------------------------------------------------
+// Before the first calculation: one DCL-PR for each program that is called with
+// the same parameter types every time.
+dcl-proc WritePrototypes;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_line char(100);
+  dcl-s l_name varchar(10);
+  dcl-s l_sig varchar(300);
+  dcl-s l_reason varchar(150);
+  dcl-s l_extra int(10);
+  dcl-s l_plist varchar(14);
+  dcl-s l_p int(10);
+  dcl-s l_rest varchar(300);
+  dcl-s l_semi int(10);
+  dcl-s l_f int(10);
+  dcl-s l_known ind;
+
+  g_protoCount = 0;
+  for l_k = 1 to SrcCount();
+    l_line = SrcLine(l_k);
+    if not IsCOp(l_line) or OpOf(l_line) <> 'CALL';
+      iter;
+    endif;
+    l_name = ProgramName(Txt('C':'FACTOR2':l_line));
+    if l_name = '';
+      iter;
+    endif;
+    l_plist = Txt('C':'RESULT':l_line);
+    if CallParms(l_k:l_plist:l_extra) <> '';
+      iter;
+    endif;
+    l_sig = ParmSignature(l_reason);
+    if l_reason <> '';
+      iter;
+    endif;
+    l_known = *off;
+    for l_f = 1 to g_protoCount;
+      if g_protoName(l_f) = l_name;
+        l_known = *on;
+      endif;
+    endfor;
+    if l_known or g_protoCount >= 40 or IsConstName(l_name);
+      iter;
+    endif;
+    g_protoCount += 1;
+    g_protoName(g_protoCount) = l_name;
+    g_protoSig(g_protoCount) = l_sig;
+    AddOut('dcl-pr ' + l_name + ' extpgm(''' + l_name + ''');':SrcLineNo(l_k));
+    l_rest = l_sig;
+    dow l_rest <> '';
+      l_semi = %scan(';':l_rest);
+      if l_semi = 0;
+        AddOut('  dcl-parm *n ' + l_rest + ';':SrcLineNo(l_k));
+        l_rest = '';
+      else;
+        AddOut('  dcl-parm *n ' + %subst(l_rest:1:l_semi - 1) + ';':SrcLineNo(l_k));
+        l_rest = %subst(l_rest:l_semi + 1);
+      endif;
+    enddo;
+    AddOut('end-pr;':SrcLineNo(l_k));
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+// *ON when the program was called with the same parameter types as its prototype.
+dcl-proc ProtoMatches;
+  dcl-pi *n ind;
+    i_name varchar(10) const;
+    i_sig varchar(300) const;
+  end-pi;
+
+  dcl-s l_f int(10);
+
+  for l_f = 1 to g_protoCount;
+    if g_protoName(l_f) = i_name;
+      return g_protoSig(l_f) = i_sig;
+    endif;
+  endfor;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+// The statements of a CALL: o_extra PARM lines were read with it.
+dcl-proc CallStatements;
+  dcl-pi *n varchar(1000);
+    i_index int(10) const;
+    i_f2 varchar(14) const;
+    i_plist varchar(14) const;
+    i_ext varchar(6) const;
+    o_extra int(10);
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_name varchar(10);
+  dcl-s l_sig varchar(300);
+  dcl-s l_reason varchar(150);
+  dcl-s l_k int(10);
+  dcl-s l_pre varchar(500) inz('');
+  dcl-s l_post varchar(500) inz('');
+  dcl-s l_args varchar(300) inz('');
+  dcl-s l_call varchar(400);
+
+  o_reason = '';
+  l_name = ProgramName(i_f2);
+  if l_name = '';
+    o_reason = 'CALL needs a literal program name without a library';
+    return '';
+  endif;
+  l_reason = CallParms(i_index:i_plist:o_extra);
+  if l_reason <> '';
+    o_reason = l_reason;
+    return '';
+  endif;
+  l_sig = ParmSignature(l_reason);
+  if l_reason <> '';
+    o_reason = l_reason;
+    return '';
+  endif;
+  if not ProtoMatches(l_name:l_sig);
+    o_reason = 'Program ' + l_name + ' is called with different parameter types '
+               + 'or its name is already used';
+    return '';
+  endif;
+  for l_k = 1 to g_pCount;
+    if l_k > 1;
+      l_args += ' : ';
+    endif;
+    l_args += g_pRes(l_k);
+    if g_pF1(l_k) <> '';
+      if l_pre <> '';
+        l_pre += '; ';
+      endif;
+      l_pre += g_pRes(l_k) + ' = ' + g_pF1(l_k);
+    endif;
+    if g_pF2(l_k) <> '';
+      if l_post <> '';
+        l_post += '; ';
+      endif;
+      l_post += g_pF2(l_k) + ' = ' + g_pRes(l_k);
+    endif;
+  endfor;
+  l_call = 'callp' + i_ext + ' ' + l_name + '(' + l_args + ')';
+  if l_pre <> '';
+    l_call = l_pre + '; ' + l_call;
+  endif;
+  if l_post <> '';
+    l_call += '; ' + l_post;
+  endif;
+  return l_call;
+end-proc;
+
 // ------------------------------------------------------------------
 // ANDxx or ORxx with a valid xx.
 dcl-proc IsAndOr;
@@ -2055,6 +2355,10 @@ dcl-proc ConvertC;
   if not g_klDone;
     PrescanKlist();
   endif;
+  if not g_cStarted;
+    g_cStarted = *on;
+    WritePrototypes();
+  endif;
 
   l_opText = Up(Txt('C':'OPERATION':i_line));
   l_paren = %scan('(':l_opText);
@@ -2105,6 +2409,7 @@ dcl-proc ConvertC;
   endsl;
   if l_reason = '' and l_op <> 'BEGSR' and l_op <> 'ENDSR' and l_f1 <> ''
      and l_op <> 'KLIST' and l_op <> 'COMP' and not IsStringOp(l_op)
+     and l_op <> 'CALL' and l_op <> 'PLIST' and l_op <> 'PARM'
      and l_op <> 'DO' and l_op <> 'DSPLY' and l_op <> 'COMIT' and l_op <> 'COMMIT'
      and not IsArith(l_op) and not (l_op = 'CHAIN' or l_op = 'SETLL'
      or l_op = 'SETGT' or l_op = 'READE' or l_op = 'READPE' or l_op = 'DELETE')
@@ -2183,6 +2488,27 @@ dcl-proc ConvertC;
           l_stmt = 'for ' + l_res + ' = ' + l_start + ' to ' + l_limit;
           l_kind = 'F';
         endif;
+      when l_op = 'CALL';
+        if l_f1 <> '' or Txt('C':'LENGTH':i_line) <> ''
+           or (l_ext <> '' and l_ext <> '(e)');
+          l_reason = 'CALL with factor 1, length or an extender other than (E)';
+        else;
+          l_post = CallStatements(i_index:l_f2:l_res:l_ext:l_k:l_reason);
+          l_extra += l_k;
+          l_stmt = '';
+          l_note = 'CALL converted to a CALLP of a prototype written before the '
+                   + 'calculations: parameters are passed by reference as before';
+        endif;
+      when l_op = 'PLIST';
+        if Up(l_f1) = '*ENTRY' or l_f1 = '';
+          l_reason = 'PLIST *ENTRY: declare the parameters of the program with '
+                     + 'dcl-pi by hand';
+        else;
+          l_extra += ReadParms(i_index);
+          l_kind = 'k';
+        endif;
+      when l_op = 'PARM';
+        l_reason = 'PARM without a CALL or PLIST before it';
       when l_op = 'DSPLY';
         if l_f1 = '' and (l_f2 <> '' or l_res <> '');
           l_reason = 'DSPLY with a queue or response needs a message in factor 1';
