@@ -412,6 +412,8 @@ C specifications (part 2, `ConvertC` in `IAfreeFx4`, sample `samples/FREE4C.rpgl
 
 | `MOVE`, `MOVEL` between declared fields (type table filled from the D specifications of the same source) | char to char: `res = f2` when the lengths are equal, `%subst` of the longer or `%subst(res:...) = f2` for the shorter; `MOVEL(P)`: `res = f2`; numeric to numeric with equal decimals and enough digits: `res = f2`; literal `'1'`/`'0'` or `*ON`/`*OFF` to `*INnn` or an indicator: `*on`/`*off`; `*BLANKS`, `*ZEROS` and the like: assigned. Reported A (check). Other type pairs, undeclared fields, `MOVE(P)`, a result with length or decimals: R |
 | `CAT`, `SCAN`, `CHECK`, `CHEKR`, `SUBST` (result declared in the source; found indicator in 75-76) | as the table of FREE-12: `res = %trimr(f1) + ' ' + f2;`, `pos = %scan(a:b:start);`, `*in60 = (%scan(a:b) > 0);`, `res = %subst(s:start:len);`. A; `(P)` is C. R: error indicator or `(E)`, figurative constants, a variable number of blanks, undeclared result |
+| `DO` with a declared index field, `ENDDO` with an increment | `for IDX = start to limit;` (start and limit default to 1), then `for IDX = start to limit by inc;` | C |
+| `DSPLY`, `COMIT`/`COMMIT`, `ROLBK`, `DUMP`, `TIME` (6-digit field) | `dsply msg queue resp;`, `commit;`, `rolbk;`, `dump(a);`, `now = %dec(%time() : *hms);` | C |
 | Conditioning indicator (columns 9-11) on a simple operation | `if *in90;` or `if not *in90;`, the statement indented, `endif;` |
 
 R: level indicators (columns 7-8), a conditioning indicator on a group operation (`IF`, `DOW`, `BEGSR`...) or on `RT`, resulting indicators of other operations,

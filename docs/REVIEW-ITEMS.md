@@ -66,7 +66,7 @@ FREE-10 (module `IAfreeFx4`): the R items of the RPG IV source types `RPGLE` and
 | RV-51 | `CALL`, `PARM`, `PLIST` | prototype needed | Convert with RV-08; the RPG IV `CALLP` and `CALLB` forms are already kept | Planned | Not started |
 | RV-52 | Level indicators (columns 7-8) and `RT` on a calculation; a conditioning indicator on a group operation (`IF`, `DOW`, `BEGSR` ...) | the cycle, or no statement to wrap | Decide with RV-20 (cycle); for the group operations convert with a nested `if` | Planned | Not started |
 | RV-53 | Resulting indicators of operations other than file operations, arithmetic and `COMP` (`LOOKUP`, `TESTN`, `CHECK` with `ER`, `SUBST` with `ER`, `CALL`) | no tests exist for them | Convert with the operation (RV-50) | Planned | Not started |
-| RV-54 | `ANDxx`/`ORxx` after a comment line or with indicators; traditional `DO` and `DOUxx` with factors | header rewrite | Convert: the `DO` forms as in FREE-05 | Planned | Not started |
+| RV-54 | `ANDxx`/`ORxx` after a comment line or with indicators; traditional `DO` without an index field | needs a hidden index | Convert: declare an index like FREE-05 | Planned | Not started |
 | RV-55 | I specifications (program described and external field renames) | cycle entries, rename | Convert program described files like FREE-04; renames with RV-30 | Planned | Not started |
 | RV-56 | O specifications of RPG IV | columns differ | With FREE-06 part 3 | Planned | Not started |
 | RV-57 | D specifications: names continued with `...`, keyword literals continued with `+` or `-`, `FROMFILE`, `TOFILE`, `CLASS`, `PACKEVEN`, object types; the F spec designations P, S, R, T, sequence, limits | not valid or no form | Convert the continuations; No form for the rest | Planned | Not started |

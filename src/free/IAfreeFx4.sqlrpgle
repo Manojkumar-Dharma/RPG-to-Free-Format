@@ -33,6 +33,8 @@ dcl-s g_inFree ind inz(*off);           // inside /FREE ... /END-FREE
 dcl-s g_lastLineNo int(10) inz(0);
 dcl-s g_stack char(1) dim(60);          // open C groups: I, L, S, W, M, E, R
 dcl-s g_depth int(10) inz(0);
+dcl-s g_hdrIdx int(10) dim(60);         // output line and text of a DO header
+dcl-s g_hdrTxt varchar(300) dim(60);
 dcl-s g_klName varchar(14) dim(50);     // KLIST names and their key fields
 dcl-s g_klKeys varchar(200) dim(50);
 dcl-s g_klCount int(10) inz(0);
@@ -2044,6 +2046,10 @@ dcl-proc ConvertC;
   dcl-s l_andF2 varchar(14);
   dcl-s l_hasInd ind inz(*off);
   dcl-s l_cond varchar(30) inz('');
+  dcl-s l_incr varchar(14) inz('');
+  dcl-s l_hdr varchar(300);
+  dcl-s l_start varchar(14);
+  dcl-s l_limit varchar(14);
   dcl-s l_base int(10);
 
   if not g_klDone;
@@ -2099,6 +2105,7 @@ dcl-proc ConvertC;
   endsl;
   if l_reason = '' and l_op <> 'BEGSR' and l_op <> 'ENDSR' and l_f1 <> ''
      and l_op <> 'KLIST' and l_op <> 'COMP' and not IsStringOp(l_op)
+     and l_op <> 'DO' and l_op <> 'DSPLY' and l_op <> 'COMIT' and l_op <> 'COMMIT'
      and not IsArith(l_op) and not (l_op = 'CHAIN' or l_op = 'SETLL'
      or l_op = 'SETGT' or l_op = 'READE' or l_op = 'READPE' or l_op = 'DELETE')
      and %subst(l_op:1:2) <> 'IF' and %subst(l_op:1:3) <> 'DOW'
@@ -2147,12 +2154,68 @@ dcl-proc ConvertC;
       when l_op = 'ENDIF' or l_op = 'ENDDO' or l_op = 'ENDFOR' or l_op = 'ENDSL'
            or l_op = 'ENDMON';
         if l_f2 <> '' and l_op = 'ENDDO';
-          l_reason = 'ENDDO with an increment (factor 2) is not converted';
+          if g_depth > 0 and g_stack(g_depth) = 'F';
+            if l_f2 <> '1';
+              l_incr = l_f2;
+            endif;
+          else;
+            l_reason = 'ENDDO with an increment (factor 2) closes no DO loop';
+          endif;
         endif;
         l_stmt = Low(l_op);
         l_kind = '-';
       when l_op = 'ITER' or l_op = 'LEAVE' or l_op = 'LEAVESR';
         l_stmt = Low(l_op);
+      when l_op = 'DO';
+        l_start = l_f1;
+        l_limit = l_f2;
+        if l_start = '';
+          l_start = '1';
+        endif;
+        if l_limit = '';
+          l_limit = '1';
+        endif;
+        if l_res = '' or Txt('C':'LENGTH':i_line) <> ''
+           or Txt('C':'DECIMALS':i_line) <> '' or l_ext <> '';
+          l_reason = 'DO needs an index field that is declared elsewhere (no '
+                     + 'length, decimals or extender)';
+        else;
+          l_stmt = 'for ' + l_res + ' = ' + l_start + ' to ' + l_limit;
+          l_kind = 'F';
+        endif;
+      when l_op = 'DSPLY';
+        if l_f1 = '' and (l_f2 <> '' or l_res <> '');
+          l_reason = 'DSPLY with a queue or response needs a message in factor 1';
+        elseif l_f2 = '' and l_res <> '';
+          l_reason = 'DSPLY with a response and no queue is not converted';
+        else;
+          l_stmt = 'dsply' + l_ext + ' ' + l_f1;
+          if l_f2 <> '';
+            l_stmt += ' ' + l_f2;
+          endif;
+          if l_res <> '';
+            l_stmt += ' ' + l_res;
+          endif;
+        endif;
+      when l_op = 'COMIT' or l_op = 'COMMIT' or l_op = 'ROLBK';
+        l_stmt = Low(l_op) + l_ext;
+        if l_op = 'COMIT';
+          l_stmt = 'commit' + l_ext;
+        endif;
+        if l_f1 <> '' and l_op <> 'ROLBK';
+          l_stmt += ' ' + l_f1;
+        elseif l_f1 <> '';
+          l_reason = 'ROLBK with factor 1 is not valid';
+        endif;
+      when l_op = 'DUMP';
+        l_stmt = 'dump' + l_ext;
+      when l_op = 'TIME';
+        if l_res = '' or SymType(l_res) <> 'packed(6 : 0)'
+           and SymType(l_res) <> 'zoned(6 : 0)';
+          l_reason = 'TIME is converted for a declared 6-digit numeric field only';
+        else;
+          l_stmt = l_res + ' = %dec(%time() : *hms)';
+        endif;
       when l_op = 'BEGSR';
         if l_f1 = '';
           l_reason = 'BEGSR without a name';
@@ -2404,6 +2467,11 @@ dcl-proc ConvertC;
   endif;
   select;
     when l_kind = '-';
+      if l_incr <> '' and g_depth > 0;
+        l_hdr = g_hdrTxt(g_depth);
+        OutSet(g_hdrIdx(g_depth):%subst(l_hdr:1:%len(l_hdr) - 1) + ' by '
+               + l_incr + ';');
+      endif;
       CPop(' ');
     when l_kind = 'w' or l_kind = 'e';
       if g_depth > 0 and (g_stack(g_depth) = 'W' or g_stack(g_depth) = 'E');
@@ -2442,8 +2510,12 @@ dcl-proc ConvertC;
     EmitStatement(l_base:'endif;':i_lineNo);
   endif;
   select;
-    when l_kind = 'I' or l_kind = 'L';
+    when l_kind = 'I' or l_kind = 'L' or l_kind = 'F';
       CPush(l_kind);
+      if l_kind = 'F' and g_depth > 0;
+        g_hdrIdx(g_depth) = OutCount();
+        g_hdrTxt(g_depth) = Pad(l_indent) + l_stmt + ';';
+      endif;
     when l_kind = 'S' or l_kind = 'M' or l_kind = 'R';
       CPush(l_kind);
     when l_kind = 'w';

@@ -5,6 +5,8 @@
      DName             S        10     A
      DShort            S        4      A
      DFlag             S               N
+     DIdx              S        5      I
+     DNow              S        6      P0
      DPos              S        3      P0
      DFull             S        30     A
      C*Main loop
@@ -49,3 +51,9 @@
      C     'AB'          SCAN      Name:2        Pos
      C     'AB'          SCAN      Name                                   60
      C     3             SUBST(P)  Name:2        Full
+     C     1             DO        10            Idx
+     C     Name          DSPLY
+     C                   ENDDO     2
+     C                   TIME                    Now
+     C                   COMMIT
+     C                   DUMP(A)
