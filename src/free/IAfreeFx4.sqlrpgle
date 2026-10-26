@@ -11,7 +11,7 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 
 /copy qcpysrc,IAcnvSrvP
 /copy qcpysrc,IAfreeRulP
-/copy qcpysrc,IAfreeCalcP
+/copy qcpysrc,IAfreeCalP
 /copy qcpysrc,IAfreeFx4P
 
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
@@ -1194,7 +1194,7 @@ dcl-proc BuildType;
     i_dec varchar(5) const;
     i_bytes ind const;
     i_isSub ind const;
-    o_reason varchar(150);
+    o_reason varchar(190);
   end-pi;
 
   dcl-s l_dtype char(1);
@@ -2078,7 +2078,7 @@ dcl-proc StringStmt;
     i_f2 varchar(14) const;
     i_res varchar(14) const;
     i_found varchar(2) const;
-    o_post varchar(100);
+    o_post varchar(400);
     o_reason varchar(190);
   end-pi;
 

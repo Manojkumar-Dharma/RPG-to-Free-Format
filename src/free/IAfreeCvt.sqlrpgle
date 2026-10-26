@@ -17,7 +17,7 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 
 /copy qcpysrc,IAcnvSrvP
 /copy qcpysrc,IAfreeRulP
-/copy qcpysrc,IAfreeCalcP
+/copy qcpysrc,IAfreeCalP
 /copy qcpysrc,IAfreeFx4P
 /copy qcpysrc,IAfreeOutP
 

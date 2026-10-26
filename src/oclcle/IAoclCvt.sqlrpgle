@@ -4047,7 +4047,7 @@ dcl-proc ConvertAttr;
       when (l_keyword = 'CANCEL' or l_keyword = 'INQUIRY')
            and (l_value = 'YES' or l_value = 'NO');
         l_isSkipped = (l_value = 'NO');
-      when l_keyword = 'MRTMAX' and IsPlainNumber(l_value);
+      when l_keyword = 'MRTMAX' and IsPlainNumber(l_value:*off);
         l_isSkipped = *on;
       when l_keyword = 'NEP' and (l_value = 'YES' or l_value = 'NO');
         l_isSkipped = (l_value = 'YES');

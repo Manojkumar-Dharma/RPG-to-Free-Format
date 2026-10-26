@@ -21,7 +21,7 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 /copy qcpysrc,IAcnvSrvP
 /copy qcpysrc,IAfreeRulP
 /copy qcpysrc,IAfreeOutP
-/copy qcpysrc,IAfreeCalcP
+/copy qcpysrc,IAfreeCalP
 
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
