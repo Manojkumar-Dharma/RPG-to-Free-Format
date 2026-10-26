@@ -534,6 +534,23 @@ Reported R: a program name that is not a literal without library (`CALL PGMNM`, 
 
 `samples/FREECAL.rpg38`: the cases above, then the R lines. Expected result, written from the design and not from a run: prototypes `PGMA` (like NAME, like CNT) and `PGMB` (like CODE, like SAVE) before the first calculation; `callp PGMA(NAME : CNT);`, `callp(e) PGMA(NAME : CNT);` with `*IN91 = %error;`, `CODE = 'X'; SAVE = NAME; callp PGMB(CODE : SAVE); BACK = SAVE;`.
 
+## File description continuation records (FREE-18, review item RV-32)
+
+Source: SC09-1817 chapter 5 (Continuation Line, Tables 16 and 17). Code: `ContinuationKeywords` and `ConvertFile` (which now calls `ConvertFileLine`) in `IAfreeCvt`. The option of a continuation record (K in column 53, option in columns 54-59, entry in columns 60-67) can also be on the main file line. The options become keywords of the `dcl-f` of the main line; all the records of the file are reported with it.
+
+| Option | Keyword | Files |
+|---|---|---|
+| `COMIT` | `commit` | DISK |
+| `INFDS name` | `infds(NAME)` (the data structure keeps the RPG/400 layout: A) | DISK, PRINTER |
+| `INFSR name`, `INFSR *PSSR` | `infsr(NAME)`, `infsr(*pssr)` | DISK, PRINTER |
+| `RECNO field` | `recno(FIELD)` (numeric, no decimals, defined in the program: A) | DISK |
+| `RENAME` (external name in columns 19-28, new name in 60-67) | `rename(EXT:NEW)` | externally described DISK |
+| `IGNORE` (record format in columns 19-28) | `ignore(FORMAT)` | externally described DISK |
+
+Reported R, with the whole file kept as comments (the main line and its records): `PRTCTL` (needs a program-described printer file; the printer file is declared externally described), the options of WORKSTN and SPECIAL files (`ID`, `IND`, `NUM`, `PASS`, `SAVDS`, `SFILE`, `SLN`, `PLIST`), an option that is not in Table 17, an option given twice (`RENAME` and `IGNORE` may be repeated), an entry that is not a name, `COMIT` with an entry, `RENAME` or `IGNORE` for a file that is not externally described, entries in columns 29-52 or 68-74 of a continuation record, a continuation record without an option.
+
+`samples/FREEFCN.rpg38`: one file for each converted option (also `COMIT` on the main line), then the R files. Expected result, written from the design and not from a run: `dcl-f CUSTMAS disk usage(*input) keyed commit;`, `dcl-f ORDERS disk usage(*update:*delete) keyed recno(RRN) infds(ORDDS) infsr(*pssr);`, `dcl-f ITEMS disk usage(*input) keyed rename(ITEMREC:ITEMR) ignore(OLDREC);`, `dcl-f QPRINT printer infsr(PRTERR);`.
+
 ## LOKUP and MOVEA (FREE-08, arrays and tables of FREE-07)
 
 Source: SC09-1818 chapter 27 and SC09-1817 chapter 11 (LOKUP: the search argument, the high, low and equal indicators, the index, the second table), the ILE RPG reference (`%LOOKUP`, `%LOOKUPGT`, `%LOOKUPGE`, `%LOOKUPLT`, `%LOOKUPLE`). `IAfreeCvt` gives `IAfreeCalc` the arrays and tables of the E specifications (`CalcDefineArray`: name, sequence, number of entries, alternating array). The statements use the hidden field `LOKUP_IX` (declared once).

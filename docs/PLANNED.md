@@ -51,12 +51,13 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-15 | IACNVFREE | Zone moves `MHHZO`, `MHLZO`, `MLHZO`, `MLLZO` between character fields (RV-06 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEZON.rpg38`; needs a compile and test; `rules/IACNVRULES.sql` must be run again; numeric fields (sign zone) stay R; next: see FREE-16 |
 | FREE-16 | IACNVFREE | `CALL`, `PARM`, `PLIST` of RPG II and III to prototypes (`dcl-pr` with `extpgm`, `like` parameters) and `callp` (RV-08 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREECAL.rpg38`; needs a compile and test; `rules/IACNVRULES.sql` must be run again; `PLIST *ENTRY`, a program name in a field and a library name stay R; next: `IN`/`OUT`/`OCUR` (RV-11) |
 | FREE-17 | IACNVFREE | Data areas: `*NAMVAR DEFN` to the `dtaara` keyword, `IN`, `OUT`, `UNLCK` of a data area (RV-11 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEDTA.rpg38`; needs a compile and test; `OCUR` is still R (needs `OCCURS` of the I specification); `rules/IACNVRULES.sql` must be run again |
+| FREE-18 | IACNVFREE | File description continuation records of RPG II and III to `dcl-f` keywords: `COMIT`, `INFDS`, `INFSR`, `RECNO`, `RENAME`, `IGNORE` (RV-32 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEFCN.rpg38`; needs a compile and test; the options of WORKSTN and SPECIAL files and `PRTCTL` stay R; next: RV-35 |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-17 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-18 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.

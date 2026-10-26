@@ -1,0 +1,31 @@
+      * RPG III file description continuation records (RV-32)
+     H
+      * COMIT on the main line; RECNO, INFDS, INFSR on continuation records
+     FCUSTMAS IF  E           K        DISK         KCOMIT
+     FORDERS  UF  E           K        DISK
+     F                                              KRECNO RRN
+     F                                              KINFDS ORDDS
+     F                                              KINFSR *PSSR
+      * RENAME and IGNORE of record formats
+     FITEMS   IF  E           K        DISK
+     F            ITEMREC                           KRENAMEITEMR
+     F            OLDREC                            KIGNORE
+      * Printer file with a file exception/error subroutine
+     FQPRINT  O   F     132            PRINTER
+     F                                              KINFSR PRTERR
+      * Not converted
+     FLATE    IF  E           K        DISK
+     F                                              KNUM   1
+     FLATE2   IF  E           K        DISK
+     F                                              KRECNO RRN1
+     F                                              KRECNO RRN2
+     FLATE3   IF  E           K        DISK
+     F                                              KXYZ   A
+     FLATE4   IF  E           K        DISK
+     F                                              KCOMIT A
+     FREPORT  O   F      80            PRINTER
+     F                                              KPRTCTLPRTDS
+     FLATE5   IF  F      80            DISK
+     F            FMT1                              KRENAMEFMT2
+     FLATE6   IF  E           K        DISK
+     F                                              KINFDS 1BAD

@@ -698,10 +698,141 @@ dcl-proc ConvertHeader;
 end-proc;
 
 // ------------------------------------------------------------------
+// A name of the continuation options: letters, digits and $ # @ _, 1 to 10
+// characters, not starting with a digit or an underscore.
+dcl-proc ContName;
+  dcl-pi *n ind;
+    i_text varchar(10) const;
+  end-pi;
+
+  dcl-c C_FIRST 'ABCDEFGHIJKLMNOPQRSTUVWXYZ$#@';
+  dcl-c C_REST 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$#@_';
+
+  if %len(i_text) < 1;
+    return *off;
+  endif;
+  return (%check(C_FIRST:%subst(i_text:1:1)) = 0
+          and %check(C_REST:i_text) = 0);
+end-proc;
+
+// ------------------------------------------------------------------
+// The continuation records of a file description (RV-32): the options of
+// columns 54-59 (with the entry of columns 60-67) as keywords of dcl-f. The
+// main line may carry one itself (K in column 53). Returns '' or the reason
+// the file is not converted. DISK files: COMIT, INFDS, INFSR, RECNO, RENAME and
+// IGNORE (externally described); PRINTER files: INFDS and INFSR. The options
+// of WORKSTN and SPECIAL files and PRTCTL are not converted.
+dcl-proc ContinuationKeywords;
+  dcl-pi *n varchar(190);
+    i_index int(10) const;
+    i_line char(100) const;
+    i_extra int(10) const;
+    i_device varchar(7) const;
+    i_fmt char(1) const;
+    o_keywords varchar(200);
+    o_note varchar(190);
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_up char(100);
+  dcl-s l_opt varchar(6);
+  dcl-s l_arg varchar(8);
+  dcl-s l_ext varchar(10);
+  dcl-s l_seen varchar(100) inz('|');
+  dcl-s l_disk ind;
+
+  o_keywords = '';
+  o_note = '';
+  l_disk = (i_device = 'DISK');
+  for l_k = 0 to i_extra;
+    if l_k = 0;
+      l_up = %xlate(C_LOWER:C_UPPER:i_line);
+      if %subst(l_up:53:1) <> 'K';
+        iter;
+      endif;
+    else;
+      l_up = %xlate(C_LOWER:C_UPPER:g_sourceLines(i_index + l_k));
+      if %trim(%subst(l_up:29:18)) <> '' or %trim(%subst(l_up:68:7)) <> '';
+        return 'Columns 29-52 and 68-74 of a continuation record must be blank';
+      endif;
+    endif;
+    l_opt = %trim(%subst(l_up:54:6));
+    l_arg = %trim(%subst(l_up:60:8));
+    l_ext = %trim(%subst(l_up:19:10));
+    if l_opt = '';
+      return 'Continuation record without an option (columns 54-59)';
+    endif;
+    if l_ext <> '' and l_opt <> 'RENAME' and l_opt <> 'IGNORE';
+      return 'Columns 19-28 of a continuation record are only for RENAME and IGNORE';
+    endif;
+    if l_opt <> 'RENAME' and l_opt <> 'IGNORE' and %scan('|' + l_opt + '|':l_seen) > 0;
+      return 'Continuation option ' + l_opt + ' is given twice';
+    endif;
+    l_seen += l_opt + '|';
+
+    select;
+      when l_opt = 'COMIT';
+        if not l_disk or l_arg <> '';
+          return 'COMIT is converted for DISK files, with columns 60-67 blank';
+        endif;
+        o_keywords += ' commit';
+      when l_opt = 'INFDS';
+        if not ContName(l_arg);
+          return 'INFDS needs a data structure name in columns 60-65';
+        endif;
+        o_keywords += ' infds(' + l_arg + ')';
+        AppendText(o_note:'INFDS ' + l_arg + ' must be declared with the layout of'
+                   + ' the file information data structure (I specification)');
+      when l_opt = 'INFSR';
+        if l_arg <> '*PSSR' and not ContName(l_arg);
+          return 'INFSR needs a subroutine name or *PSSR in columns 60-65';
+        endif;
+        if l_arg = '*PSSR';
+          o_keywords += ' infsr(*pssr)';
+        else;
+          o_keywords += ' infsr(' + l_arg + ')';
+        endif;
+      when l_opt = 'RECNO';
+        if not l_disk or not ContName(l_arg);
+          return 'RECNO is converted for DISK files, with a field name in columns'
+                 + ' 60-65';
+        endif;
+        o_keywords += ' recno(' + l_arg + ')';
+        AppendText(o_note:'RECNO field ' + l_arg + ' must be a numeric field without'
+                   + ' decimals defined in the program');
+      when l_opt = 'RENAME';
+        if not l_disk or i_fmt <> 'E' or not ContName(l_ext) or not ContName(l_arg);
+          return 'RENAME is converted for externally described DISK files, with the'
+                 + ' external name in columns 19-28 and the new name in 60-67';
+        endif;
+        o_keywords += ' rename(' + l_ext + ':' + l_arg + ')';
+      when l_opt = 'IGNORE';
+        if not l_disk or i_fmt <> 'E' or not ContName(l_ext) or l_arg <> '';
+          return 'IGNORE is converted for externally described DISK files, with the'
+                 + ' record format in columns 19-28';
+        endif;
+        o_keywords += ' ignore(' + l_ext + ')';
+      when l_opt = 'PRTCTL';
+        return 'PRTCTL needs a program-described printer file: the printer file is'
+               + ' declared externally described here';
+      when l_opt = 'ID' or l_opt = 'IND' or l_opt = 'NUM' or l_opt = 'PASS'
+           or l_opt = 'SAVDS' or l_opt = 'SFILE' or l_opt = 'SLN'
+           or l_opt = 'PLIST';
+        return 'Continuation option ' + l_opt + ' is for WORKSTN or SPECIAL files,'
+               + ' which are not converted yet';
+      other;
+        return 'Continuation option ' + l_opt + ' is not known';
+    endsl;
+  endfor;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
 // F: file description specification (RPG II guide, chapter 19) to dcl-f
 // (Reference, Tables 105 and 106). DISK and PRINTER files only. Returns the
 // number of continuation records that follow the specification and were
-// consumed with it.
+// consumed with it: their options are converted with it (RV-32) or all the
+// records are kept as comments.
 dcl-proc ConvertFile;
   dcl-pi *n int(10);
     i_index int(10) const;
@@ -711,6 +842,53 @@ dcl-proc ConvertFile;
 
   dcl-s l_up char(100);
   dcl-s l_extra int(10);
+  dcl-s l_k int(10);
+  dcl-s l_ok ind inz(*off);
+  dcl-s l_keywords varchar(200) inz('');
+  dcl-s l_note varchar(190) inz('');
+  dcl-s l_reason varchar(190) inz('');
+
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  l_extra = CountContinuations(i_index);
+  if l_extra > 0 or %subst(l_up:53:1) = 'K';
+    l_reason = ContinuationKeywords(i_index:i_line:l_extra:%trim(%subst(l_up:40:7))
+                                    :%subst(l_up:19:1):l_keywords:l_note);
+    if l_reason <> '';
+      ReviewSpec(i_lineNo:i_line:l_reason);
+      for l_k = 1 to l_extra;
+        ReviewSpec(g_sourceLineNos(i_index + l_k):g_sourceLines(i_index + l_k)
+                   :'Continuation of the file description above');
+      endfor;
+      return l_extra;
+    endif;
+  endif;
+
+  ConvertFileLine(i_lineNo:i_line:l_keywords:l_note:l_ok);
+  for l_k = 1 to l_extra;
+    if l_ok;
+      RptItem(C_STS_CONVERTED:g_sourceLineNos(i_index + l_k)
+              :%trimr(%subst(g_sourceLines(i_index + l_k):6:69)):'');
+    else;
+      ReviewSpec(g_sourceLineNos(i_index + l_k):g_sourceLines(i_index + l_k)
+                 :'Continuation of the file description above');
+    endif;
+  endfor;
+  return l_extra;
+end-proc;
+
+// ------------------------------------------------------------------
+// One file description line to dcl-f; i_keywords are the keywords of its
+// continuation records. o_ok is on when the line was converted.
+dcl-proc ConvertFileLine;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+    i_keywords varchar(200) const;
+    i_contNote varchar(190) const;
+    o_ok ind;
+  end-pi;
+
+  dcl-s l_up char(100);
   dcl-s l_name varchar(8);
   dcl-s l_type char(1);
   dcl-s l_desig char(1);
@@ -731,10 +909,9 @@ dcl-proc ConvertFile;
   dcl-s l_usage varchar(40);
   dcl-s l_stmt varchar(200);
   dcl-s l_note varchar(190) inz('');
-  dcl-s l_cont1 int(10);
 
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
-  l_extra = CountContinuations(i_index);
+  o_ok = *off;
   l_name = %trim(%subst(l_up:7:8));
   l_type = %subst(l_up:15:1);
   l_desig = %subst(l_up:16:1);
@@ -753,26 +930,13 @@ dcl-proc ConvertFile;
   l_add = %subst(l_up:66:1);
   l_cond = %trim(%subst(l_up:71:2));
 
-  // Continuation records (RECNO, SUBR exit, NUM, FMTS, INFSR ...): the whole
-  // file is kept as comments so that no option is lost silently.
-  if l_extra > 0 or %subst(l_up:53:1) = 'K';
-    ReviewSpec(i_lineNo:i_line
-               :'Continuation records (RECNO, SUBR exit, NUM, FMTS, INFSR) are not '
-                + 'converted');
-    for l_cont1 = 1 to l_extra;
-      ReviewSpec(g_sourceLineNos(i_index + l_cont1):g_sourceLines(i_index + l_cont1)
-                 :'Continuation of the file description above');
-    endfor;
-    return l_extra;
-  endif;
-
   select;
     when not IsFileName(l_name);
       ReviewSpec(i_lineNo:i_line:'File name (columns 7-14) is not valid');
-      return 0;
+      return;
     when l_type <> 'I' and l_type <> 'O' and l_type <> 'U' and l_type <> 'C';
       ReviewSpec(i_lineNo:i_line:'File type (column 15) must be I, O, U or C');
-      return 0;
+      return;
     when l_device <> 'DISK' and l_device <> 'PRINTER';
       if l_device = 'WORKSTN';
         ReviewSpec(i_lineNo:i_line:'Device WORKSTN is not converted yet: it needs '
@@ -782,38 +946,39 @@ dcl-proc ConvertFile;
       else;
         ReviewSpec(i_lineNo:i_line:'Device ' + l_device + ' is not converted yet');
       endif;
-      return 0;
+      return;
     when l_fmt <> ' ' and l_fmt <> 'F' and not (g_dialect = '3' and l_fmt = 'E');
       ReviewSpec(i_lineNo:i_line
                  :'Record format (column 19) ' + l_fmt + ' is not converted');
-      return 0;
+      return;
     when l_seq <> ' ';
       ReviewSpec(i_lineNo:i_line
                  :'Sequence checking (column 18) is not supported in free-form');
-      return 0;
+      return;
     when l_cond <> '' and not IsExternalIndicator(l_cond)
          and not (g_dialect = '3' and l_cond = 'UC');
       ReviewSpec(i_lineNo:i_line:'File condition (columns 71-72) ' + l_cond
                  + ' must be U1 to U8 (or UC in RPG III)');
-      return 0;
+      return;
     when ToInt(l_recLen) < 1 and l_fmt <> 'E';
       ReviewSpec(i_lineNo:i_line:'Record length (columns 24-27) is missing');
-      return 0;
+      return;
     when g_dialect = '3' and l_fmt = 'E' and (l_recLen <> '' or l_keyLen <> ''
          or l_org <> ' ' or l_keyStart <> '' or (l_addr <> ' ' and l_addr <> 'K'));
       ReviewSpec(i_lineNo:i_line:'Record length, key length, organization and key '
                  + 'start must be blank for an externally described file');
-      return 0;
+      return;
     when g_dialect = '3' and (l_desig = 'C' or l_desig = 'D');
       ReviewSpec(i_lineNo:i_line:'File designation (column 16) ' + l_desig
                  + ' is not valid in RPG III');
-      return 0;
+      return;
   endsl;
 
   if l_device = 'PRINTER';
     ConvertPrinterFile(i_lineNo:i_line:l_name:l_type:l_desig:l_mode:l_keyLen:l_addr
-                       :l_org:l_ovf:l_keyStart:l_ext:l_add:l_cond);
-    return 0;
+                       :l_org:l_ovf:l_keyStart:l_ext:l_add:l_cond:i_keywords
+                       :i_contNote:o_ok);
+    return;
   endif;
 
   // ---- DISK ----
@@ -821,61 +986,61 @@ dcl-proc ConvertFile;
     when l_ext <> ' ';
       ReviewSpec(i_lineNo:i_line
                  :'Extension or line counter specification (column 39) is not converted');
-      return 0;
+      return;
     when l_ovf <> '';
       ReviewSpec(i_lineNo:i_line:'Overflow indicator is only for PRINTER files');
-      return 0;
+      return;
     when l_desig = 'P' or l_desig = 'S';
       ReviewSpec(i_lineNo:i_line:'Primary and secondary files (the RPG cycle) are '
                  + 'not supported in free-form');
-      return 0;
+      return;
     when l_desig = 'R' or l_desig = 'T';
       ReviewSpec(i_lineNo:i_line
                  :'Record address and table files are not supported in free-form');
-      return 0;
+      return;
     when l_desig <> ' ' and l_desig <> 'F' and l_desig <> 'C' and l_desig <> 'D';
       ReviewSpec(i_lineNo:i_line
                  :'File designation (column 16) ' + l_desig + ' is not valid');
-      return 0;
+      return;
     when l_org = 'T';
       ReviewSpec(i_lineNo:i_line
                  :'Address output file organization (T) is not supported');
-      return 0;
+      return;
     when l_mode = 'L';
       ReviewSpec(i_lineNo:i_line
                  :'Limits processing (column 28 L) is not supported in free-form');
-      return 0;
+      return;
     when l_mode <> ' ' and l_mode <> 'R';
       ReviewSpec(i_lineNo:i_line
                  :'Mode of processing (column 28) ' + l_mode + ' is not valid');
-      return 0;
+      return;
     when l_addr = 'I';
       ReviewSpec(i_lineNo:i_line
                  :'Record address type I (address output file) is not supported');
-      return 0;
+      return;
     when l_add <> ' ' and l_add <> 'A' and l_add <> 'U';
       ReviewSpec(i_lineNo:i_line
                  :'File addition (column 66) ' + l_add + ' is not valid');
-      return 0;
+      return;
     when l_type = 'C';
       ReviewSpec(i_lineNo:i_line:'A combined file is not valid for a DISK file');
-      return 0;
+      return;
     when l_type = 'O' and (l_desig = 'C' or l_mode = 'R');
       ReviewSpec(i_lineNo:i_line:'Direct file load is not supported in free-form');
-      return 0;
+      return;
     when l_type = 'O' and l_desig <> ' ';
       ReviewSpec(i_lineNo:i_line
                  :'An output file must have a blank file designation (column 16)');
-      return 0;
+      return;
     when l_type = 'O' and l_add = 'A';
       ReviewSpec(i_lineNo:i_line
                  :'Output with file addition is not supported in free-form');
-      return 0;
+      return;
     when (l_type = 'I' or l_type = 'U') and l_desig = ' ';
       ReviewSpec(i_lineNo:i_line
                  :'An input or update file needs a designation (F, C or D; F in '
                   + 'RPG III)');
-      return 0;
+      return;
   endsl;
 
   if l_fmt = 'E';
@@ -903,24 +1068,24 @@ dcl-proc ConvertFile;
       when l_addr = 'P';
         ReviewSpec(i_lineNo:i_line
                    :'Packed key (column 31 P) is not supported in free-form');
-        return 0;
+        return;
       when l_addr = ' ';
         ReviewSpec(i_lineNo:i_line:'Indexed file processed consecutively or by '
                    + 'relative record number: free-form KEYED reads in key order');
-        return 0;
+        return;
       when l_addr <> 'A';
         ReviewSpec(i_lineNo:i_line:'Record address type (column 31) ' + l_addr
                    + ' is not valid');
-        return 0;
+        return;
       when ToInt(l_keyLen) < 1;
         ReviewSpec(i_lineNo:i_line:'Key length (columns 29-30) is missing');
-        return 0;
+        return;
       when l_keyStart = 'EXTK';
         ReviewSpec(i_lineNo:i_line:'Noncontiguous key (EXTK) is not supported');
-        return 0;
+        return;
       when ToInt(l_keyStart) < 1;
         ReviewSpec(i_lineNo:i_line:'Key start (columns 35-38) is missing');
-        return 0;
+        return;
     endsl;
     l_stmt += ' keyed(*char:' + %trim(%char(ToInt(l_keyLen))) + ') keyloc('
               + %trim(%char(ToInt(l_keyStart))) + ')';
@@ -929,7 +1094,7 @@ dcl-proc ConvertFile;
     l_stmt += ' keyed';
   elseif l_keyLen <> '' or l_keyStart <> '' or l_addr <> ' ';
     ReviewSpec(i_lineNo:i_line:'Key entries given for a file that is not indexed');
-    return 0;
+    return;
   endif;
 
   if l_cond = 'UC';
@@ -939,7 +1104,10 @@ dcl-proc ConvertFile;
   elseif l_cond <> '';
     l_stmt += ' extind(*IN' + l_cond + ')';
   endif;
-  l_stmt += ';';
+  l_stmt += i_keywords + ';';
+  if i_contNote <> '';
+    AppendText(l_note:i_contNote);
+  endif;
 
   if l_type = 'U';
     AppendText(l_note:'*DELETE added: fixed-form update files can delete records');
@@ -962,12 +1130,13 @@ dcl-proc ConvertFile;
   else;
     RegisterFile(l_name:ToInt(l_recLen):'D':l_type:i_lineNo:(l_org = 'I'));
   endif;
+  o_ok = *on;
   if l_note = '';
     RptItem(C_STS_CONVERTED:i_lineNo:%trimr(%subst(i_line:6:69)):'');
   else;
     RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
   endif;
-  return 0;
+  return;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -989,6 +1158,9 @@ dcl-proc ConvertPrinterFile;
     i_ext char(1) const;
     i_add char(1) const;
     i_cond varchar(2) const;
+    i_keywords varchar(200) const;
+    i_contNote varchar(190) const;
+    o_ok ind;
   end-pi;
 
   dcl-s l_stmt varchar(200);
@@ -1021,7 +1193,10 @@ dcl-proc ConvertPrinterFile;
   elseif i_cond <> '';
     l_stmt += ' extind(*IN' + i_cond + ')';
   endif;
-  l_stmt += ';';
+  l_stmt += i_keywords + ';';
+  if i_contNote <> '';
+    AppendText(l_note:i_contNote);
+  endif;
 
   if i_ext = 'L';
     AppendText(l_note:'line counter specification is converted with the O '
@@ -1031,6 +1206,7 @@ dcl-proc ConvertPrinterFile;
              + 'specifications (FREE-06)');
   AddOut(l_stmt:i_lineNo);
   RegisterFile(i_name:0:'P':i_type:i_lineNo:*off);
+  o_ok = *on;
   RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
 end-proc;
 
