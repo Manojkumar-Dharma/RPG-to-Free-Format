@@ -29,6 +29,15 @@ dcl-pr CalcDefineField;
   i_decimals int(10) const;
 end-pr;
 
+// An array or table of an E specification (sequence A, D or blank, number of
+// entries, name of the alternating array), for LOKUP, MOVEA and the table index.
+dcl-pr CalcDefineArray;
+  i_name varchar(10) const;
+  i_sequence char(1) const;
+  i_dim int(10) const;
+  i_alt varchar(10) const;
+end-pr;
+
 // One C specification line (columns as in the RPG II coding form).
 dcl-pr CalcLine;
   i_line char(100) const;

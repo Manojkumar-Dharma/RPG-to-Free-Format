@@ -505,11 +505,11 @@
   "ind2": "LO",
   "ind3": "EQ",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "LOKUP is not converted yet; the array or table definition comes from the E specification (FREE-07)",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -619,11 +619,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "MOVEA is not converted yet; the array definitions come from the E specifications (FREE-07)",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {

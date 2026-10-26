@@ -346,6 +346,7 @@ dcl-proc ConvertExtension;
   AddOut(l_stmt + ';':i_lineNo);
   DefineName(l_name:i_lineNo);
   DefineArrayField(l_name:%subst(l_up:40:3):%subst(l_up:44:1));
+  CalcDefineArray(l_name:%subst(l_up:45:1):ToInt(l_dim):l_alt);
 
   if l_alt <> '';
     l_altStmt = 'dcl-s ' + l_alt + ' ' + l_altType + ' dim('
@@ -360,14 +361,16 @@ dcl-proc ConvertExtension;
     AddOut(l_altStmt + ';':i_lineNo);
     DefineName(l_alt:i_lineNo);
     DefineArrayField(l_alt:%subst(l_up:52:3):%subst(l_up:56:1));
+    CalcDefineArray(l_alt:%subst(l_up:57:1):ToInt(l_dim):'');
   endif;
 
   l_status = C_STS_CONVERTED;
   if %subst(l_name:1:3) = 'TAB';
     l_status = C_STS_ASSUMPTION;
-    l_note = 'Table ' + l_name + ' is declared as an array. In RPG II the table '
-             + 'name in a calculation means the entry found by the last LOKUP; '
-             + 'that is not converted';
+    l_note = 'Table ' + l_name + ' is declared as an array with the index field '
+             + l_name + '_IDX: the table name in a calculation means the entry '
+             + 'found by the last LOKUP, written ' + l_name + '(' + l_name
+             + '_IDX)';
   endif;
   RptItem(l_status:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
 end-proc;

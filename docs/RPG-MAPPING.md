@@ -424,6 +424,35 @@ Reported R: names ending in `...`, keyword literals continued with `+` or `-`,
 FROMFILE, TOFILE, CLASS, PACKEVEN, object types, invalid entries. `**` compile-time
 data sections are kept as is (A). Sample: `samples/FREE4.rpgle`.
 
+## LOKUP and MOVEA (FREE-08, arrays and tables of FREE-07)
+
+Source: SC09-1818 chapter 27 and SC09-1817 chapter 11 (LOKUP: the search argument, the high, low and equal indicators, the index, the second table), the ILE RPG reference (`%LOOKUP`, `%LOOKUPGT`, `%LOOKUPGE`, `%LOOKUPLT`, `%LOOKUPLE`). `IAfreeCvt` gives `IAfreeCalc` the arrays and tables of the E specifications (`CalcDefineArray`: name, sequence, number of entries, alternating array). The statements use the hidden field `LOKUP_IX` (declared once).
+
+| Source | Becomes | Status |
+|---|---|---|
+| `LOKUP ARR`, equal indicator | `LOKUP_IX = %lookup(F1:ARR);` and `*INeq = (LOKUP_IX > 0);` | C |
+| high only / low only | `%lookupgt` / `%lookuplt`, `*INnn = (LOKUP_IX > 0);` | C (needs the sequence, column 45) |
+| equal and high / equal and low | `%lookupge` / `%lookuple`, both indicators set off, then `if LOKUP_IX > 0; if ARR(LOKUP_IX) = F1; *INeq = *on; else; *INhi = *on; endif; endif;` | C (needs the sequence) |
+| `LOKUP ARR,X` | the search starts at `X`: `%lookup(F1:ARR:X)`, then `X` is the position found or 1; a numeric literal index is not changed | C |
+| `LOKUP TAB` (table) | the same search; the entry found is kept in `TAB_IDX` (declared `int(10) inz(1)`), also in the index of the alternating table and of the table in the result field | A |
+| a table name in any other calculation | `TAB(TAB_IDX)`, the current entry (the first one before a `LOKUP`); a table name as factor 1 of `LOKUP` is the current entry too | A |
+| `MOVEA ARR1 ARR2`, same number of entries, same entry length and type | `ARR2 = ARR1;` | C |
+| `MOVEA *BLANK(S) ARR`, `MOVEA *ZERO(S) ARR` | `ARR = *blanks;` (alphanumeric array), `ARR = *zeros;` | C |
+
+Reported R: no resulting indicator, more than two, high and low together, high or low without the sequence of the array, an index on a table, a result field with an array, a result field that is not a table, a search argument field of another length or format than the entries (a literal is not checked), an array or table that no E specification defines, `MOVEA` with an index, between an array and a field, to or from a table, and between arrays of another size, entry length or type. The result indicator rules follow the manual: an indicator is set on only for a successful search; the conversion sets it off when the search fails.
+
+`samples/FREELOK.rpg36` has one line for each row. Expected result, written from the design and not from a run:
+
+| Line | Expected |
+|---|---|
+| `SRCH LOKUP ARR`, 90 | `LOKUP_IX = %lookup(SRCH:ARR);`, `*IN90 = (LOKUP_IX > 0);` |
+| `SRCH LOKUP ARR,X`, 91 | `LOKUP_IX = %lookup(SRCH:ARR:X);`, `*IN91 = (LOKUP_IX > 0);`, `if LOKUP_IX = 0; X = 1; else; X = LOKUP_IX; endif;` |
+| high 92; high 93 and equal 94; low 95 and equal 96 | `%lookupgt`; `%lookupge` with the `if ... endif` test; `%lookuple` with the test |
+| `SRCH3 LOKUP TABCOD`, 97 | `%lookup(SRCH3:TABCOD)`, `*IN97`, `if LOKUP_IX > 0; TABCOD_IDX = LOKUP_IX; TABAMT_IDX = LOKUP_IX; endif;`, A |
+| `Z-ADD TABAMT TOTAL` | `TOTAL = TABAMT(TABAMT_IDX);` |
+| `MOVEA ARR ARRB`, `MOVEA *BLANK CHRARR`, `MOVEA *ZEROS ARRB` | `ARRB = ARR;`, `CHRARR = *blanks;`, `ARRB = *zeros;` |
+| the "Not converted" lines | each kept as comment, R |
+
 ## MOVE and MOVEL (FREE-08)
 
 Source: SC09-1818 chapter 27 and SC09-1817 chapter 11 (the move operations), the ILE RPG reference (`%SUBST` as the target of an assignment). `MOVE` moves right-justified, `MOVEL` left-justified; the rest of the result field keeps its old value (no `P`), so both lengths must be known. `IAfreeCvt` gives `IAfreeCalc` the length and type of the fields of the I specifications and of the arrays of the E specifications (`CalcDefineField`); a field that a result field defines is known as well. Only these fields, literals and figurative constants are converted; a field of any other origin (data structure subfields, external fields) is R. Lengths below are the lengths `LR` of the result and `LF` of factor 2.
@@ -465,12 +494,12 @@ Source: SC09-1818 chapter 20 (RPG II), SC09-1817 chapter 9 (RPG III), ILE RPG re
 | Compile-time array (columns 33-35 filled, no file) | `dcl-s NAME type dim(n) perrcd(k) ctdata;` | C |
 | Sequence A or D (column 45) | `ascend` or `descend` | C |
 | Alternating pair (columns 46-57) | the main array as above, and `dcl-s ALT type dim(n) alt(NAME);` for the second array (`ALT` is on the alternating array, `PERRCD` and `CTDATA` only on the main one) | C |
-| Table (name starts with `TAB`) | declared as an array | A: in RPG II the table name in a calculation means the entry found by the last `LOKUP`; that is not converted |
+| Table (name starts with `TAB`) | declared as an array with the index field `NAME_IDX` | A: in RPG II the table name in a calculation means the entry found by the last `LOKUP`; it is written `NAME(NAME_IDX)` (see "LOKUP and MOVEA") |
 | The `**` record before compile-time data | `**CTDATA NAME`, the name of the next compile-time array or table in the order of the E specifications; the data records are copied as they are | C |
 | A `**` section with no converted array | kept as it is | R |
 | From file (11-18), to file (19-26), record address files, packed or binary format (43, 55), a name or length that is not valid, a name already defined | line kept as `// RPG II:` comment; a compile-time array that is not converted still owns its data section, so the sections stay in order | R |
 
-Numeric entries are declared `zoned`, the format of the data records. Entries of a numeric array are limited to 15 digits and alphanumeric entries to 256 characters, as in the source. The C specifications keep their own rules: `SORTA` and `XFOOT` were already converted and now find their array; `LOKUP` and `MOVEA` are still reported R (their conversion is not written yet, the array definitions they need are now declared).
+Numeric entries are declared `zoned`, the format of the data records. Entries of a numeric array are limited to 15 digits and alphanumeric entries to 256 characters, as in the source. The C specifications keep their own rules: `SORTA` and `XFOOT` were already converted and now find their array; `LOKUP` and `MOVEA` are converted, see "LOKUP and MOVEA" below.
 
 `samples/FREEE.rpg36` has one case for each row. Expected result, written from the design and not from a run:
 

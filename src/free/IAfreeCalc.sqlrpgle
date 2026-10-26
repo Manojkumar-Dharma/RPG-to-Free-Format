@@ -36,6 +36,7 @@ dcl-c C_MAXSTMT 8;
 dcl-c C_MAXSQL 200;
 dcl-c C_MAXKL 100;
 dcl-c C_MAXFLD 1000;
+dcl-c C_MAXARR 200;
 
 // The parts of one C specification line.
 dcl-ds Calc_t qualified template;
@@ -102,6 +103,17 @@ dcl-s g_fldLen int(10) dim(C_MAXFLD);
 dcl-s g_fldDec int(10) dim(C_MAXFLD);
 dcl-s g_fldCount int(10);
 
+// The arrays and tables of the E specifications (CalcDefineArray): the name, the
+// sequence (A, D or blank), the number of entries, the alternating array of a
+// main array and whether it is a table (a name that starts with TAB).
+dcl-s g_arrName varchar(10) dim(C_MAXARR);
+dcl-s g_arrSeq char(1) dim(C_MAXARR);
+dcl-s g_arrDim int(10) dim(C_MAXARR);
+dcl-s g_arrAlt varchar(10) dim(C_MAXARR);
+dcl-s g_arrTable ind dim(C_MAXARR);
+dcl-s g_arrCount int(10);
+dcl-s g_lookupDeclared ind;
+
 // Key lists (KLIST and KFLD), collected before the conversion: the name, the key
 // fields joined with ':', their number and whether a KFLD was not a plain name.
 dcl-s g_klName varchar(10) dim(C_MAXKL);
@@ -143,6 +155,8 @@ dcl-proc CalcStart export;
   g_klCount = 0;
   g_klOpen = *off;
   g_fldCount = 0;
+  g_arrCount = 0;
+  g_lookupDeclared = *off;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -324,6 +338,12 @@ dcl-proc ConvOperand;
   if %subst(i_text:1:1) = '*';
     o_reason = 'Special name ' + i_text + ' is not converted';
     return *off;
+  endif;
+
+  // A table name in a calculation is the entry the last LOKUP selected.
+  if IsTableName(l_upper);
+    o_text = i_text + '(' + i_text + '_IDX)';
+    return *on;
   endif;
 
   // Array element.
@@ -984,6 +1004,12 @@ dcl-proc CalcLine export;
   if l_rule.kind = 'STRING';
     g_hdrIndex = 0;
     ConvertString(l_c:l_rule);
+    return;
+  endif;
+  // LOKUP reads its own operands: array name with an index, tables.
+  if l_rule.kind = 'LOOKUP';
+    g_hdrIndex = 0;
+    ConvertLookup(l_c:l_rule);
     return;
   endif;
   l_isSubrOperand = (l_rule.opcode = 'EXSR' or l_rule.opcode = 'BEGSR'
@@ -1997,6 +2023,390 @@ dcl-proc OperandType;
 end-proc;
 
 // ------------------------------------------------------------------
+// Defines an array or table of an E specification (called by IAfreeCvt). A name
+// that starts with TAB is a table: its current entry is selected by LOKUP, which
+// the conversion keeps in the field NAME_IDX (declared here, first entry 1).
+dcl-proc CalcDefineArray export;
+  dcl-pi *n;
+    i_name varchar(10) const;
+    i_sequence char(1) const;
+    i_dim int(10) const;
+    i_alt varchar(10) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_isTable ind;
+
+  if g_arrCount >= C_MAXARR;
+    return;
+  endif;
+  g_arrCount += 1;
+  g_arrName(g_arrCount) = Up(i_name);
+  g_arrSeq(g_arrCount) = i_sequence;
+  g_arrDim(g_arrCount) = i_dim;
+  g_arrAlt(g_arrCount) = Up(i_alt);
+  l_isTable = (%scan('TAB':Up(i_name)) = 1);
+  g_arrTable(g_arrCount) = l_isTable;
+  if l_isTable;
+    DeclareHidden(Up(i_name) + '_IDX':'int(10) inz(1)');
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc ArrayInfo;
+  dcl-pi *n ind;
+    i_name varchar(30) const;
+    o_isTable ind;
+    o_sequence char(1);
+    o_dim int(10);
+    o_alt varchar(10);
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_name varchar(30);
+
+  l_name = Up(i_name);
+  for l_index = 1 to g_arrCount;
+    if g_arrName(l_index) = l_name;
+      o_isTable = g_arrTable(l_index);
+      o_sequence = g_arrSeq(l_index);
+      o_dim = g_arrDim(l_index);
+      o_alt = g_arrAlt(l_index);
+      return *on;
+    endif;
+  endfor;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc IsTableName;
+  dcl-pi *n ind;
+    i_upper varchar(30) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  for l_index = 1 to g_arrCount;
+    if g_arrName(l_index) = i_upper and g_arrTable(l_index);
+      return *on;
+    endif;
+  endfor;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+// A field of the conversion itself (the index of a table, the result of a
+// lookup): declared with the other fields at the end, once.
+dcl-proc DeclareHidden;
+  dcl-pi *n;
+    i_name varchar(30) const;
+    i_type varchar(40) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  for l_index = 1 to g_declCount;
+    if g_declName(l_index) = Up(i_name);
+      return;
+    endif;
+  endfor;
+  if g_declCount >= C_MAXDECL;
+    return;
+  endif;
+  g_declCount += 1;
+  g_declName(g_declCount) = Up(i_name);
+  g_declType(g_declCount) = i_type;
+end-proc;
+
+// ------------------------------------------------------------------
+// LOKUP (RPG II guide chapter 27; RPG/400 reference chapter 11) on an array or a
+// table of the E specifications. Resulting indicators: high (54-55), low (56-57)
+// and equal (58-59); one or two of them, high and low not together.
+//   equal            LOKUP_IX = %lookup(F1:ARR);          *INeq = (LOKUP_IX > 0);
+//   high / low       %lookupgt / %lookuplt                 (needs the sequence)
+//   equal and high   %lookupge, equal and low %lookuple    (needs the sequence)
+// With an index (ARR,X) the search starts at X, and X is set to the position found
+// or to 1. A table keeps the entry found in NAME_IDX, which every reference to the
+// table name in a calculation uses; the second table in the result field and the
+// alternating table get the same entry.
+dcl-proc ConvertLookup;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-ds l_rule likeds(IAfreeOpc_t);
+  dcl-s l_comma int(10);
+  dcl-s l_name varchar(30);
+  dcl-s l_idxText varchar(30) inz('');
+  dcl-s l_idxConv varchar(30) inz('');
+  dcl-s l_hasIndex ind inz(*off);
+  dcl-s l_isTable ind;
+  dcl-s l_seq char(1);
+  dcl-s l_dim int(10);
+  dcl-s l_alt varchar(10);
+  dcl-s l_resName varchar(30) inz('');
+  dcl-s l_resTable ind;
+  dcl-s l_resSeq char(1);
+  dcl-s l_resDim int(10);
+  dcl-s l_resAlt varchar(10);
+  dcl-s l_f1 varchar(60);
+  dcl-s l_hi varchar(20) inz('');
+  dcl-s l_lo varchar(20) inz('');
+  dcl-s l_eq varchar(20) inz('');
+  dcl-s l_count int(10) inz(0);
+  dcl-s l_func varchar(12);
+  dcl-s l_search varchar(150);
+  dcl-s l_element varchar(60);
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_note varchar(190) inz('');
+  dcl-s l_kind1 char(1);
+  dcl-s l_len1 int(10);
+  dcl-s l_dec1 int(10);
+  dcl-s l_kind2 char(1);
+  dcl-s l_len2 int(10);
+  dcl-s l_dec2 int(10);
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+  dcl-s l_n int(10) inz(0);
+
+  // The array or table, and its index.
+  l_name = i_c.factor2;
+  l_comma = %scan(',':l_name);
+  if l_comma > 0;
+    l_idxText = %trim(%subst(l_name:l_comma + 1));
+    l_name = %subst(l_name:1:l_comma - 1);
+    l_hasIndex = *on;
+  endif;
+  l_name = Up(l_name);
+  if not ArrayInfo(l_name:l_isTable:l_seq:l_dim:l_alt);
+    l_reason = l_name + ' is not an array or table defined by an E specification';
+  endif;
+  if l_reason = '' and l_hasIndex and l_isTable;
+    l_reason = 'A table has no index';
+  endif;
+  if l_reason = '' and i_c.result <> '';
+    if not l_isTable;
+      l_reason = 'The result field must be blank when factor 2 is an array';
+    elseif not ArrayInfo(i_c.result:l_resTable:l_resSeq:l_resDim:l_resAlt);
+      l_reason = i_c.result + ' is not a table defined by an E specification';
+    elseif not l_resTable;
+      l_reason = i_c.result + ' is not a table';
+    else;
+      l_resName = Up(i_c.result);
+    endif;
+  endif;
+
+  // The resulting indicators.
+  if l_reason = '';
+    if i_c.result1 <> '  ';
+      l_reason = IndicatorName(i_c.result1:l_hi);
+      l_count += 1;
+    endif;
+    if l_reason = '' and i_c.result2 <> '  ';
+      l_reason = IndicatorName(i_c.result2:l_lo);
+      l_count += 1;
+    endif;
+    if l_reason = '' and i_c.result3 <> '  ';
+      l_reason = IndicatorName(i_c.result3:l_eq);
+      l_count += 1;
+    endif;
+  endif;
+  if l_reason = '';
+    select;
+      when l_count = 0;
+        l_reason = 'LOKUP needs a high, low or equal resulting indicator';
+      when l_count > 2;
+        l_reason = 'No more than two resulting indicators can be used with LOKUP';
+      when l_hi <> '' and l_lo <> '';
+        l_reason = 'High and low cannot be used together with LOKUP';
+      when (l_hi <> '' or l_lo <> '') and l_seq = ' ';
+        l_reason = 'A high or low search needs the sequence of ' + l_name
+                   + ' (column 45 of the E specification)';
+    endsl;
+  endif;
+
+  // The search argument and the index.
+  if l_reason = '';
+    if not ConvOperand(i_c.factor1:l_f1:l_reason);
+      l_f1 = '';
+    endif;
+  endif;
+  if l_reason = '' and l_hasIndex;
+    if not ConvOperand(l_idxText:l_idxConv:l_reason);
+      l_idxConv = '';
+    endif;
+  endif;
+  // A field used as search argument must have the length and format of the
+  // entries (a literal or a figurative constant is not checked).
+  if l_reason = '' and %len(l_f1) > 0;
+    if %subst(l_f1:1:1) <> C_QUOTE and %subst(l_f1:1:1) <> '*'
+       and not IsNumberLiteral(l_f1);
+      if OperandType(l_f1:l_kind1:l_len1:l_dec1);
+        if OperandType(l_name:l_kind2:l_len2:l_dec2);
+          if l_kind1 <> l_kind2 or l_len1 <> l_len2;
+            l_reason = 'The search argument and the entries of ' + l_name
+                       + ' must have the same length and format';
+          endif;
+        endif;
+      endif;
+    endif;
+  endif;
+
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  // The search.
+  select;
+    when l_hi <> '' and l_eq <> '';
+      l_func = '%lookupge';
+    when l_lo <> '' and l_eq <> '';
+      l_func = '%lookuple';
+    when l_hi <> '';
+      l_func = '%lookupgt';
+    when l_lo <> '';
+      l_func = '%lookuplt';
+    other;
+      l_func = '%lookup';
+  endsl;
+  l_search = l_func + '(' + l_f1 + ':' + l_name;
+  if l_hasIndex;
+    l_search += ':' + l_idxConv;
+  endif;
+  l_search += ')';
+  l_element = l_name + '(LOKUP_IX)';
+
+  DeclareHidden('LOKUP_IX':'int(10)');
+  l_n += 1;
+  l_statements(l_n) = 'LOKUP_IX = ' + l_search;
+  select;
+    when l_eq <> '' and (l_hi <> '' or l_lo <> '');
+      l_n += 1;
+      l_statements(l_n) = l_eq + ' = *off';
+      l_n += 1;
+      l_statements(l_n) = %trim(l_hi + l_lo) + ' = *off';
+      l_n += 1;
+      l_statements(l_n) = 'if LOKUP_IX > 0; if ' + l_element + ' = ' + l_f1 + '; '
+                          + l_eq + ' = *on; else; ' + %trim(l_hi + l_lo)
+                          + ' = *on; endif; endif';
+    when l_eq <> '';
+      l_n += 1;
+      l_statements(l_n) = l_eq + ' = (LOKUP_IX > 0)';
+    other;
+      l_n += 1;
+      l_statements(l_n) = %trim(l_hi + l_lo) + ' = (LOKUP_IX > 0)';
+  endsl;
+
+  // The index of the array, or the current entry of the table.
+  if l_hasIndex;
+    if IsName(l_idxText);
+      l_n += 1;
+      l_statements(l_n) = 'if LOKUP_IX = 0; ' + l_idxConv + ' = 1; else; '
+                          + l_idxConv + ' = LOKUP_IX; endif';
+    endif;
+  elseif l_isTable;
+    l_note = 'Table ' + l_name + ': the entry found is kept in ' + l_name
+             + '_IDX, which the references to the table name use';
+    l_n += 1;
+    l_statements(l_n) = 'if LOKUP_IX > 0; ' + l_name + '_IDX = LOKUP_IX';
+    if l_alt <> '';
+      l_statements(l_n) += '; ' + l_alt + '_IDX = LOKUP_IX';
+    endif;
+    if l_resName <> '';
+      l_statements(l_n) += '; ' + l_resName + '_IDX = LOKUP_IX';
+    endif;
+    l_statements(l_n) += '; endif';
+  endif;
+
+  l_rule = i_rule;
+  l_rule.reason = l_note;
+  if l_note = '';
+    l_rule.status = C_STS_CONVERTED;
+  else;
+    l_rule.status = C_STS_ASSUMPTION;
+  endif;
+  EmitStatements(i_c:l_rule:l_statements:l_n:'');
+end-proc;
+
+// ------------------------------------------------------------------
+// MOVEA, the whole array to a whole array of the same number of entries and the
+// same entry length and type, or *BLANK(S) and *ZERO(S) to an array. Moves with
+// an index, between an array and a field, and between arrays of another size are
+// reported R.
+dcl-proc ConvertMovea;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_isTable1 ind;
+  dcl-s l_isTable2 ind;
+  dcl-s l_seq char(1);
+  dcl-s l_dim1 int(10);
+  dcl-s l_dim2 int(10);
+  dcl-s l_alt varchar(10);
+  dcl-s l_kind1 char(1);
+  dcl-s l_len1 int(10);
+  dcl-s l_dec1 int(10);
+  dcl-s l_kind2 char(1);
+  dcl-s l_len2 int(10);
+  dcl-s l_dec2 int(10);
+  dcl-s l_figure varchar(10);
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+
+  select;
+    when i_c.result1 <> '  ' or i_c.result2 <> '  ' or i_c.result3 <> '  ';
+      l_reason = 'Resulting indicators are not used by MOVEA';
+    when %scan(',':i_c.result) > 0 or %scan(',':i_c.factor2) > 0;
+      l_reason = 'MOVEA with an array index is not converted';
+    when not ArrayInfo(i_c.result:l_isTable2:l_seq:l_dim2:l_alt);
+      l_reason = i_c.result + ' is not an array defined by an E specification '
+                 + '(MOVEA to a field is not converted)';
+    when l_isTable2;
+      l_reason = 'MOVEA to a table is not converted';
+  endsl;
+
+  if l_reason = '';
+    l_figure = Up(i_c.factor2C);
+    select;
+      when l_figure = '*BLANK' or l_figure = '*BLANKS';
+        if OperandType(i_c.result:l_kind2:l_len2:l_dec2) and l_kind2 = 'C';
+          l_statements(1) = i_c.resultC + ' = *blanks';
+        else;
+          l_reason = 'MOVEA of *BLANK needs an alphanumeric array';
+        endif;
+      when l_figure = '*ZERO' or l_figure = '*ZEROS';
+        l_statements(1) = i_c.resultC + ' = *zeros';
+      when not ArrayInfo(i_c.factor2:l_isTable1:l_seq:l_dim1:l_alt);
+        l_reason = i_c.factor2 + ' is not an array defined by an E specification '
+                   + '(MOVEA from a field is not converted)';
+      when l_isTable1;
+        l_reason = 'MOVEA from a table is not converted';
+      when l_dim1 <> l_dim2;
+        l_reason = 'MOVEA between arrays of a different number of entries is not '
+                   + 'converted';
+      other;
+        if OperandType(i_c.factor2:l_kind1:l_len1:l_dec1)
+           and OperandType(i_c.result:l_kind2:l_len2:l_dec2)
+           and l_kind1 = l_kind2 and l_len1 = l_len2 and l_dec1 = l_dec2;
+          l_statements(1) = i_c.resultC + ' = ' + i_c.factor2C;
+        else;
+          l_reason = 'MOVEA between arrays of a different entry length or type is '
+                     + 'not converted';
+        endif;
+    endsl;
+  endif;
+
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+  EmitStatements(i_c:i_rule:l_statements:1:'');
+end-proc;
+
+// ------------------------------------------------------------------
 // MOVE and MOVEL (RPG II guide chapter 27; RPG/400 reference chapter 11). The
 // data is moved right-justified (MOVE) or left-justified (MOVEL) and the rest of
 // the result field keeps its old value, so the lengths of both fields must be
@@ -2029,6 +2439,10 @@ dcl-proc ConvertMove;
   dcl-s l_f2 varchar(40);
   dcl-s l_found ind;
 
+  if i_rule.opcode = 'MOVEA';
+    ConvertMovea(i_c:i_rule);
+    return;
+  endif;
   l_left = (i_rule.opcode = 'MOVEL');
   l_pad = (i_c.halfAdjust = 'P');
   l_res = i_c.resultC;

@@ -1,0 +1,33 @@
+      * RPG II LOKUP and MOVEA (FREE-08, arrays of FREE-07)
+     H
+     E                    ARR     4   8  5 0A
+     E                    ARRB        8  5 0
+     E                    CHRARR      6  3
+     E                    TABCOD  5  10  3 0ATABAMT  6 2
+     C                     Z-ADD7         SRCH    50
+     C                     Z-ADD1         X       30
+     C                     Z-ADD2         SRCH3   30
+      * Array: equal, with an index, high, equal and high, low and equal
+     C           SRCH      LOKUPARR                      90
+     C           SRCH      LOKUPARR,X                    91
+     C           SRCH      LOKUPARR                  92
+     C           SRCH      LOKUPARR                  93  94
+     C           SRCH      LOKUPARR                    9596
+      * Table: the entry found is used through the table names
+     C           SRCH3     LOKUPTABCOD                   97
+     C                     Z-ADDTABAMT    TOTAL   82
+      * MOVEA
+     C                     MOVEAARR       ARRB
+     C                     MOVEA*BLANK    CHRARR
+     C                     MOVEA*ZEROS    ARRB
+      * Not converted
+     C           SRCH      LOKUPARRB                 92
+     C           SRCH      LOKUPARR                  9293
+     C           SRCH3     LOKUPTABCOD,X                 97
+     C           SRCH      LOKUPARR       ARRB           90
+     C           SRCH      LOKUPARR
+     C           SRCH3     LOKUPARR                      90
+     C           SRCH      LOKUPNOARR                    90
+     C                     MOVEAARR       CHRARR
+     C                     MOVEAARR,2     ARRB
+     C                     MOVEASRCH      ARRB

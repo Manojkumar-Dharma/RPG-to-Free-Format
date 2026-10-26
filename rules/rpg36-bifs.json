@@ -82,5 +82,40 @@
   "use": "CAT",
   "note": "String without trailing blanks",
   "source": "SC09-2508 chapter 'Built-in Functions' (release not checked on a system)"
+ },
+ {
+  "name": "%LOOKUP",
+  "since": "V5R1",
+  "use": "LOKUP",
+  "note": "Position of an element equal to the search argument",
+  "source": "ILE RPG reference, built-in functions (release not checked on a system)"
+ },
+ {
+  "name": "%LOOKUPGT",
+  "since": "V5R1",
+  "use": "LOKUP",
+  "note": "Nearest element greater than the search argument",
+  "source": "ILE RPG reference, built-in functions (release not checked on a system)"
+ },
+ {
+  "name": "%LOOKUPGE",
+  "since": "V5R1",
+  "use": "LOKUP",
+  "note": "Element equal to or nearest greater",
+  "source": "ILE RPG reference, built-in functions (release not checked on a system)"
+ },
+ {
+  "name": "%LOOKUPLT",
+  "since": "V5R1",
+  "use": "LOKUP",
+  "note": "Nearest element less than the search argument",
+  "source": "ILE RPG reference, built-in functions (release not checked on a system)"
+ },
+ {
+  "name": "%LOOKUPLE",
+  "since": "V5R1",
+  "use": "LOKUP",
+  "note": "Element equal to or nearest less",
+  "source": "ILE RPG reference, built-in functions (release not checked on a system)"
  }
 ]
