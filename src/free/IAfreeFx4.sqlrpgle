@@ -62,6 +62,14 @@ dcl-s g_divHalf ind inz(*off);
 dcl-s g_quoted ind inz(*off);           // a name was written as a literal
 dcl-s g_constName varchar(21) dim(C_MAXCONST);
 dcl-s g_constCount int(10) inz(0);
+// The files of the F specifications (I specifications and file operations).
+dcl-c C_MAXFL 100;
+dcl-s g_flName varchar(10) dim(C_MAXFL);
+dcl-s g_flLen int(10) dim(C_MAXFL);
+dcl-s g_flType char(1) dim(C_MAXFL);
+dcl-s g_flDevice varchar(7) dim(C_MAXFL);
+dcl-s g_flLayout ind dim(C_MAXFL);
+dcl-s g_flCount int(10) inz(0);
 
 // ------------------------------------------------------------------
 dcl-proc Up;
@@ -133,6 +141,7 @@ dcl-proc Fx4Start export;
   g_cStarted = *off;
   g_protoCount = 0;
   g_divIdx = 0;
+  g_flCount = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -668,6 +677,13 @@ dcl-proc ConvertF;
   endif;
 
   if not l_isLike;
+    if l_fmt = 'E';
+      FlAdd(l_name:0:l_type:l_device);
+    else;
+      FlAdd(l_name:%int(l_recLen):l_type:l_device);
+    endif;
+  endif;
+  if not l_isLike;
     select;
       when l_type = 'I' and l_add = 'A';
         l_usage = '*input : *output';
@@ -720,6 +736,357 @@ dcl-proc ConvertF;
   g_lastLineNo = i_lineNo;
   ReportWithContinuations(i_index:i_lineNo:i_line:l_extra:l_note);
   return l_extra;
+end-proc;
+
+// ------------------------------------------------------------------
+// The files of the converted F specifications that I specifications and file
+// operations need: record length (0 for an external file), layout written.
+dcl-proc FlAdd;
+  dcl-pi *n;
+    i_name varchar(10) const;
+    i_recLen int(10) const;
+    i_type char(1) const;
+    i_device varchar(7) const;
+  end-pi;
+
+  if g_flCount < C_MAXFL;
+    g_flCount += 1;
+    g_flName(g_flCount) = Up(i_name);
+    g_flLen(g_flCount) = i_recLen;
+    g_flType(g_flCount) = i_type;
+    g_flDevice(g_flCount) = i_device;
+    g_flLayout(g_flCount) = *off;
+  endif;
+end-proc;
+
+dcl-proc FlFind;
+  dcl-pi *n int(10);
+    i_name varchar(14) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+
+  for l_k = 1 to g_flCount;
+    if g_flName(l_k) = Up(i_name);
+      return l_k;
+    endif;
+  endfor;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// One field line of an I specification of a program described file (columns 31
+// to 74). o_stmt is the dcl-subf statement, o_reason says why it cannot be
+// converted. Columns: 31-35 data attributes, 36 format, 37-41 from, 42-46 to,
+// 47-48 decimals, 49-62 name, 63-64 level, 65-66 matching, 67-68 relation,
+// 69-74 indicators.
+dcl-proc InputField4;
+  dcl-pi *n ind;
+    i_line char(100) const;
+    i_recLen int(10) const;
+    o_stmt varchar(200);
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_up char(100);
+  dcl-s l_fmt char(1);
+  dcl-s l_decText varchar(2);
+  dcl-s l_dec int(10);
+  dcl-s l_from int(10);
+  dcl-s l_to int(10);
+  dcl-s l_len int(10);
+  dcl-s l_digits int(10);
+  dcl-s l_name varchar(14);
+  dcl-s l_type varchar(30);
+  dcl-s l_fromText varchar(5);
+  dcl-s l_toText varchar(5);
+
+  o_stmt = '';
+  o_reason = '';
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  l_fmt = %subst(l_up:36:1);
+  l_fromText = %trim(%subst(l_up:37:5));
+  l_toText = %trim(%subst(l_up:42:5));
+  l_decText = %trim(%subst(l_up:47:2));
+  l_name = %trim(%subst(l_up:49:14));
+
+  select;
+    when %trim(%subst(l_up:31:5)) <> '';
+      o_reason = 'Data attributes (columns 31-35: date or time format, *VAR) are '
+                 + 'not converted';
+    when not IsDigits(l_fromText) or not IsDigits(l_toText);
+      o_reason = 'Field location (columns 37-46) is not valid';
+    when %trim(%subst(l_up:63:12)) <> '';
+      o_reason = 'Control level, matching fields, field record relation or field '
+                 + 'indicators are not supported in free-form';
+    when l_name = '' or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$#@':l_name) > 0
+         or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ_$#@':%subst(l_name:1:1)) > 0;
+      o_reason = 'Field name (columns 49-62) is not a simple name (an array '
+                 + 'element, *IN or PAGE is not converted)';
+    when l_decText <> '' and not IsDigits(l_decText);
+      o_reason = 'Decimal positions (columns 47-48) are not valid';
+    when SymType(l_name) <> '';
+      o_reason = 'Field ' + l_name + ' is already declared';
+  endsl;
+  if o_reason <> '';
+    return *off;
+  endif;
+  l_from = %int(l_fromText);
+  l_to = %int(l_toText);
+  l_len = l_to - l_from + 1;
+  if l_decText <> '';
+    l_dec = %int(l_decText);
+  else;
+    l_dec = 0;
+  endif;
+  if l_from < 1 or l_to < l_from;
+    o_reason = 'Field location (columns 37-46) is not valid';
+  elseif i_recLen > 0 and l_to > i_recLen;
+    o_reason = 'Field ends past the record length ' + %char(i_recLen);
+  endif;
+  if o_reason <> '';
+    return *off;
+  endif;
+
+  select;
+    when (l_fmt = ' ' and l_decText = '') or l_fmt = 'A';
+      if l_decText <> '';
+        o_reason = 'Decimal positions on a character field';
+      else;
+        l_type = 'char(' + %char(l_len) + ')';
+      endif;
+    when l_fmt = 'N';
+      if l_len <> 1 or l_decText <> '';
+        o_reason = 'An indicator field (N) is one position without decimals';
+      else;
+        l_type = 'ind';
+      endif;
+    when l_fmt = 'F';
+      if (l_len <> 4 and l_len <> 8) or l_decText <> '';
+        o_reason = 'A float field is 4 or 8 bytes long and has no decimals';
+      else;
+        l_type = 'float(' + %char(l_len) + ')';
+      endif;
+    when l_decText = '';
+      o_reason = 'A numeric field needs decimal positions (columns 47-48)';
+    when l_fmt = ' ' or l_fmt = 'S';
+      l_digits = l_len;
+      if l_len > 63;
+        o_reason = 'A zoned field is longer than 63 digits';
+      else;
+        l_type = 'zoned(' + %char(l_len) + ' : ' + %char(l_dec) + ')';
+      endif;
+    when l_fmt = 'P';
+      l_digits = 2 * l_len - 1;
+      if l_len > 32;
+        o_reason = 'A packed field is longer than 32 bytes';
+      else;
+        l_type = 'packed(' + %char(l_digits) + ' : ' + %char(l_dec) + ')';
+      endif;
+    when l_fmt = 'B';
+      if l_len <> 2 and l_len <> 4;
+        o_reason = 'A binary field must be 2 or 4 bytes long';
+      else;
+        if l_len = 2;
+          l_digits = 4;
+        else;
+          l_digits = 9;
+        endif;
+        l_type = 'bindec(' + %char(l_digits) + ' : ' + %char(l_dec) + ')';
+      endif;
+    when l_fmt = 'I' or l_fmt = 'U';
+      select;
+        when l_len = 1;
+          l_digits = 3;
+        when l_len = 2;
+          l_digits = 5;
+        when l_len = 4;
+          l_digits = 10;
+        when l_len = 8;
+          l_digits = 20;
+        other;
+          o_reason = 'An integer field is 1, 2, 4 or 8 bytes long';
+      endsl;
+      if l_dec <> 0;
+        o_reason = 'An integer field has no decimal positions';
+      endif;
+      if o_reason = '';
+        if l_fmt = 'I';
+          l_type = 'int(' + %char(l_digits) + ')';
+        else;
+          l_type = 'uns(' + %char(l_digits) + ')';
+        endif;
+      endif;
+    other;
+      o_reason = 'Data format ' + l_fmt + ' (sign formats, date, time, timestamp, '
+                 + 'graphic, UCS-2) is not converted';
+  endsl;
+  if o_reason = '' and l_dec > l_len and l_fmt <> 'P' and l_fmt <> 'B';
+    o_reason = 'Decimal positions are more than the length';
+  endif;
+  if o_reason <> '';
+    return *off;
+  endif;
+
+  o_stmt = '  dcl-subf ' + l_name + ' ' + l_type + ' pos(' + %char(l_from) + ');';
+  AddSym(l_name:l_type);
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// I specification of a program described file: one record type, no record
+// identifying codes. The record line and its field lines become the data
+// structure FILE_REC (length of the record) with the fields as subfields; the
+// file operations of the C specifications name it in their result field.
+dcl-proc ConvertI;
+  dcl-pi *n int(10);
+    i_index int(10) const;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_up char(100);
+  dcl-s l_next char(100);
+  dcl-s l_nextUp char(100);
+  dcl-s l_name varchar(10);
+  dcl-s l_file int(10);
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_last int(10);
+  dcl-s l_k int(10);
+  dcl-s l_stmt varchar(200);
+  dcl-s l_fieldReason varchar(190);
+  dcl-s l_fields int(10) inz(0);
+  dcl-s l_multi ind inz(*off);
+  dcl-s l_recLen int(10) inz(0);
+  dcl-s l_dsName varchar(14);
+  dcl-s l_out varchar(200) dim(300);
+  dcl-s l_outNo int(10) dim(300);
+  dcl-s l_outCount int(10) inz(0);
+  dcl-s l_status char(1);
+  dcl-s l_reasons varchar(190) dim(300);
+  dcl-s l_ok ind dim(300);
+
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  l_name = %trim(%subst(l_up:7:10));
+
+  // A field line or an AND/OR line with no record line before it.
+  if l_name = '' and %subst(l_up:16:3) <> 'AND' and %subst(l_up:16:2) <> 'OR';
+    ReviewSpec(i_lineNo:i_line:'Field line without an input record line');
+    return 0;
+  endif;
+  if l_name = '';
+    ReviewSpec(i_lineNo:i_line:'AND/OR line without an input record line');
+    return 0;
+  endif;
+
+  // The block: the field lines, and AND/OR lines (not converted) after the
+  // record line.
+  l_last = 0;
+  l_k = i_index + 1;
+  dow l_k <= SrcCount();
+    l_next = SrcLine(l_k);
+    l_nextUp = %xlate(C_LOWER:C_UPPER:l_next);
+    if %subst(l_nextUp:6:1) <> 'I' or %subst(l_nextUp:7:1) = '*'
+       or %subst(l_nextUp:7:1) = '/';
+      leave;
+    endif;
+    if %trim(%subst(l_nextUp:7:10)) <> '';
+      leave;
+    endif;
+    if %subst(l_nextUp:16:3) = 'AND' or %subst(l_nextUp:16:2) = 'OR';
+      l_multi = *on;
+    endif;
+    l_last += 1;
+    l_k += 1;
+  enddo;
+
+  l_file = FlFind(l_name);
+  l_dsName = l_name + '_REC';
+  select;
+    when l_multi;
+      l_reason = 'More than one record type (AND/OR lines) is not supported in '
+                 + 'free-form';
+    when l_last > 250;
+      l_reason = 'The record layout has more than 250 lines';
+    when l_file = 0;
+      l_reason = 'File ' + l_name + ' is not declared by a converted F '
+                 + 'specification';
+    when g_flLen(l_file) = 0;
+      l_reason = 'File ' + l_name + ' is externally described: field renames and '
+                 + 'field indicators are not converted yet';
+    when g_flDevice(l_file) <> 'DISK' and g_flDevice(l_file) <> 'SEQ';
+      l_reason = 'File ' + l_name + ' is not a DISK or SEQ file';
+    when g_flType(l_file) <> 'I' and g_flType(l_file) <> 'U'
+         and g_flType(l_file) <> 'C';
+      l_reason = 'File ' + l_name + ' is not an input, update or combined file';
+    when g_flLayout(l_file);
+      l_reason = 'File ' + l_name + ' already has a record layout (more than one '
+                 + 'record type)';
+    when %subst(l_up:21:2) = '**';
+      l_reason = 'Look-ahead fields are not supported in free-form';
+    when %trim(%subst(l_up:21:2)) <> '';
+      l_reason = 'Record identifying indicator ' + %trim(%subst(l_up:21:2))
+                 + ' is not set by free-form I/O';
+    when %trim(%subst(l_up:23:24)) <> '';
+      l_reason = 'Record identification codes (more than one record type) are not '
+                 + 'supported in free-form';
+    when %trim(%subst(l_up:19:2)) <> '' or (%subst(l_up:17:2) <> '  '
+         and %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ':%subst(l_up:17:2)) > 0);
+      l_reason = 'Sequence checking (columns 17-20) is not supported in free-form';
+  endsl;
+  if l_reason <> '';
+    ReviewWithContinuations(i_index:i_lineNo:i_line:l_last:l_reason);
+    return l_last;
+  endif;
+  l_recLen = g_flLen(l_file);
+
+  l_outCount += 1;
+  l_out(l_outCount) = 'dcl-ds ' + l_dsName + ' len(' + %char(l_recLen) + ');';
+  l_outNo(l_outCount) = i_lineNo;
+  for l_k = 1 to l_last;
+    l_next = SrcLine(i_index + l_k);
+    l_nextUp = %xlate(C_LOWER:C_UPPER:l_next);
+    l_ok(l_k) = InputField4(l_next:l_recLen:l_stmt:l_fieldReason);
+    if l_ok(l_k);
+      l_fields += 1;
+      l_outCount += 1;
+      l_out(l_outCount) = l_stmt;
+      l_outNo(l_outCount) = SrcLineNo(i_index + l_k);
+    else;
+      l_reasons(l_k) = l_fieldReason;
+      l_outCount += 1;
+      l_out(l_outCount) = '// ' + %trimr(%subst(l_next:6:69));
+      l_outNo(l_outCount) = SrcLineNo(i_index + l_k);
+    endif;
+  endfor;
+  if l_fields = 0;
+    ReviewWithContinuations(i_index:i_lineNo:i_line:l_last
+                            :'No subfield could be converted');
+    return l_last;
+  endif;
+  l_outCount += 1;
+  l_out(l_outCount) = 'end-ds;';
+  l_outNo(l_outCount) = SrcLineNo(i_index + l_last);
+  for l_k = 1 to l_outCount;
+    AddOut(l_out(l_k):l_outNo(l_k));
+  endfor;
+  g_flLayout(l_file) = *on;
+  AddSym(l_dsName:'ds');
+
+  RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:75))
+          :'record layout of file ' + l_name + ' declared as data structure '
+          + l_dsName + ': READ and CHAIN of the file name it');
+  for l_k = 1 to l_last;
+    l_next = SrcLine(i_index + l_k);
+    if l_ok(l_k);
+      RptItem(C_STS_CONVERTED:SrcLineNo(i_index + l_k):%trimr(%subst(l_next:6:75)):'');
+    else;
+      RptItem(C_STS_REVIEW:SrcLineNo(i_index + l_k):%trimr(%subst(l_next:6:75))
+              :l_reasons(l_k));
+    endif;
+  endfor;
+  g_lastLineNo = SrcLineNo(i_index + l_last);
+  return l_last;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -2669,6 +3036,7 @@ dcl-proc ConvertC;
   dcl-s l_half ind inz(*off);
   dcl-s l_expr varchar(100);
   dcl-s l_args varchar(300);
+  dcl-s l_fi int(10);
   dcl-s l_open ind inz(*off);
   dcl-s l_post varchar(400) inz('');
   dcl-s l_err ind inz(*off);
@@ -3132,6 +3500,17 @@ dcl-proc ConvertC;
           l_reason = l_op + ' without a file or record in factor 2';
         endif;
         l_args += l_f2;
+        // A program described file with an I specification: the result is its
+        // record data structure.
+        if l_res = '' and (l_op = 'CHAIN' or l_op = 'READE' or l_op = 'READPE'
+           or l_op = 'READ' or l_op = 'READP' or l_op = 'UPDATE');
+          l_fi = FlFind(l_f2);
+          if l_fi > 0;
+            if g_flLayout(l_fi);
+              l_res = Up(l_f2) + '_REC';
+            endif;
+          endif;
+        endif;
         if l_res <> '' and (l_op = 'CHAIN' or l_op = 'READE' or l_op = 'READPE'
            or l_op = 'READ' or l_op = 'READP' or l_op = 'WRITE' or l_op = 'UPDATE'
            or l_op = 'EXFMT');
@@ -3295,7 +3674,7 @@ dcl-proc Fx4Line export;
       o_extra = ConvertP(i_index:i_lineNo:i_line);
     when l_form = 'I';
       Fx4Flush();
-      ReviewSpec(i_lineNo:i_line:'RPG IV input specification is not converted yet');
+      o_extra = ConvertI(i_index:i_lineNo:i_line);
     when l_form = 'O';
       Fx4Flush();
       ReviewSpec(i_lineNo:i_line:'RPG IV output specification is not converted yet '

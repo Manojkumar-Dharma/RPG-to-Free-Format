@@ -754,3 +754,22 @@ Reported R: the error indicator of `OCUR` (occurrence out of range; needs `MONIT
 ## RPG IV: BITON, BITOF, TESTB, TESTZ (FREE-22, RV-50)
 
 `ConvertC` of `IAfreeFx4` converts these with the same expressions as the RPG II and III conversion (see "TESTN, TESTZ, BITON, BITOF, TESTB"), written as `*inNN = (test);` for each resulting indicator and `FLD = %bitor(FLD : x'mask');` or `%bitand(FLD : x'inverse')` for the bit setting. The result field must be a declared character field (one position for the bit operations, any length for `TESTZ`; the D specification gives the type); factor 2 is a bit number text (`'036'`), a hexadecimal literal (`X'88'`) or a declared one-position character field. `TESTZ` and `TESTB` with a field are assumptions (A) with the reason of the RPG III conversion. Reported R: a result field that is not declared, not character or (bit operations) not one position, a length or decimals on the result field, an operation extender, bit numbers other than 0 to 7, repeated bit numbers, resulting indicators on `BITON` or `BITOF`, no resulting indicator on `TESTB` or `TESTZ`, indicator 2 of `TESTB` for one bit.
+
+## RPG IV input specifications of program described files (FREE-23, RV-55)
+
+`samples/FREE4I.rpgle` has one line for each row; `ConvertI` of `IAfreeFx4` reads the columns of the RPG IV I specification (file 7-16, sequence 17-18, record identifying indicator 21-22, codes 23-46; fields: data attributes 31-35, format 36, from 37-41, to 42-46, decimals 47-48, name 49-62, level 63-64, matching 65-66, relation 67-68, indicators 69-74). Expected result, written from the design and not from a run:
+
+| RPG IV | Free-form | Status |
+|---|---|---|
+| record line of a DISK or SEQ file with record length (F specification format `F`), alphabetic sequence entry, no indicator and no codes | `dcl-ds FILE_REC len(n);` ... `end-ds;` | A (the READ and CHAIN of the file must name it) |
+| field: format blank or `A` | `dcl-subf NAME char(len) pos(from);` (blank with decimals: `zoned`) | C |
+| field: `S` | `zoned(len : dec)` | C |
+| field: `P` | `packed(2*len-1 : dec)` | C |
+| field: `B` (2 or 4 bytes) | `bindec(4 or 9 : dec)` | C |
+| field: `I`, `U` (1, 2, 4, 8 bytes) | `int(3, 5, 10, 20)`, `uns(...)` | C |
+| field: `F` (4 or 8 bytes) | `float(4)` or `float(8)` | C |
+| field: `N` (one position) | `ind` | C |
+| `READ`, `READP`, `READE`, `READPE`, `CHAIN`, `UPDATE` of such a file with no result field | the result field becomes `FILE_REC` | C |
+
+Reported R: an externally described file (field renames and field indicators: RV-30), a file that no converted F specification declares, a file that is not DISK or SEQ, a second record type (AND/OR lines, record identification codes, a second record line for the file), a record identifying indicator, `**` (look-ahead), sequence checking (numeric sequence, columns 19-20), control level, matching fields, field record relation and field indicators, data attributes (`*VAR`, date and time formats), the formats `L`, `R`, `D`, `T`, `Z`, `C`, `G`, a field name that is not a simple name (array element, `*IN`, `PAGE`), a field already declared, and a field past the record length. A field that cannot be converted is kept as a comment inside the data structure; when none can be converted the whole block stays R.
+
