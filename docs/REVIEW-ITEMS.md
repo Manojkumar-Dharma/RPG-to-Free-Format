@@ -31,7 +31,7 @@ Code status and test status follow `PLANNED.md`.
 | RV-10 | `COMIT`, `ROLBK` (3) | file handling | Convert: `commit`, `rolbk`; the file list as `(e)` where used | Planned | Not started |
 | RV-11 | `IN`, `OUT`, `OCUR` (3) | data areas and data structures | Convert: `in`, `out`, `occur`; `*DTAARA` definitions through `DEFN` (RV-07) | Planned | Not started |
 | RV-12 | `EXFMT`, `READC`, `ACQ`, `NEXT`, `POST`, `REL` | WORKSTN file I/O | Convert with the display file of IACNVDSPF; needs the I/O design | Planned | Not started |
-| RV-13 | `EXCPT`, `PAGE`, `PAGE1` to `PAGE7`, O and L specifications | output | FREE-06 (picked up by another session) | In progress | Not tested |
+| RV-13 | `EXCPT`, `PAGE`, `PAGE1` to `PAGE7`, O and L specifications | output | FREE-06: exception records done in part 1, the rest is RV-60 to RV-63 | Written | Not tested |
 | RV-14 | `GOTO`, `TAG`, `CABxx` | free-form has no `GOTO` | Decide: rewrite the common patterns (skip forward to a `TAG` in the same group, loop back, jump to the end) with `if`, `dow`, `leave`, `return`; the other patterns stay R | Planned | Not started |
 | RV-15 | `DEBUG`, `EXIT`, `FORCE`, `FREE`, `KEY`, `RLABL`, `SET`, `SHTDN` | S/36 and external subroutine features | No form: the reason names the replacement (`dump`, `callp`, `*inlr`) | Done | N/A |
 
@@ -57,7 +57,30 @@ Code status and test status follow `PLANNED.md`.
 
 ## IACNVFREE: RPG IV
 
-FREE-10 is being worked on in another session; its R items are tracked there.
+FREE-10 (module `IAfreeFx4`): the R items of the RPG IV source types `RPGLE` and
+`SQLRPGLE`. Code status follows `PLANNED.md`.
+
+| ID | Item | Why R today | Resolution | Code status | Test status |
+|----|------|-------------|------------|-------------|-------------|
+| RV-50 | C specifications: `MOVE`/`MOVEL` between other type pairs, `MOVEA`, `XLATE`, `TESTN`, `TESTZ`, bit operations, `MVR`, `DEFN`, `LOOKUP` | not converted for RPG IV yet | Convert: as RV-02 to RV-07 on the RPG IV columns and the type table of `IAfreeFx4` | Planned | Not started |
+| RV-51 | `CALL`, `PARM`, `PLIST` | prototype needed | Convert with RV-08; the RPG IV `CALLP` and `CALLB` forms are already kept | Planned | Not started |
+| RV-52 | Level indicators (columns 7-8) and `RT` on a calculation; a conditioning indicator on a group operation (`IF`, `DOW`, `BEGSR` ...) | the cycle, or no statement to wrap | Decide with RV-20 (cycle); for the group operations convert with a nested `if` | Planned | Not started |
+| RV-53 | Resulting indicators of operations other than file operations, arithmetic and `COMP` (`LOOKUP`, `TESTN`, `CHECK` with `ER`, `SUBST` with `ER`, `CALL`) | no tests exist for them | Convert with the operation (RV-50) | Planned | Not started |
+| RV-54 | `ANDxx`/`ORxx` after a comment line or with indicators; traditional `DO` and `DOUxx` with factors | header rewrite | Convert: the `DO` forms as in FREE-05 | Planned | Not started |
+| RV-55 | I specifications (program described and external field renames) | cycle entries, rename | Convert program described files like FREE-04; renames with RV-30 | Planned | Not started |
+| RV-56 | O specifications of RPG IV | columns differ | With FREE-06 part 3 | Planned | Not started |
+| RV-57 | D specifications: names continued with `...`, keyword literals continued with `+` or `-`, `FROMFILE`, `TOFILE`, `CLASS`, `PACKEVEN`, object types; the F spec designations P, S, R, T, sequence, limits | not valid or no form | Convert the continuations; No form for the rest | Planned | Not started |
+| RV-58 | `/COPY` and `/INCLUDE` members | the member is fixed form | with RV-36 | Planned | Not started |
+| RV-59 | SQL statements inside RPG IV groups are not indented with the group | `CalcSqlLine` keeps the RPG II/III indentation | Convert: indent with the group depth of `IAfreeFx4` | Planned | Not started |
+
+FREE-06 (module `IAfreeOut`): the R items of the output specifications.
+
+| ID | Item | Why R today | Resolution | Code status | Test status |
+|----|------|-------------|------------|-------------|-------------|
+| RV-60 | Heading, detail and total output records (types H, D, T), `1P`, level indicators on output | written by the RPG cycle | Decide with RV-20 | Planned | Not started |
+| RV-61 | Edited numeric fields (edit codes, edit words), blank after, data format P, B, L, R, relative end positions, `PAGE`, `UDATE` and the like, `*PLACE`, array elements | DDS needs the edited width and other keywords | Convert: width table of the edit codes, `EDTCDE`/`EDTWRD`, `PAGNBR`, `DATE`, `ZEROS` | Planned | Not started |
+| RV-62 | Output of DISK files (`EXCPT`, `ADD`, `DEL`) and a second printer file | one DDS per source today | Convert: `write` of the record with a data structure; one DDS member per file with `DDSTGT` | Planned | Not started |
+| RV-63 | The DDS is written as comments at the end of the member | no second target yet | Convert: `DDSTGT` parameter and a second member | Planned | Not started |
 
 ## IAOCLTOCLE and IACNVDSPF
 
@@ -69,8 +92,8 @@ FREE-10 is being worked on in another session; its R items are tracked there.
 
 ## Order of work
 
-1. Open items first: RV-01 (done), then FREE-06 and FREE-10 when the other
-   session is finished.
+1. Open items first: RV-01 (done), then FREE-06 (RV-60 to RV-63) and FREE-10
+   (RV-50 to RV-59).
 2. The Convert items that need no decision: RV-02 to RV-11, RV-32, RV-35.
 3. The Decide items: RV-14, RV-20/21, RV-30, RV-36.
 4. The Sample items when the members arrive: RV-33, RV-41, RV-42.
