@@ -1,0 +1,20 @@
+      * RPG III multiple-occurrence data structure and OCUR (FREE-20)
+     H
+     ICUSTDS       DS                         10
+     I                                        1  30 CNAME
+     I                                        31 372CBAL
+     IPLAIN        DS
+     I                                        1   5 PFLD
+      * Set the occurrence, read it, both
+     C                     Z-ADD2         WANT    30
+     C           WANT      OCUR CUSTDS
+     C                     OCUR CUSTDS    CUR     30
+     C           3         OCUR CUSTDS    CUR
+     C           WANT      OCUR CUSTDS    CUR
+      * Not converted
+     C           WANT      OCUR CUSTDS                 90
+     C           WANT      OCUR PLAIN
+     C           WANT      OCUR NODS
+     C                     OCUR CUSTDS
+     C           PLAIN     OCUR CUSTDS
+     C                     OCUR CUSTDS    BAD     52

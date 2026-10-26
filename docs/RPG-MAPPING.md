@@ -735,3 +735,16 @@ Host variables (`:name`) are not changed. A field that is only used in an SQL st
 ## More mapping tables
 
 To be written with the converter, one section per specification type (E, I, C, O), in the same form as `OCL-MAPPING.md` and `DSPF-MAPPING.md`.
+
+## Multiple-occurrence data structures and OCUR (RPG III)
+
+`samples/FREEOCC.rpg38` has one line for each row. Expected result, written from the design and not from a run:
+
+| RPG III | Free-form | Status |
+|---|---|---|
+| data structure line with columns 44-47 (number of occurrences, 1 to 9999) | `dcl-ds NAME occurs(n);` (with `inz` for the option `I`) | A |
+| `OCUR` with factor 1 | `%occur(ds) = factor1;` | A |
+| `OCUR` with a result field | `result = %occur(ds);` (the result is declared when columns 49-52 give a length) | A |
+| `OCUR` with both | the two statements in this order | A |
+
+Reported R: the error indicator of `OCUR` (occurrence out of range; needs `MONITOR`), a factor 2 that is not a data structure with occurrences, a factor 1 that is a data structure, a result field with decimal positions, `OCUR` with no factor 1 and no result, and a data structure line with a length (columns 48-51) or other entries in columns 43-70.

@@ -67,6 +67,7 @@ dcl-s g_ctSection int(10);
 // first line, so DEFN *NAMVAR can add the DTAARA keyword.
 dcl-s g_dsNames varchar(10) dim(C_MAXDS);
 dcl-s g_dsOut int(10) dim(C_MAXDS);
+dcl-s g_dsOccurs ind dim(C_MAXDS);
 dcl-s g_dsCount int(10);
 
 // ------------------------------------------------------------------
@@ -94,6 +95,7 @@ dcl-proc FreeConvert export;
   g_ctCount = 0;
   g_ctSection = 0;
   g_dsCount = 0;
+  clear g_dsOccurs;
 
   select;
     when %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPG36';
@@ -1600,8 +1602,20 @@ dcl-proc ConvertInput;
   dcl-s l_stmt varchar(200);
   dcl-s l_fieldReason varchar(190);
   dcl-s l_status char(1);
+  dcl-s l_occurs varchar(4) inz('');
+  dcl-s l_occursOk ind inz(*on);
 
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  // Columns 44-47: a whole number from 1 to 9999, or blank.
+  l_occurs = %trim(%subst(l_up:44:4));
+  l_occursOk = *on;
+  if l_occurs <> '';
+    if %check(C_DIGITS:l_occurs) > 0;
+      l_occursOk = *off;
+    elseif %dec(l_occurs:5:0) < 1;
+      l_occursOk = *off;
+    endif;
+  endif;
 
   // A field or AND/OR line with no record line before it.
   if IsInputField(l_up);
@@ -1650,6 +1664,13 @@ dcl-proc ConvertInput;
     when %trim(%subst(l_up:21:21)) <> '';
       l_reason = 'Record identification codes (more than one record type) are not '
                  + 'supported in free-form';
+    when l_kind = 'D' and g_dialect = '3'
+         and (%subst(l_up:42:2) <> '  ' or %trim(%subst(l_up:48:23)) <> ''
+              or not l_occursOk);
+      l_reason = 'Only the number of occurrences (columns 44-47) is converted on a '
+                 + 'data structure line';
+    when l_kind = 'D' and g_dialect = '3';
+      // columns 44-47: number of occurrences (checked above)
     when %subst(l_up:42:1) <> ' ' or %trim(%subst(l_up:43:28)) <> '';
       l_reason = 'Field entries on the record line are not valid';
     when l_last - i_index + 2 > C_MAXBLOCK;
@@ -1716,6 +1737,10 @@ dcl-proc ConvertInput;
   else;
     l_head = 'dcl-ds ' + l_name + ';';
   endif;
+  if l_kind = 'D' and l_occurs <> '';
+    l_head = %subst(l_head:1:%len(l_head) - 1) + ' occurs(' + %char(%dec(l_occurs:5:0))
+             + ');';
+  endif;
   if l_kind = 'D' and %subst(l_up:18:1) = 'I';
     l_head = %subst(l_head:1:%len(l_head) - 1) + ' inz;';
   endif;
@@ -1769,6 +1794,7 @@ dcl-proc ConvertInput;
     g_dsCount += 1;
     g_dsNames(g_dsCount) = %xlate(C_LOWER:C_UPPER:l_name);
     g_dsOut(g_dsCount) = g_outputCount + 1;
+    g_dsOccurs(g_dsCount) = (l_occurs <> '');
   endif;
   for l_k = 1 to g_blockCount;
     AddOut(g_blockText(l_k):g_blockLineNos(l_k));
@@ -1788,6 +1814,23 @@ dcl-proc ConvertInput;
   endif;
   RptItem(l_status:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
   return l_last - i_index;
+end-proc;
+
+// ------------------------------------------------------------------
+// Whether a data structure has a number of occurrences (columns 44-47).
+dcl-proc CvtIsOccursDs export;
+  dcl-pi *n ind;
+    i_name varchar(10) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  for l_index = 1 to g_dsCount;
+    if g_dsNames(l_index) = i_name;
+      return g_dsOccurs(l_index);
+    endif;
+  endfor;
+  return *off;
 end-proc;
 
 // ------------------------------------------------------------------

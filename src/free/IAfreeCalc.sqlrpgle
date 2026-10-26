@@ -1115,6 +1115,11 @@ dcl-proc CalcLine export;
     ConvertDataArea(l_c:l_rule);
     return;
   endif;
+  if l_rule.opcode = 'OCUR';
+    g_hdrIndex = 0;
+    ConvertOcur(l_c:l_rule);
+    return;
+  endif;
   // Bit operations, TESTN and TESTZ read their own factor 2 (bit numbers).
   if l_rule.opcode = 'BITON' or l_rule.opcode = 'BITOF'
      or l_rule.opcode = 'TESTB' or l_rule.opcode = 'TESTN'
@@ -2500,6 +2505,60 @@ dcl-proc ConvertDataArea;
   if l_ind <> '';
     l_count = 2;
     l_statements(2) = l_ind + ' = %error';
+  endif;
+  EmitStatements(i_c:i_rule:l_statements:l_count:'');
+end-proc;
+
+// ------------------------------------------------------------------
+// OCUR (RPG/400 reference, OCUR): factor 2 is a multiple-occurrence data
+// structure. Factor 1 sets the current occurrence, the result field receives it.
+// Free-form: %OCCUR(ds) = factor 1; and result = %OCCUR(ds);. The error
+// indicator (occurrence out of range) is not converted. Factor 1 that names a
+// data structure is not converted either.
+dcl-proc ConvertOcur;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-s l_ds varchar(30);
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+  dcl-s l_count int(10) inz(0);
+
+  l_ds = Up(i_c.factor2);
+  select;
+    when i_c.result1 <> '  ' or i_c.result2 <> '  ' or i_c.result3 <> '  ';
+      l_reason = 'The error indicator of OCUR (occurrence out of range) is not '
+                 + 'converted: use MONITOR with the %OCCUR assignment';
+    when i_c.halfAdjust <> ' ';
+      l_reason = 'Operation extender ' + i_c.halfAdjust + ' is not allowed for OCUR';
+    when not CvtIsOccursDs(l_ds);
+      l_reason = i_c.factor2 + ' is not a data structure with a number of '
+                 + 'occurrences (columns 44-47 of the data structure line)';
+    when i_c.factor1 = '' and i_c.result = '';
+      l_reason = 'OCUR needs factor 1 or a result field';
+    when i_c.factor1 <> '' and CvtIsOccursDs(Up(i_c.factor1));
+      l_reason = 'Factor 1 is a data structure: setting the occurrence from '
+                 + 'another data structure is not converted';
+    when i_c.result <> '' and i_c.decimals <> ' ' and i_c.decimals <> '0';
+      l_reason = 'The result field of OCUR must have no decimal positions';
+  endsl;
+  if l_reason = '' and i_c.result <> '';
+    l_reason = DeclareResult(i_c.result:i_c.length:i_c.decimals:*on);
+  endif;
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  if i_c.factor1 <> '';
+    l_count += 1;
+    l_statements(l_count) = '%occur(' + i_c.factor2 + ') = ' + i_c.factor1;
+  endif;
+  if i_c.result <> '';
+    l_count += 1;
+    l_statements(l_count) = i_c.result + ' = %occur(' + i_c.factor2 + ')';
   endif;
   EmitStatements(i_c:i_rule:l_statements:l_count:'');
 end-proc;

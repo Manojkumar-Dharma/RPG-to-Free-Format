@@ -82,6 +82,11 @@ dcl-pr CvtDtaaraDs ind;
   i_external varchar(20) const;
 end-pr;
 
+// Whether a data structure of the I specifications has a number of occurrences.
+dcl-pr CvtIsOccursDs ind;
+  i_name varchar(10) const;
+end-pr;
+
 dcl-pr OutCount int(10);
 end-pr;
 

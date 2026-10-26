@@ -1816,11 +1816,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "A",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "OCUR needs a multiple-occurrence data structure (OCCURS of the I specification is not converted yet)",
+  "reason": "OCUR is converted to %OCCUR; the error indicator (occurrence out of range) is reported for review",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
