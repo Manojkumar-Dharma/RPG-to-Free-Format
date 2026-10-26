@@ -750,3 +750,7 @@ To be written with the converter, one section per specification type (E, I, C, O
 | `OCUR` with both | the two statements in this order | A |
 
 Reported R: the error indicator of `OCUR` (occurrence out of range; needs `MONITOR`), a factor 2 that is not a data structure with occurrences, a factor 1 that is a data structure, a result field with decimal positions, `OCUR` with no factor 1 and no result, and a data structure line with a length (columns 48-51) or other entries in columns 43-70.
+
+## RPG IV: BITON, BITOF, TESTB, TESTZ (FREE-22, RV-50)
+
+`ConvertC` of `IAfreeFx4` converts these with the same expressions as the RPG II and III conversion (see "TESTN, TESTZ, BITON, BITOF, TESTB"), written as `*inNN = (test);` for each resulting indicator and `FLD = %bitor(FLD : x'mask');` or `%bitand(FLD : x'inverse')` for the bit setting. The result field must be a declared character field (one position for the bit operations, any length for `TESTZ`; the D specification gives the type); factor 2 is a bit number text (`'036'`), a hexadecimal literal (`X'88'`) or a declared one-position character field. `TESTZ` and `TESTB` with a field are assumptions (A) with the reason of the RPG III conversion. Reported R: a result field that is not declared, not character or (bit operations) not one position, a length or decimals on the result field, an operation extender, bit numbers other than 0 to 7, repeated bit numbers, resulting indicators on `BITON` or `BITOF`, no resulting indicator on `TESTB` or `TESTZ`, indicator 2 of `TESTB` for one bit.

@@ -12,6 +12,8 @@
      DNow              S        6      P0
      DPos              S        3      P0
      DFull             S        30     A
+     DBits             S        1      A
+     DMaskF            S        1      A
      C*Main loop
      C     Init          BEGSR
      C                   EVAL      Count = 0
@@ -86,3 +88,14 @@
      C                   DO        2
      C     Count         ADD       1             Count
      C                   ENDDO
+      * Bit operations and TESTZ (FREE-22)
+     C                   BITON     '0'           Bits
+     C                   BITOF     '67'          Bits
+     C                   BITON     X'88'         Bits
+     C                   BITON     MaskF         Bits
+     C                   TESTB     '07'          Bits                 616263
+     C                   TESTB     X'01'         Bits                 61  63
+     C                   TESTZ                   Bits                 616263
+     C                   BITON     '8'           Bits
+     C                   TESTB     '0'           Digits                   61
+     C                   BITON     '0'           Bits                 61

@@ -2269,6 +2269,192 @@ dcl-proc TestnStmts;
 end-proc;
 
 // ------------------------------------------------------------------
+// BITON, BITOF, TESTB and TESTZ (RPG/400 reference; free-form %BITOR, %BITAND,
+// %BITNOT). Factor 2 of the bit operations: bit numbers in apostrophes ('036'),
+// a 1-byte hexadecimal literal (X'88') or a one-position character field. The
+// result field must be a declared character field. '; ' separated statements;
+// o_note is set when the conversion is an assumption.
+dcl-proc BitStmts;
+  dcl-pi *n varchar(500);
+    i_op varchar(10) const;
+    i_f2 varchar(14) const;
+    i_res varchar(14) const;
+    i_line char(100) const;
+    o_reason varchar(190);
+    o_note varchar(190);
+  end-pi;
+
+  dcl-c C_HEXD '0123456789ABCDEF';
+  dcl-c C_BITV '128064032016008004002001';
+
+  dcl-s l_out varchar(500) inz('');
+  dcl-s l_resType varchar(30);
+  dcl-s l_up varchar(14);
+  dcl-s l_inner varchar(14);
+  dcl-s l_seen char(8) inz('00000000');
+  dcl-s l_mask int(10) inz(0);
+  dcl-s l_bits int(10) inz(0);
+  dcl-s l_bit int(10);
+  dcl-s l_k int(10);
+  dcl-s l_hex varchar(40) inz('');
+  dcl-s l_inverse varchar(40) inz('');
+  dcl-s l_field ind inz(*off);
+  dcl-s l_and varchar(100);
+  dcl-s l_zone varchar(100);
+  dcl-s l_ind char(2);
+  dcl-s l_test varchar(300);
+  dcl-s l_slotCount int(10) inz(0);
+  dcl-s l_fType varchar(30);
+
+  o_reason = '';
+  o_note = '';
+  l_resType = SymType(i_res);
+  if i_res = '' or l_resType = '' or %subst(l_resType:1:4) <> 'char';
+    o_reason = i_op + ' needs a declared character result field';
+    return '';
+  endif;
+  if i_op <> 'TESTZ' and l_resType <> 'char(1)';
+    o_reason = 'The result field of ' + i_op + ' must be one position';
+    return '';
+  endif;
+  if Txt('C':'LENGTH':i_line) <> '' or Txt('C':'DECIMALS':i_line) <> '';
+    o_reason = i_op + ' with a length or decimals on the result field is not '
+               + 'converted';
+    return '';
+  endif;
+
+  // ---- factor 2 of the bit operations ----
+  if i_op <> 'TESTZ';
+    l_up = Up(i_f2);
+    select;
+      when %len(l_up) = 5 and %subst(l_up:1:2) = 'X''' and %subst(l_up:5:1) = '''';
+        if %check(C_HEXD:%subst(l_up:3:2)) <> 0;
+          o_reason = 'The hexadecimal literal ' + i_f2 + ' is not valid';
+          return '';
+        endif;
+        l_mask = (%scan(%subst(l_up:3:1):C_HEXD) - 1) * 16
+                 + %scan(%subst(l_up:4:1):C_HEXD) - 1;
+        for l_k = 0 to 7;
+          if %rem(%div(l_mask:%int(%subst(C_BITV:l_k * 3 + 1:3))):2) = 1;
+            l_bits += 1;
+          endif;
+        endfor;
+      when %len(i_f2) >= 3 and %subst(i_f2:1:1) = '''' and
+           %subst(i_f2:%len(i_f2):1) = '''';
+        l_inner = %subst(i_f2:2:%len(i_f2) - 2);
+        if %len(l_inner) > 8 or %check('01234567':l_inner) <> 0;
+          o_reason = 'The bit numbers ' + i_f2 + ' must be 1 to 8 digits from 0 to 7';
+          return '';
+        endif;
+        for l_k = 1 to %len(l_inner);
+          l_bit = %int(%subst(l_inner:l_k:1));
+          if %subst(l_seen:l_bit + 1:1) = '1';
+            o_reason = 'Bit number ' + %char(l_bit) + ' is repeated in ' + i_f2;
+            return '';
+          endif;
+          %subst(l_seen:l_bit + 1:1) = '1';
+          l_mask += %int(%subst(C_BITV:l_bit * 3 + 1:3));
+          l_bits += 1;
+        endfor;
+      when SymType(i_f2) <> '';
+        l_fType = SymType(i_f2);
+        if l_fType <> 'char(1)';
+          o_reason = 'Factor 2 ' + i_f2 + ' must be a declared one-position '
+                     + 'character field';
+          return '';
+        endif;
+        l_field = *on;
+      other;
+        o_reason = 'Factor 2 ' + i_f2 + ' is not converted for ' + i_op;
+        return '';
+    endsl;
+    if l_field;
+      l_hex = i_f2;
+      l_inverse = '%bitnot(' + i_f2 + ')';
+    else;
+      l_hex = 'x''' + %subst(C_HEXD:%div(l_mask:16) + 1:1)
+              + %subst(C_HEXD:%rem(l_mask:16) + 1:1) + '''';
+      l_inverse = 'x''' + %subst(C_HEXD:%div(255 - l_mask:16) + 1:1)
+                  + %subst(C_HEXD:%rem(255 - l_mask:16) + 1:1) + '''';
+    endif;
+  endif;
+
+  // ---- BITON and BITOF set bits ----
+  if i_op = 'BITON' or i_op = 'BITOF';
+    if Txt('C':'HI':i_line) <> '' or Txt('C':'LO':i_line) <> ''
+       or Txt('C':'EQ':i_line) <> '';
+      o_reason = 'Resulting indicators are not allowed for ' + i_op;
+      return '';
+    endif;
+    if i_op = 'BITON';
+      return i_res + ' = %bitor(' + i_res + ' : ' + l_hex + ')';
+    endif;
+    return i_res + ' = %bitand(' + i_res + ' : ' + l_inverse + ')';
+  endif;
+
+  // ---- the tests: one expression for each resulting indicator ----
+  if i_op = 'TESTB';
+    l_and = '%bitand(' + i_res + ' : ' + l_hex + ')';
+    if l_field;
+      o_note = 'TESTB with a field in factor 2: RPG sets no indicator on when the '
+               + 'field has no bit on';
+    endif;
+  else;
+    l_zone = '%bitand(%subst(' + i_res + ':1:1) : x''F0'')';
+    o_note = 'TESTZ is written on the zone of the first character as EBCDIC: & and '
+             + 'A-I (zone C), - and J-R (zone D), other zones';
+  endif;
+  for l_k = 1 to 3;
+    select;
+      when l_k = 1;
+        l_ind = Txt('C':'HI':i_line);
+      when l_k = 2;
+        l_ind = Txt('C':'LO':i_line);
+      other;
+        l_ind = Txt('C':'EQ':i_line);
+    endsl;
+    if l_ind = '';
+      iter;
+    endif;
+    l_test = '';
+    if i_op = 'TESTB';
+      select;
+        when l_k = 1;
+          l_test = l_and + ' = x''00''';
+        when l_k = 2;
+          if l_bits = 1 and not l_field;
+            o_reason = 'Indicator ' + l_ind + ' (bits on and off) cannot be set '
+                       + 'for one bit';
+            return '';
+          endif;
+          l_test = l_and + ' <> x''00'' and ' + l_and + ' <> ' + l_hex;
+        other;
+          l_test = l_and + ' = ' + l_hex;
+      endsl;
+    else;
+      select;
+        when l_k = 1;
+          l_test = l_zone + ' = x''50'' or ' + l_zone + ' = x''C0''';
+        when l_k = 2;
+          l_test = l_zone + ' = x''60'' or ' + l_zone + ' = x''D0''';
+        other;
+          l_test = 'not (' + l_zone + ' = x''50'' or ' + l_zone + ' = x''C0'' or '
+                   + l_zone + ' = x''60'' or ' + l_zone + ' = x''D0'')';
+      endsl;
+    endif;
+    if %len(l_out) > 0;
+      l_out += '; ';
+    endif;
+    l_out += '*in' + l_ind + ' = (' + l_test + ')';
+    l_slotCount += 1;
+  endfor;
+  if l_slotCount = 0;
+    o_reason = i_op + ' needs a resulting indicator';
+  endif;
+  return l_out;
+end-proc;
+
+// ------------------------------------------------------------------
 // ANDxx or ORxx with a valid xx.
 dcl-proc IsAndOr;
   dcl-pi *n ind;
@@ -2548,7 +2734,8 @@ dcl-proc ConvertC;
       l_reason = 'Indicator RT is not converted';
     when (Txt('C':'HI':i_line) <> '' or Txt('C':'LO':i_line) <> ''
          or Txt('C':'EQ':i_line) <> '') and l_op <> 'SETON' and l_op <> 'SETOFF'
-         and not IsStringOp(l_op) and l_op <> 'TESTN';
+         and not IsStringOp(l_op) and l_op <> 'TESTN' and l_op <> 'TESTB'
+         and l_op <> 'TESTZ';
       l_post = ResultInds(l_op:l_f1:l_f2:l_res:i_line:l_err:l_reason);
       l_hasInd = l_reason = '';
     when IsAndOr(l_op);
@@ -2658,6 +2845,14 @@ dcl-proc ConvertC;
           l_reason = 'DEFN is converted for *LIKE only (declared before the '
                      + 'first calculation)';
         endif;
+      when l_op = 'BITON' or l_op = 'BITOF' or l_op = 'TESTB' or l_op = 'TESTZ';
+        if l_ext <> '' or (l_op = 'TESTZ' and l_f2 <> '')
+           or (l_op <> 'TESTZ' and l_f2 = '');
+          l_reason = l_op + ' with an extender or without the right factor 2';
+        else;
+          l_post = BitStmts(l_op:l_f2:l_res:i_line:l_reason:l_note);
+        endif;
+        l_stmt = '';
       when l_op = 'TESTN';
         l_post = TestnStmts(i_line:l_res:l_reason);
         l_stmt = '';
