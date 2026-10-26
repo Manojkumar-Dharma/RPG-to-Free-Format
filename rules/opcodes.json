@@ -353,11 +353,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "A",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "EXCPT writes output records: converted with the O specifications (FREE-06)",
+  "reason": "EXCPT writes the record formats of the printer file DDS made from the O specifications (FREE-06): create the printer file from the DDS member",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {

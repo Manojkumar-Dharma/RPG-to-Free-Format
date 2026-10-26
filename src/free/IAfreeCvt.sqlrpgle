@@ -19,6 +19,7 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 /copy qcpysrc,IAfreeRulP
 /copy qcpysrc,IAfreeCalcP
 /copy qcpysrc,IAfreeFx4P
+/copy qcpysrc,IAfreeOutP
 
 dcl-c C_MAXSRC 20000;
 dcl-c C_MAXOUT 40000;
@@ -134,6 +135,7 @@ dcl-proc FreeConvert export;
   AddOut('**FREE':0);
   CalcStart();
   Fx4Start();
+  OutStart();
   if g_dialect <> '4';
     for l_index = 1 to g_sourceCount;
       CalcPrescan(g_sourceLines(l_index));
@@ -144,6 +146,9 @@ dcl-proc FreeConvert export;
     Fx4Flush();
   endif;
   CalcFinish();
+  if g_dialect <> '4';
+    AddDdsComments();
+  endif;
   if g_overflow;
     o_msgId = 'IAC0101';
     o_msgData = 'The converted source has more than ' + %char(C_MAXOUT) + ' lines';
@@ -225,6 +230,8 @@ dcl-proc ConvertSource;
             l_reason = 'L (line counter) specification not converted yet';
           when l_form = 'C';
             l_reason = '';
+          when l_form = 'O' and g_dialect <> '4';
+            l_reason = '';
           when l_form = 'O';
             l_reason = 'O specification not converted yet (FREE-06)';
           other;
@@ -232,6 +239,8 @@ dcl-proc ConvertSource;
         endsl;
         if l_form = 'C';
           CalcLine(l_line:l_lineNo);
+        elseif l_form = 'O' and g_dialect <> '4';
+          l_extra = OutLine(l_index:l_lineNo:l_line);
         else;
           ReviewSpec(l_lineNo:l_line:l_reason);
         endif;
@@ -1042,6 +1051,33 @@ dcl-proc CountContinuations;
     endif;
   enddo;
   return l_count;
+end-proc;
+
+// ------------------------------------------------------------------
+// The printer file DDS made from the exception output records (FREE-06) is kept
+// as comments at the end of the converted source: copy it into a DDS source
+// member and create the printer file from it.
+dcl-proc AddDdsComments;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_count int(10);
+  dcl-s l_k int(10);
+
+  l_count = OutFinish();
+  if l_count = 0;
+    return;
+  endif;
+  AddOut('':0);
+  AddOut('// Printer file ' + OutDdsFile() + ': DDS source made from the O '
+         + 'specifications.':0);
+  AddOut('// Copy these lines (without the // and the first blank) into a DDS '
+         + 'source member and run':0);
+  AddOut('// CRTPRTF FILE(' + OutDdsFile() + ') SRCFILE(...) before compiling '
+         + 'this program.':0);
+  for l_k = 1 to l_count;
+    AddOut('//' + OutDdsLine(l_k):0);
+  endfor;
 end-proc;
 
 // ------------------------------------------------------------------

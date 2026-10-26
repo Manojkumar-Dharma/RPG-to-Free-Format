@@ -1,0 +1,54 @@
+**FREE
+// IAfreeOutP - prototypes of IAfreeOut, the O specification converter of
+// IACNVFREE (FREE-06): exception output (EXCPT) records of a PRINTER file become
+// record formats of a printer file DDS source and WRITE statements.
+// Include with: /copy qcpysrc,IAfreeOutP (member IAfreeOutP of file QCPYSRC).
+// Target release V7R3.
+
+/if defined(IAFREEOUTP)
+/eof
+/endif
+/define IAFREEOUTP
+
+// Resets the state. Called once before the conversion.
+dcl-pr OutStart;
+end-pr;
+
+// One O specification line of an RPG II or RPG III source (a record line or a
+// field, AND or OR line). Returns the number of following lines that belong to
+// the same output record and were consumed with it.
+dcl-pr OutLine int(10);
+  i_index int(10) const;
+  i_lineNo int(10) const;
+  i_line char(100) const;
+end-pr;
+
+// The record formats written by EXCPT with this name (blank = EXCPT without a
+// name): their number, the format name and the condition (output indicators)
+// of the nth one, '' when it has none.
+dcl-pr OutExceptCount int(10);
+  i_name varchar(6) const;
+end-pr;
+
+dcl-pr OutExceptFormat varchar(10);
+  i_name varchar(6) const;
+  i_number int(10) const;
+end-pr;
+
+dcl-pr OutExceptCond varchar(80);
+  i_name varchar(6) const;
+  i_number int(10) const;
+end-pr;
+
+// Builds the DDS source after the whole source is converted (the field types
+// are known then). Returns the number of DDS lines.
+dcl-pr OutFinish int(10);
+end-pr;
+
+dcl-pr OutDdsLine varchar(80);
+  i_index int(10) const;
+end-pr;
+
+// The printer file the DDS belongs to ('' when there is no DDS).
+dcl-pr OutDdsFile varchar(8);
+end-pr;

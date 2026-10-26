@@ -20,6 +20,7 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 
 /copy qcpysrc,IAcnvSrvP
 /copy qcpysrc,IAfreeRulP
+/copy qcpysrc,IAfreeOutP
 /copy qcpysrc,IAfreeCalcP
 
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
@@ -1078,6 +1079,8 @@ dcl-proc CalcLine export;
       ConvertKeyList(l_c);
     when l_rule.kind = 'MOVE';
       ConvertMove(l_c:l_rule);
+    when l_rule.kind = 'OUTPUT';
+      ConvertExcept(l_c:l_rule);
     other;
       ConvertTemplate(l_c:l_rule);
   endsl;
@@ -1945,6 +1948,67 @@ dcl-proc CalcDefineField export;
   g_fldKind(g_fldCount) = i_kind;
   g_fldLen(g_fldCount) = i_length;
   g_fldDec(g_fldCount) = i_decimals;
+end-proc;
+
+// ------------------------------------------------------------------
+// EXCPT (FREE-06): writes the record formats of the printer DDS that were made
+// from the exception records of the O specifications (module IAfreeOut).
+dcl-proc ConvertExcept;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-s l_name varchar(10);
+  dcl-s l_count int(10);
+  dcl-s l_k int(10);
+  dcl-s l_cond varchar(80);
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+
+  l_name = Up(i_c.factor2);
+  if %len(l_name) > 6;
+    ReviewHere(i_c.line:i_c.lineNo:'EXCPT name ' + l_name + ' is too long');
+    return;
+  endif;
+  l_count = OutExceptCount(l_name);
+  if l_count = 0 or l_count > C_MAXSTMT;
+    ReviewHere(i_c.line:i_c.lineNo:'No exception output record named '
+               + l_name + ' was converted (see the O specifications)');
+    return;
+  endif;
+  for l_k = 1 to l_count;
+    l_cond = OutExceptCond(l_name:l_k);
+    if l_cond = '';
+      l_statements(l_k) = 'write ' + OutExceptFormat(l_name:l_k);
+    else;
+      l_statements(l_k) = 'if ' + l_cond + '; write '
+                          + OutExceptFormat(l_name:l_k) + '; endif';
+    endif;
+  endfor;
+  EmitStatements(i_c:i_rule:l_statements:l_count:'');
+end-proc;
+
+// ------------------------------------------------------------------
+// Kind and size of a field defined so far (for the output specifications).
+dcl-proc CalcFieldInfo export;
+  dcl-pi *n ind;
+    i_name varchar(10) const;
+    o_kind char(1);
+    o_length int(10);
+    o_decimals int(10);
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  for l_index = 1 to g_fldCount;
+    if g_fldName(l_index) = Up(i_name);
+      o_kind = g_fldKind(l_index);
+      o_length = g_fldLen(l_index);
+      o_decimals = g_fldDec(l_index);
+      return *on;
+    endif;
+  endfor;
+  return *off;
 end-proc;
 
 // ------------------------------------------------------------------

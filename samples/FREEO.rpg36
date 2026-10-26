@@ -1,0 +1,18 @@
+      * Output specifications (FREE-06): exception records of a printer file
+     FREPORT  O         132     OA     PRINTER
+     C                     Z-ADD0         TOTAL   92
+     C                     MOVE ' '       NAME    20
+     C                     EXCPT HEAD
+     C   01                EXCPT DETAIL
+     C                     EXCPT
+     OREPORT  E 11             HEAD
+     O                                 20   'Customer list'
+     OREPORT  E  1    N02      DETAIL
+     O                         NAME    25
+     O                 01      TOTAL   40
+     OREPORT  E   01
+     O                         NAME    20
+     OREPORT  H 11    1P
+     O                                 20   'Heading by the cycle'
+     OREPORT  E                EDITED
+     O                         TOTAL 1 60

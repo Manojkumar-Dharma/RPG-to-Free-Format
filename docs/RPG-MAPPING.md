@@ -484,6 +484,30 @@ Reported R: alphanumeric to numeric and numeric to alphanumeric, numeric of anot
 | `MOVE CUSTNO ACCT` | `ACCT = CUSTNO;` |
 | numeric to alphanumeric and back, `BAL` to `ACCT`, literal `5` to `ACCT`, unknown field, `*HIVAL`, `P` on a numeric result, a resulting indicator | each kept as comment, R |
 
+## Output specifications to a printer file DDS (FREE-06)
+
+Decision (user, 2026-10-25): the output of a PRINTER file is made as an externally described printer file. First increment: RPG II and RPG III (RPG36, RPG38, RPG, SQLRPG), module `IAfreeOut`. The DDS source is written as comments at the end of the converted member (a separate `DDSTGT` member is the next step).
+
+| Source | Result | Status |
+|---|---|---|
+| `O` record line type `E` (exception) of a PRINTER file declared by a converted F specification, with its field lines | a record format of the printer DDS, named as the EXCPT name (columns 32-37; with a two-digit number when several records have the name; `EXCPT` for no name) | A (DDS not tested) |
+| Space before / after (columns 17-18), skip before / after (19-22) | `SPACEB(n)`, `SPACEA(n)`, `SKIPB(n)`, `SKIPA(n)` (`A0`-`A9` are 100-109, `B0`-`B2` are 110-112). `SPACEA(0)` is always written: a blank entry means no spacing in RPG but the DDS default is one line | C |
+| Output indicators of a field line (23-31) | DDS conditioning indicators of the field (`N01`, ` 02`) | C |
+| Output indicators of a record line (and AND lines) | the condition of the `write`: `if *in01 and not *in02; write DETAIL; endif;` | C |
+| Constant (45-70) with an end position | a constant at line blank, position = end - length + 1 | C |
+| Character or unedited numeric field (name 32-37, end position 40-43) | field with length and type of the definition (`A`, or `S` with decimals), usage `O`, position = end - length + 1 | C |
+| `EXCPT NAME` in the calculations | one `write FORMAT;` for each record format with the name, in source order | A |
+| `EXCPT` without a name | the formats of the exception records without a name | A |
+| Heading, detail and total records (types H, D, T) | whole record as comments | R: written by the RPG cycle |
+| Level, `1P`, `MR`, `LR`, `RT` output indicators; OR lines; ADD, DEL, fetch overflow, release (16-18) | comments | R |
+| Edit codes (38) on a numeric field, edit words, blank after (39), data format P, B, L, R (44), relative end positions, `PAGE`, `UDATE` and the like, `*PLACE`, array elements | comments | R |
+| A field without a known length (not defined by I, E or a result field) | the record format is not generated | R (the `write` has to be fixed by hand) |
+| A second printer file, a file that is not a converted PRINTER file | comments | R |
+
+Open: the DDS line position (columns 39-41) is left blank so that `SPACEA`, `SPACEB` and `SKIP` place the record: confirm with `CRTPRTF` on the first test. Edited numeric fields need the width of each edit code (next step); heading, detail and total records need the cycle.
+
+Sample: `samples/FREEO.rpg36`. Expected: record formats `HEAD` (constant at position 8, `SPACEB(1)`, `SPACEA(1)`), `DETAIL` (`SPACEA(1)`, `NAME` at 6, `TOTAL` at 32 conditioned by `01`), `EXCPT01`...; the `H` record and `EDITED` stay R; `EXCPT HEAD` becomes `write HEAD;`, `EXCPT DETAIL` becomes `if not *in02; write DETAIL; endif;` inside `if *in01`.
+
 ## Arrays and tables (FREE-07)
 
 Source: SC09-1818 chapter 20 (RPG II), SC09-1817 chapter 9 (RPG III), ILE RPG reference (`dcl-s` keywords `DIM`, `PERRCD`, `CTDATA`, `ALT`, `ASCEND`, `DESCEND`; compile-time data, "Coding a Compile-Time Array"). Columns of the E specification: 11-18 from file, 19-26 to file, 27-32 name, 33-35 entries per record, 36-39 entries per array, 40-42 length, 43 packed or binary, 44 decimal positions, 45 sequence, 46-51 second array of an alternating pair with 52-54 length, 55 packed or binary, 56 decimal positions, 57 sequence.
