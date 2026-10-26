@@ -455,6 +455,24 @@ Reported R: `XLATE` with an error indicator, with a factor 1 that is not `From:T
 | `COMIT 'B1'` with error indicator 90, `ROLBK` | `commit(e) 'B1';` and `*IN90 = %error;`, `rolbk;` |
 | `DIV` to 2 decimals then `MVR`; `MVR` after `ADD`; `XLATE` with an error indicator; `XLATE` with no `From:To`; `*LIKE DEFN` of a literal; `*NAMVAR DEFN`; `DEFN` with a length `5`; `DSPLY *MABC1`; `DSPLY` without factor 1; `DSPLY` of a numeric field | each kept as comment, R |
 
+## TESTN, TESTZ, BITON, BITOF, TESTB (FREE-14, review items RV-04 and RV-05)
+
+Source: SC09-1817 chapter 11 (each operation), the ILE RPG reference (`%BITAND`, `%BITOR`, `%BITNOT`, `%CHECK`, `%TRIML`). Code: `ConvertBitTest`, `BitMask`, `HexByte` in `IAfreeCalc`; the resulting indicator tests are given to `ResultStatement` because they depend on the field.
+
+| Source | Becomes | Status |
+|---|---|---|
+| `BITON '036' FLDA` (bit numbers 0 to 7, 0 is the leftmost bit) | `FLDA = %bitor(FLDA:x'92');` (the mask is worked out) | C |
+| `BITOF '7' FLDA` | `FLDA = %bitand(FLDA:x'FE');` (the inverted mask) | C |
+| `BITON X'88' FLDA`, `BITOF X'88' FLDA` | `%bitor(FLDA:x'88')`, `%bitand(FLDA:x'77')` | C |
+| `BITON FLDB FLDA`, `BITOF FLDB FLDA` (one-position field in factor 2) | `%bitor(FLDA:FLDB)`, `%bitand(FLDA:%bitnot(FLDB))` | C |
+| `TESTB mask FLDA 16 17 18` | `*IN16 = (%bitand(FLDA:mask) = x'00');` all bits off (54-55); `*IN17 = (... <> x'00' and ... <> mask);` mixed (56-57); `*IN18 = (%bitand(FLDA:mask) = mask);` all on (58-59) | C; A with a field in factor 2 (RPG/400 sets no indicator on when the field has no bit on) |
+| `TESTN FLD 21 22 23` (field of length n) | NU: `%check('0123456789':%subst(FLD:1:n-1)) = 0 and %check('0123456789ABCDEFGHIJKLMNOPQR{}':%subst(FLD:n:1)) = 0`; BN (leading blanks, then digits): first position blank, the other positions digits or blanks, no blank after the first digit (`%scan(' ':%triml(FLD)) = 0`); BL: `FLD = *blanks` | A: the sign zone is tested as a letter (A-R, `{`, `}`), not as a hexadecimal zone |
+| `TESTZ FLD 31 32 33` | zone of the first character `%bitand(%subst(FLD:1:1):x'F0')`: `x'50'` or `x'C0'` (`&`, A-I) in 54-55, `x'60'` or `x'D0'` (`-`, J-R) in 56-57, any other zone in 58-59 | A: EBCDIC zones |
+
+Reported R: bit numbers other than 0 to 7, repeated bit numbers, more than 8 bits, a named constant or an array element in factor 2, a factor 2 field that is not one position character, a result field that is numeric or (bit operations, `TESTB`) longer than one position, resulting indicators on `BITON` and `BITOF`, an indicator in 56-57 of `TESTB` with one bit or of `TESTN` on a field of one position, no resulting indicator on a test, `TESTN` on a field not defined before the line.
+
+`samples/FREEBIT.rpg38` has one line for each row, then the R lines. Expected result, written from the design and not from a run: the masks of the first lines are `x'92'` (bits 0, 3, 6), `x'FE'`, `x'88'`, `x'77'`; the last nine lines are kept as comments, R.
+
 ## LOKUP and MOVEA (FREE-08, arrays and tables of FREE-07)
 
 Source: SC09-1818 chapter 27 and SC09-1817 chapter 11 (LOKUP: the search argument, the high, low and equal indicators, the index, the second table), the ILE RPG reference (`%LOOKUP`, `%LOOKUPGT`, `%LOOKUPGE`, `%LOOKUPLT`, `%LOOKUPLE`). `IAfreeCvt` gives `IAfreeCalc` the arrays and tables of the E specifications (`CalcDefineArray`: name, sequence, number of entries, alternating array). The statements use the hidden field `LOKUP_IX` (declared once).

@@ -46,13 +46,14 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-10 | IACNVFREE | RPG IV fixed form (`RPGLE`, `SQLRPGLE`): H, F, D, I, C, O, P specifications read through `IACNVLAY`; extended factor 2 and the free-form syntax lines of SC09-2508 as templates | In progress | Not tested | Part 1 (H, F, D, P, directives, /FREE; module `IAfreeFx4`) and part 2a (C specifications: extended factor 2, structured ops, arithmetic, file ops without indicators) written, not compiled. Part 2b (resulting indicators of file operations, arithmetic and COMP; ANDxx/ORxx) written. Conditioning indicators on simple operations, `DO`/`ENDDO`, `DSPLY`, `COMMIT`, `ROLBK`, `DUMP`, `TIME`, `CALL`/`PARM`/`PLIST` (prototypes before the first calculation), `XLATE`, `MVR`, `DEFN *LIKE`, `TESTN` written. MOVE/MOVEL between declared fields written. String operations CAT, SCAN, CHECK, CHEKR, SUBST written. Open: other MOVE type pairs, MOVEA, XLATE, CALL/PARM, I and O specs. 7.3 manuals are in `docs/ref`. Picked up 2026-10-25; do not start it in parallel. |
 | FREE-11 | IACNVFREE | Embedded SQL of `SQLRPG` (`C/EXEC SQL`, `C+`, `C/END-EXEC`) to free-form `exec sql ...;` | Written | Not tested | `samples/FREESQL.sqlrpg`; needs a compile and test; `WHENEVER ... GOTO` is A (TAG not converted); SQL in a `/COPY` member is not possible in RPG/400 |
 | FREE-12 | IACNVFREE | RPG III string operations `CAT`, `SCAN`, `SUBST`, `CHECK`, `CHEKR` to `+`, `%scan`, `%subst`, `%check`, `%checkr` (`XLATE` stays R) | Written | Not tested | `samples/FREESTR.rpg38`; needs a compile and test; decision: no `P` is converted with the padded form and marked A; error indicator R; `rules/IACNVRULES.sql` must be run again (new rows and BIFs) |
-| FREE-13 | IACNVFREE | Review items that need no decision, first part: `XLATE`, `MVR` (after `DIV`, whole numbers), `DEFN *LIKE`, `DSPLY`, `DUMP`, `COMIT`, `ROLBK` (RV-02, RV-03, RV-07, RV-09, RV-10 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEOP2.rpg38`; needs a compile and test; `rules/IACNVRULES.sql` must be run again; next: `TESTN`/`TESTZ`, bit operations, zone moves, `CALL`/`PARM`/`PLIST`, `IN`/`OUT`/`OCUR` |
+| FREE-13 | IACNVFREE | Review items that need no decision, first part: `XLATE`, `MVR` (after `DIV`, whole numbers), `DEFN *LIKE`, `DSPLY`, `DUMP`, `COMIT`, `ROLBK` (RV-02, RV-03, RV-07, RV-09, RV-10 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEOP2.rpg38`; needs a compile and test; `rules/IACNVRULES.sql` must be run again; next: see FREE-14 |
+| FREE-14 | IACNVFREE | Review items that need no decision, second part: `TESTN`, `TESTZ`, `BITON`, `BITOF`, `TESTB` (RV-04, RV-05 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEBIT.rpg38`; needs a compile and test; `rules/IACNVRULES.sql` must be run again; next: zone moves (RV-06), `CALL`/`PARM`/`PLIST` for RPG II and III (RV-08), `IN`/`OUT`/`OCUR` (RV-11) |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-13 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-14 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.

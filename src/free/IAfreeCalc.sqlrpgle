@@ -648,6 +648,7 @@ dcl-proc ResultStatement;
     i_rule likeds(IAfreeOpc_t) const;
     i_slot int(10) const;
     o_statement varchar(250);
+    i_test varchar(250) const options(*nopass);
   end-pi;
 
   dcl-ds l_ind likeds(IAfreeInd_t);
@@ -679,7 +680,12 @@ dcl-proc ResultStatement;
   if l_ind.cycle = 'Y';
     return %trim(l_ind.reason);
   endif;
-  l_test = RulResultTest(l_code);
+  // TESTN, TESTZ and TESTB give their own test (it depends on the field).
+  if %parms >= 5 and i_test <> '';
+    l_test = i_test;
+  else;
+    l_test = RulResultTest(l_code);
+  endif;
   if l_test = '';
     return 'The test ' + l_code + ' of ' + i_rule.opcode + ' is not in IACNVRES';
   endif;
@@ -1036,6 +1042,14 @@ dcl-proc CalcLine export;
   if l_rule.kind = 'DISPLAY';
     g_hdrIndex = 0;
     ConvertDsply(l_c:l_rule);
+    return;
+  endif;
+  // Bit operations, TESTN and TESTZ read their own factor 2 (bit numbers).
+  if l_rule.opcode = 'BITON' or l_rule.opcode = 'BITOF'
+     or l_rule.opcode = 'TESTB' or l_rule.opcode = 'TESTN'
+     or l_rule.opcode = 'TESTZ';
+    g_hdrIndex = 0;
+    ConvertBitTest(l_c:l_rule);
     return;
   endif;
   l_isSubrOperand = (l_rule.opcode = 'EXSR' or l_rule.opcode = 'BEGSR'
@@ -2475,6 +2489,266 @@ dcl-proc ConvertDsply;
   else;
     l_rule.status = C_STS_ASSUMPTION;
   endif;
+  EmitStatements(i_c:l_rule:l_statements:l_count:'');
+end-proc;
+
+// ------------------------------------------------------------------
+// The two hexadecimal digits of a byte value (0 to 255).
+dcl-proc HexByte;
+  dcl-pi *n char(2);
+    i_value int(10) const;
+  end-pi;
+
+  dcl-c C_HEXDIGITS '0123456789ABCDEF';
+
+  return %subst(C_HEXDIGITS:%div(i_value:16) + 1:1)
+         + %subst(C_HEXDIGITS:%rem(i_value:16) + 1:1);
+end-proc;
+
+// ------------------------------------------------------------------
+// Factor 2 of BITON, BITOF and TESTB: bit numbers in apostrophes ('036'), a
+// 1-byte hexadecimal literal (X'88') or the name of a one-position field.
+// A literal gives the mask (0 to 255) and the number of bits; a field name
+// gives o_field. Returns '' or the reason it fails.
+dcl-proc BitMask;
+  dcl-pi *n varchar(150);
+    i_c likeds(Calc_t) const;
+    o_mask int(10);
+    o_bits int(10);
+    o_field varchar(30);
+  end-pi;
+
+  dcl-c C_HEXDIGITS '0123456789ABCDEF';
+  dcl-c C_BITVALUES '128064032016008004002001';
+
+  dcl-s l_text varchar(30);
+  dcl-s l_up varchar(30);
+  dcl-s l_inner varchar(30);
+  dcl-s l_seen char(8) inz('00000000');
+  dcl-s l_bit int(10);
+  dcl-s l_index int(10);
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+  dcl-s l_reason varchar(150) inz('');
+
+  o_mask = 0;
+  o_bits = 0;
+  o_field = '';
+  l_text = %trim(i_c.factor2);
+  l_up = Up(l_text);
+  select;
+    when %len(l_up) = 5 and %subst(l_up:1:2) = 'X''' and %subst(l_up:5:1) = '''';
+      if %check(C_HEXDIGITS:%subst(l_up:3:2)) <> 0;
+        return 'The hexadecimal literal ' + l_text + ' is not valid';
+      endif;
+      o_mask = (%scan(%subst(l_up:3:1):C_HEXDIGITS) - 1) * 16
+               + %scan(%subst(l_up:4:1):C_HEXDIGITS) - 1;
+      for l_index = 0 to 7;
+        if %rem(%div(o_mask:%int(%subst(C_BITVALUES:l_index * 3 + 1:3))):2) = 1;
+          o_bits += 1;
+        endif;
+      endfor;
+    when %len(l_text) >= 3 and %subst(l_text:1:1) = C_QUOTE
+         and %subst(l_text:%len(l_text):1) = C_QUOTE;
+      l_inner = %subst(l_text:2:%len(l_text) - 2);
+      if %len(l_inner) > 8 or %check('01234567':l_inner) <> 0;
+        return 'The bit numbers ' + l_text + ' must be 1 to 8 digits from 0 to 7';
+      endif;
+      for l_index = 1 to %len(l_inner);
+        l_bit = %int(%subst(l_inner:l_index:1));
+        if %subst(l_seen:l_bit + 1:1) = '1';
+          return 'Bit number ' + %char(l_bit) + ' is repeated in ' + l_text;
+        endif;
+        %subst(l_seen:l_bit + 1:1) = '1';
+        o_mask += %int(%subst(C_BITVALUES:l_bit * 3 + 1:3));
+        o_bits += 1;
+      endfor;
+    when IsName(l_text);
+      if not ConvOperand(l_text:o_field:l_reason);
+        return l_reason;
+      endif;
+      if OperandType(o_field:l_kind:l_len:l_dec) and (l_kind <> 'C' or l_len <> 1);
+        return 'Factor 2 ' + l_text + ' must be a one-position character field';
+      endif;
+    other;
+      return 'Factor 2 ' + l_text + ' (named constant or array element) is not'
+             + ' converted for ' + i_c.operation;
+  endsl;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// BITON, BITOF, TESTB, TESTN and TESTZ of RPG II and RPG III (RV-04, RV-05).
+dcl-proc ConvertBitTest;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-c C_NUMERICLOW '0123456789ABCDEFGHIJKLMNOPQR{}';
+  dcl-ds l_rule likeds(IAfreeOpc_t);
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+  dcl-s l_tests varchar(250) dim(3);
+  dcl-s l_count int(10) inz(0);
+  dcl-s l_slot int(10);
+  dcl-s l_statement varchar(250);
+  dcl-s l_reason varchar(150) inz('');
+  dcl-s l_note varchar(190) inz('');
+  dcl-s l_res varchar(30) inz('');
+  dcl-s l_mask int(10) inz(0);
+  dcl-s l_bits int(10) inz(0);
+  dcl-s l_field varchar(30) inz('');
+  dcl-s l_hex varchar(40) inz('');
+  dcl-s l_inverse varchar(60) inz('');
+  dcl-s l_and varchar(100);
+  dcl-s l_zone varchar(100);
+  dcl-s l_first varchar(60);
+  dcl-s l_last varchar(60);
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10) inz(0);
+  dcl-s l_dec int(10);
+  dcl-s l_known ind inz(*off);
+  dcl-s l_slotName char(2);
+
+  // The result field: one position for the bit operations, character for all.
+  if i_c.result = '';
+    l_reason = 'The result field is required for ' + i_rule.opcode;
+  elseif not ConvOperand(i_c.result:l_res:l_reason);
+    l_res = '';
+  endif;
+  if l_reason = '' and i_c.length <> '';
+    l_reason = DeclareResult(l_res:i_c.length:i_c.decimals:*off);
+  endif;
+  if l_reason = '';
+    l_known = OperandType(l_res:l_kind:l_len:l_dec);
+    if l_known and l_kind = 'N';
+      l_reason = 'The result field of ' + i_rule.opcode + ' must be a character'
+                 + ' field';
+    elseif l_known and i_rule.opcode <> 'TESTN' and i_rule.opcode <> 'TESTZ'
+           and l_len <> 1;
+      l_reason = 'The result field of ' + i_rule.opcode + ' must be one position';
+    elseif not l_known and i_rule.opcode = 'TESTN';
+      l_reason = 'TESTN needs the length of ' + l_res + ': it is not defined'
+                 + ' before this line';
+    endif;
+  endif;
+
+  // Factor 2 of the bit operations.
+  if l_reason = '' and (i_rule.opcode = 'BITON' or i_rule.opcode = 'BITOF'
+                        or i_rule.opcode = 'TESTB');
+    l_reason = BitMask(i_c:l_mask:l_bits:l_field);
+    if l_reason = '';
+      if l_field = '';
+        l_hex = 'x''' + HexByte(l_mask) + '''';
+        l_inverse = 'x''' + HexByte(255 - l_mask) + '''';
+      else;
+        l_hex = l_field;
+        l_inverse = '%bitnot(' + l_field + ')';
+      endif;
+    endif;
+  endif;
+
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  // The bit operations that set bits.
+  if i_rule.opcode = 'BITON' or i_rule.opcode = 'BITOF';
+    if i_c.result1 <> '  ' or i_c.result2 <> '  ' or i_c.result3 <> '  ';
+      ReviewHere(i_c.line:i_c.lineNo:'Resulting indicators are not allowed for '
+                 + i_rule.opcode);
+      return;
+    endif;
+    if i_rule.opcode = 'BITON';
+      l_statements(1) = l_res + ' = %bitor(' + l_res + ':' + l_hex + ')';
+    else;
+      l_statements(1) = l_res + ' = %bitand(' + l_res + ':' + l_inverse + ')';
+    endif;
+    l_rule = i_rule;
+    l_rule.status = C_STS_CONVERTED;
+    l_rule.reason = '';
+    EmitStatements(i_c:l_rule:l_statements:1:'');
+    return;
+  endif;
+
+  // The tests: one expression for each resulting indicator position.
+  select;
+    when i_rule.opcode = 'TESTB';
+      l_and = '%bitand(' + l_res + ':' + l_hex + ')';
+      l_tests(1) = l_and + ' = x''00''';
+      if l_bits <> 1 or l_field <> '';
+        l_tests(2) = l_and + ' <> x''00'' and ' + l_and + ' <> ' + l_hex;
+      endif;
+      l_tests(3) = l_and + ' = ' + l_hex;
+      if l_field <> '';
+        l_note = 'TESTB with a field in factor 2: RPG/400 sets no indicator on'
+                 + ' when the field has no bit on';
+      endif;
+    when i_rule.opcode = 'TESTZ';
+      l_zone = '%bitand(%subst(' + l_res + ':1:1):x''F0'')';
+      l_tests(1) = l_zone + ' = x''50'' or ' + l_zone + ' = x''C0''';
+      l_tests(2) = l_zone + ' = x''60'' or ' + l_zone + ' = x''D0''';
+      l_tests(3) = 'not (' + l_zone + ' = x''50'' or ' + l_zone + ' = x''C0'''
+                   + ' or ' + l_zone + ' = x''60'' or ' + l_zone + ' = x''D0'')';
+      l_note = 'TESTZ is written on the zone of the first character as EBCDIC:'
+               + ' & and A-I (zone C), - and J-R (zone D), other zones';
+    other;                                    // TESTN
+      if l_len = 1;
+        l_tests(1) = '%check(''' + C_NUMERICLOW + ''':' + l_res + ') = 0';
+      else;
+        l_first = '%subst(' + l_res + ':1:' + %char(l_len - 1) + ')';
+        l_last = '%subst(' + l_res + ':' + %char(l_len) + ':1)';
+        l_tests(1) = '%check(''' + C_DIGITS + ''':' + l_first + ') = 0 and '
+                     + '%check(''' + C_NUMERICLOW + ''':' + l_last + ') = 0';
+        // Leading blanks, then digits, the last one may carry a sign letter.
+        l_tests(2) = '%subst(' + l_res + ':1:1) = '' '' and %check('''
+                     + C_DIGITS + ' '':' + l_first + ') = 0 and %check('''
+                     + C_NUMERICLOW + ''':' + l_last + ') = 0 and %scan('' '':'
+                     + '%triml(' + l_res + ')) = 0';
+      endif;
+      l_tests(3) = l_res + ' = *blanks';
+      l_note = 'TESTN is written with %check: the last position may hold a sign'
+               + ' letter (A-R, { or }); the zones are not tested as hexadecimal';
+  endsl;
+
+  for l_slot = 1 to 3;
+    select;
+      when l_slot = 1;
+        l_slotName = i_c.result1;
+      when l_slot = 2;
+        l_slotName = i_c.result2;
+      other;
+        l_slotName = i_c.result3;
+    endsl;
+    if l_slotName <> '  ' and l_tests(l_slot) = '';
+      ReviewHere(i_c.line:i_c.lineNo:'Resulting indicator ' + %trim(l_slotName)
+                 + ' is not allowed here for ' + i_rule.opcode);
+      return;
+    endif;
+    l_reason = ResultStatement(i_c:i_rule:l_slot:l_statement:l_tests(l_slot));
+    if l_reason <> '';
+      ReviewHere(i_c.line:i_c.lineNo:l_reason);
+      return;
+    endif;
+    if l_statement <> '';
+      l_count += 1;
+      l_statements(l_count) = l_statement;
+    endif;
+  endfor;
+  if l_count = 0;
+    ReviewHere(i_c.line:i_c.lineNo:i_rule.opcode + ' needs a resulting indicator');
+    return;
+  endif;
+
+  l_rule = i_rule;
+  if l_note = '';
+    l_rule.status = C_STS_CONVERTED;
+  else;
+    l_rule.status = C_STS_ASSUMPTION;
+  endif;
+  l_rule.reason = l_note;
   EmitStatements(i_c:l_rule:l_statements:l_count:'');
 end-proc;
 

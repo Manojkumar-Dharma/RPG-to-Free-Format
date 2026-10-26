@@ -1,0 +1,34 @@
+      * RPG III bit operations, TESTB, TESTN, TESTZ
+     H
+      * Fields
+     C                     MOVEL' '       FLDA    1
+     C                     MOVEL' '       FLDB    1
+     C                     MOVEL'12345'   FLDN    5
+     C                     MOVEL'A'       FLD1    1
+      * BITON and BITOF: bit numbers, hexadecimal literal, field
+     C                     BITON'036'     FLDA
+     C                     BITOF'7'       FLDA
+     C                     BITONX'88'     FLDA
+     C                     BITOFX'88'     FLDA
+     C                     BITONFLDB      FLDA
+     C                     BITOFFLDB      FLDA
+      * TESTB: all off (54-55), mixed (56-57), all on (58-59)
+     C                     TESTB'36'      FLDA       161718
+     C                     TESTB'7'       FLDA       16  18
+     C                     TESTBX'88'     FLDA       161718
+     C                     TESTBFLDB      FLDA       161718
+      * TESTN: numeric, leading blanks, blanks
+     C                     TESTN          FLDN       212223
+     C                     TESTN          FLD1       24  25
+      * TESTZ: zone of the first character
+     C                     TESTZ          FLDN       313233
+      * Not converted
+     C                     BITON'8'       FLDA
+     C                     BITON'33'      FLDA
+     C                     BITON'0'       FLDA       41
+     C                     BITON'0'       FLDN
+     C                     TESTB'3'       FLDA       1617
+     C                     TESTB'3'       FLDA
+     C                     TESTN          FLD1       242625
+     C                     TESTN          NOFLD      24
+     C                     TESTZ          FLDN
