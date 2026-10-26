@@ -106,11 +106,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "A",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "CALL needs PLIST and PARM converted to a prototype or CALLP: not converted yet",
+  "reason": "CALL is written as a prototype and CALLP",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -714,11 +714,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "PARM is converted with CALL: not converted yet",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -733,11 +733,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "PLIST is converted with CALL: not converted yet",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {

@@ -486,6 +486,26 @@ The zone is the left four bits of the byte, so the result is the EBCDIC zone of 
 
 `samples/FREEZON.rpg38`: the four operations, then four R lines. Expected result, written from the design and not from a run: `%subst(TGT:1:1)` and `%subst(TGT:5:1)` take the zone of `%subst(SRC:1:1)` or `%subst(SRC:2:1)`.
 
+## CALL, PARM, PLIST (FREE-16, review item RV-08)
+
+Source: SC09-1817 chapter 11 (CALL, PARM, PLIST). Code: `ConvertCall`, `ConvertPlist`, `ConvertParm` in `IAfreeCalc`. `CalcPrescan` collects the PARM lines of every CALL and PLIST before the conversion (as for `KLIST`); the prototypes are written before the first calculation, after the `dcl-s` lines of the result fields (`CalcFinish`).
+
+| Source | Becomes | Status |
+|---|---|---|
+| `CALL 'PGMA'` with `PARM NAME`, `PARM CNT` | `dcl-pr PGMA extpgm('PGMA'); dcl-parm *n like(NAME); dcl-parm *n like(CNT); end-pr;` before the first calculation, then `callp PGMA(NAME : CNT);` | A |
+| `CALL 'PGMB' PLST1` (the PLIST named in the result field) | the same, with the PARM lines of the PLIST | A |
+| `CALL` with an indicator in columns 56-57 | `callp(e) ...;` and `*INnn = %error;` | A |
+| `PARM` with factor 1 | `RESULT = factor1;` before the call | A |
+| `PARM` with factor 2 | `factor2 = RESULT;` after the call | A |
+| `PARM` with a length in columns 49-51 | the result field is declared (`char(n)`, or zoned with decimals) where the PARM is | C |
+| `PLIST name`, `PARM` lines | no statement; reported C with the CALL | C |
+
+The prototype takes its parameter types from the fields with `like(...)`, so a packed or other type of an I specification is kept. A program called again must have the same kinds, lengths and decimals; the first CALL gives the prototype.
+
+Reported R: a program name that is not a literal without library (`CALL PGMNM`, `CALL 'LIB/PGM'`), a program name that is also a field name, the LR indicator (58-59), an indicator in columns 54-55, a PLIST that is not defined, a parameter that is an array element or not defined before the CALL, the same program called with other parameter types, `PLIST *ENTRY` (the parameters of the program itself need `dcl-pi`) and its PARM lines, `PARM` without a CALL or PLIST before it.
+
+`samples/FREECAL.rpg38`: the cases above, then the R lines. Expected result, written from the design and not from a run: prototypes `PGMA` (like NAME, like CNT) and `PGMB` (like CODE, like SAVE) before the first calculation; `callp PGMA(NAME : CNT);`, `callp(e) PGMA(NAME : CNT);` with `*IN91 = %error;`, `CODE = 'X'; SAVE = NAME; callp PGMB(CODE : SAVE); BACK = SAVE;`.
+
 ## LOKUP and MOVEA (FREE-08, arrays and tables of FREE-07)
 
 Source: SC09-1818 chapter 27 and SC09-1817 chapter 11 (LOKUP: the search argument, the high, low and equal indicators, the index, the second table), the ILE RPG reference (`%LOOKUP`, `%LOOKUPGT`, `%LOOKUPGE`, `%LOOKUPLT`, `%LOOKUPLE`). `IAfreeCvt` gives `IAfreeCalc` the arrays and tables of the E specifications (`CalcDefineArray`: name, sequence, number of entries, alternating array). The statements use the hidden field `LOKUP_IX` (declared once).

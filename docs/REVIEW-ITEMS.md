@@ -26,7 +26,7 @@ Code status and test status follow `PLANNED.md`.
 | RV-05 | `BITON`, `BITOF`, `TESTB` (2, 3) | bit operations | Convert: `%bitor`, `%bitand` with `%bitnot`; test with `%bitand`; done in FREE-14 | Written | Not tested |
 | RV-06 | `MHHZO`, `MHLZO`, `MLHZO`, `MLLZO` (2, 3) | zone moves | Convert with `%bitand`/`%bitor` on one byte, or No form; character fields done in FREE-15, numeric (sign zone) stays R | Written | Not tested |
 | RV-07 | `DEFN` (`*LIKE`) (2, 3) | declaration | Convert: `dcl-s NAME like(OTHER)` with the length of `OTHER` | Written | Not tested |
-| RV-08 | `CALL`, `PARM`, `PLIST` (2, 3) | prototype needed | Convert: `dcl-pr` with `extpgm` and `callp`; parameter types from the known fields | Planned | Not started |
+| RV-08 | `CALL`, `PARM`, `PLIST` (2, 3) | prototype needed | Convert: `dcl-pr` with `extpgm` and `callp`; parameter types from the known fields; done in FREE-16 (`PLIST *ENTRY` stays R) | Written | Not tested |
 | RV-09 | `DSPLY`, `DUMP` (3) | message queue and response operands | Convert: `dsply` and `dump(a)`; the queue operands as written | Written | Not tested |
 | RV-10 | `COMIT`, `ROLBK` (3) | file handling | Convert: `commit`, `rolbk`; the file list as `(e)` where used | Written | Not tested |
 | RV-11 | `IN`, `OUT`, `OCUR` (3) | data areas and data structures | Convert: `in`, `out`, `occur`; `*DTAARA` definitions through `DEFN` (RV-07) | Planned | Not started |
@@ -95,7 +95,7 @@ FREE-06 (module `IAfreeOut`): the R items of the output specifications.
 1. Open items first: RV-01 (written), then FREE-06 (RV-60 to RV-63) and FREE-10
    (RV-50 to RV-59).
 2. The Convert items that need no decision: RV-02, RV-03, RV-07, RV-09 and RV-10
-   are written (FREE-13); RV-04 and RV-05 are written (FREE-14), RV-06 (FREE-15); RV-08, RV-11, RV-32, RV-35 are next.
+   are written (FREE-13); RV-04 and RV-05 are written (FREE-14), RV-06 (FREE-15), RV-08 (FREE-16); RV-11, RV-32, RV-35 are next.
 3. The Decide items: RV-14, RV-20/21, RV-30, RV-36.
 4. The Sample items when the members arrive: RV-33, RV-41, RV-42.
 5. RV-12 and RV-31 together with the display file converter.

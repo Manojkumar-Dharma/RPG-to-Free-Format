@@ -1,0 +1,31 @@
+      * RPG III CALL, PARM and PLIST
+     H
+      * Fields
+     C                     MOVEL'ABC'     NAME    5
+     C                     Z-ADD7         CNT     50
+      * CALL with its PARM lines
+     C                     CALL 'PGMA'
+     C                     PARM           NAME
+     C                     PARM           CNT
+      * Same program, error indicator
+     C                     CALL 'PGMA'                 91
+     C                     PARM           NAME
+     C                     PARM           CNT
+      * PLIST, parameter defined by its length, value moved before and after
+     C           PLST1     PLIST
+     C           'X'       PARM           CODE    1
+     C           NAME      PARM BACK      SAVE    5
+     C                     CALL 'PGMB'    PLST1
+      * Not converted
+     C                     CALL PGMNM
+     C                     CALL 'LIB/PGM'
+     C                     CALL 'PGMA'
+     C                     PARM           CODE
+     C                     CALL 'PGMC'    PLST9
+     C                     CALL 'PGMA'                   92
+     C                     PARM           NAME
+     C                     PARM           CNT
+     C           *ENTRY    PLIST
+     C                     PARM           P1      3
+     C                     MOVEL'A'       X1      1
+     C                     PARM           NAME

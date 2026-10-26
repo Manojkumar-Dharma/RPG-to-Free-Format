@@ -36,6 +36,11 @@ dcl-c C_MAXCONDLINES 16;
 dcl-c C_MAXSTMT 8;
 dcl-c C_MAXSQL 200;
 dcl-c C_MAXKL 100;
+dcl-c C_MAXPL 40;
+dcl-c C_MAXCALL 100;
+dcl-c C_MAXPM 400;
+dcl-c C_MAXPROTO 40;
+dcl-c C_MAXPLINE 300;
 dcl-c C_MAXFLD 1000;
 dcl-c C_MAXARR 200;
 
@@ -131,6 +136,36 @@ dcl-s g_klBad ind dim(C_MAXKL);
 dcl-s g_klCount int(10);
 dcl-s g_klOpen ind;
 
+// CALL, PARM and PLIST, collected before the conversion (CalcPrescan): the PARM
+// lines in order (factor 1, factor 2, result field, length, decimals), the first
+// of each PLIST and each CALL and their number. g_parmTarget is the list that
+// takes the next PARM (a PLIST, or minus a CALL). g_callSeen counts the CALL
+// lines of the conversion; g_parmMode is the owner of the PARM lines in the
+// conversion (C call, P plist, X not converted, blank none). The prototypes
+// written before the first calculation are kept with the types of the first call.
+dcl-s g_pmF1 varchar(30) dim(C_MAXPM);
+dcl-s g_pmF2 varchar(30) dim(C_MAXPM);
+dcl-s g_pmRes varchar(30) dim(C_MAXPM);
+dcl-s g_pmLen varchar(3) dim(C_MAXPM);
+dcl-s g_pmDec char(1) dim(C_MAXPM);
+dcl-s g_pmCount int(10);
+dcl-s g_plName varchar(10) dim(C_MAXPL);
+dcl-s g_plFirst int(10) dim(C_MAXPL);
+dcl-s g_plNum int(10) dim(C_MAXPL);
+dcl-s g_plCount int(10);
+dcl-s g_callFirst int(10) dim(C_MAXCALL);
+dcl-s g_callNum int(10) dim(C_MAXCALL);
+dcl-s g_callCount int(10);
+dcl-s g_callSeen int(10);
+dcl-s g_parmTarget int(10);
+dcl-s g_parmMode char(1);
+dcl-s g_parmReason varchar(150);
+dcl-s g_protoName varchar(10) dim(C_MAXPROTO);
+dcl-s g_protoSig varchar(250) dim(C_MAXPROTO);
+dcl-s g_protoCount int(10);
+dcl-s g_protoLine varchar(100) dim(C_MAXPLINE);
+dcl-s g_protoLineCount int(10);
+
 // An embedded SQL statement (C/EXEC SQL, C+ lines, C/END-EXEC) being read. Text
 // is kept from column 16 of the first line and columns 8 to 74 of the others.
 dcl-s g_sqlOpen ind;
@@ -162,6 +197,15 @@ dcl-proc CalcStart export;
   g_sqlCount = 0;
   g_klCount = 0;
   g_klOpen = *off;
+  g_pmCount = 0;
+  g_plCount = 0;
+  g_callCount = 0;
+  g_callSeen = 0;
+  g_parmTarget = 0;
+  g_parmMode = ' ';
+  g_parmReason = '';
+  g_protoCount = 0;
+  g_protoLineCount = 0;
   g_fldCount = 0;
   g_arrCount = 0;
   g_lookupDeclared = *off;
@@ -836,6 +880,12 @@ dcl-proc CalcLine export;
   g_lastLineNo = i_lineNo;
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
 
+  // The CALL lines are counted as CalcPrescan counted them.
+  if %subst(l_up:7:1) <> '*' and %subst(l_up:7:1) <> '/'
+     and %subst(l_up:7:1) <> '+' and %trim(Fld(l_up:'OPERATION')) = 'CALL';
+    g_callSeen += 1;
+  endif;
+
   // Everything between columns 7 and 59 blank: nothing to convert.
   if %trim(Fld(i_line:'ALLC')) = '';
     return;
@@ -994,6 +1044,10 @@ dcl-proc CalcLine export;
     ReviewHere(i_line:i_lineNo:'Operation code ' + l_c.operation + ' is not known');
     return;
   endif;
+  if l_rule.opcode <> 'CALL' and l_rule.opcode <> 'PARM'
+     and l_rule.opcode <> 'PLIST';
+    g_parmMode = ' ';
+  endif;
   l_isStructure = (l_rule.kind = 'IF' or l_rule.kind = 'DO' or l_rule.kind = 'DOW'
                    or l_rule.kind = 'DOU' or l_rule.kind = 'CASE'
                    or l_rule.kind = 'SELEC');
@@ -1056,6 +1110,19 @@ dcl-proc CalcLine export;
      or l_rule.opcode = 'MLHZO' or l_rule.opcode = 'MLLZO';
     g_hdrIndex = 0;
     ConvertZoneMove(l_c:l_rule);
+    return;
+  endif;
+  // CALL, PARM and PLIST read their own operands.
+  if l_rule.opcode = 'CALL' or l_rule.opcode = 'PARM' or l_rule.opcode = 'PLIST';
+    g_hdrIndex = 0;
+    select;
+      when l_rule.opcode = 'CALL';
+        ConvertCall(l_c:l_rule);
+      when l_rule.opcode = 'PLIST';
+        ConvertPlist(l_c);
+      other;
+        ConvertParm(l_c);
+    endsl;
     return;
   endif;
   l_isSubrOperand = (l_rule.opcode = 'EXSR' or l_rule.opcode = 'BEGSR'
@@ -2832,6 +2899,307 @@ dcl-proc ConvertZoneMove;
 end-proc;
 
 // ------------------------------------------------------------------
+// CALL, PARM and PLIST of RPG II and RPG III (RV-08). The PARM lines of a CALL
+// (CalcPrescan keeps them) or the PARM lines of the PLIST named in its result
+// field give a prototype with EXTPGM, written before the first calculation
+// with the types of the parameter fields (like), and a CALLP.
+
+// The program name of a CALL: a literal without library, as a free-form name.
+dcl-proc ProgramLiteral;
+  dcl-pi *n varchar(10);
+    i_f2 varchar(30) const;
+  end-pi;
+
+  dcl-s l_name varchar(30);
+
+  if %len(i_f2) < 3 or %subst(i_f2:1:1) <> C_QUOTE
+     or %subst(i_f2:%len(i_f2):1) <> C_QUOTE;
+    return '';
+  endif;
+  l_name = Up(%subst(i_f2:2:%len(i_f2) - 2));
+  if %len(l_name) > 10 or %check(C_NAMEREST:l_name) > 0
+     or %check(C_NAMEFIRST:%subst(l_name:1:1)) > 0;
+    return '';
+  endif;
+  return %trim(l_name);
+end-proc;
+
+// ------------------------------------------------------------------
+// One PARM of the list read at i_first + i_k - 1: the free-form result field
+// (defined by its length when it has one), its type signature and the moves
+// before and after the call. Returns '' or the reason it fails.
+dcl-proc ParmEntry;
+  dcl-pi *n varchar(150);
+    i_index int(10) const;
+    o_field varchar(30);
+    o_sig varchar(30);
+    o_pre varchar(100);
+    o_post varchar(100);
+  end-pi;
+
+  dcl-s l_reason varchar(150) inz('');
+  dcl-s l_text varchar(30);
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+
+  o_field = '';
+  o_sig = '';
+  o_pre = '';
+  o_post = '';
+  if g_pmRes(i_index) = '';
+    return 'PARM without a result field';
+  endif;
+  if not ConvOperand(g_pmRes(i_index):o_field:l_reason);
+    return l_reason;
+  endif;
+  if %scan('(':o_field) > 0;
+    return 'PARM ' + g_pmRes(i_index) + ' is an array element: not converted';
+  endif;
+  l_reason = DeclareResult(o_field:g_pmLen(i_index):g_pmDec(i_index):*off);
+  if l_reason <> '';
+    return l_reason;
+  endif;
+  if not OperandType(o_field:l_kind:l_len:l_dec) or l_kind = 'F';
+    return 'Parameter ' + g_pmRes(i_index) + ' is not defined before the CALL';
+  endif;
+  o_sig = l_kind + %char(l_len) + ',' + %char(l_dec);
+  if g_pmF1(i_index) <> '';
+    if not ConvOperand(g_pmF1(i_index):l_text:l_reason);
+      return l_reason;
+    endif;
+    o_pre = o_field + ' = ' + l_text;
+  endif;
+  if g_pmF2(i_index) <> '';
+    if not ConvOperand(g_pmF2(i_index):l_text:l_reason);
+      return l_reason;
+    endif;
+    o_post = l_text + ' = ' + o_field;
+  endif;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc ConvertCall;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-ds l_rule likeds(IAfreeOpc_t);
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+  dcl-s l_count int(10) inz(0);
+  dcl-s l_reason varchar(150) inz('');
+  dcl-s l_name varchar(10);
+  dcl-s l_first int(10) inz(0);
+  dcl-s l_num int(10) inz(0);
+  dcl-s l_k int(10);
+  dcl-s l_p int(10);
+  dcl-s l_field varchar(30);
+  dcl-s l_sig varchar(30);
+  dcl-s l_pre varchar(100);
+  dcl-s l_post varchar(100);
+  dcl-s l_allPre varchar(250) inz('');
+  dcl-s l_allPost varchar(250) inz('');
+  dcl-s l_args varchar(250) inz('');
+  dcl-s l_sigs varchar(250) inz('');
+  dcl-s l_protos varchar(250) inz('');
+  dcl-s l_ind varchar(20) inz('');
+  dcl-s l_ext varchar(3) inz('');
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+  dcl-s l_known ind inz(*off);
+  dcl-s l_found int(10) inz(0);
+
+  g_parmMode = 'X';
+  l_name = ProgramLiteral(i_c.factor2);
+  select;
+    when l_name = '';
+      l_reason = 'CALL needs a literal program name without a library';
+    when i_c.result1 <> '  ';
+      l_reason = 'Resulting indicator ' + %trim(i_c.result1)
+                 + ' is not allowed for CALL';
+    when i_c.result3 <> '  ';
+      l_reason = 'The LR indicator of CALL (columns 58-59) is not converted';
+    when i_c.halfAdjust <> ' ';
+      l_reason = 'Operation extender ' + i_c.halfAdjust + ' is not allowed for CALL';
+    when g_callSeen > C_MAXCALL;
+      l_reason = 'Too many CALL operations';
+  endsl;
+  if l_reason = '' and OperandType(l_name:l_kind:l_len:l_dec);
+    l_reason = 'The program name ' + l_name + ' is also the name of a field';
+  endif;
+  if l_reason = '';
+    if i_c.result = '';
+      l_first = g_callFirst(g_callSeen);
+      l_num = g_callNum(g_callSeen);
+    else;
+      for l_p = 1 to g_plCount;
+        if g_plName(l_p) = Up(i_c.result);
+          l_found = l_p;
+        endif;
+      endfor;
+      if l_found = 0;
+        l_reason = 'PLIST ' + i_c.result + ' is not defined';
+      else;
+        l_first = g_plFirst(l_found);
+        l_num = g_plNum(l_found);
+      endif;
+    endif;
+  endif;
+  if l_reason = '' and i_c.result2 <> '  ';
+    l_reason = IndicatorName(i_c.result2:l_ind);
+    l_ext = '(e)';
+  endif;
+
+  for l_k = 1 to l_num;
+    if l_reason <> '';
+      leave;
+    endif;
+    l_reason = ParmEntry(l_first + l_k - 1:l_field:l_sig:l_pre:l_post);
+    if l_reason = '';
+      if l_k > 1;
+        l_args += ' : ';
+        l_sigs += ';';
+        l_protos += ';';
+      endif;
+      l_args += l_field;
+      l_sigs += l_sig;
+      l_protos += l_field;
+      if l_pre <> '';
+        if l_allPre <> '';
+          l_allPre += '; ';
+        endif;
+        l_allPre += l_pre;
+      endif;
+      if l_post <> '';
+        if l_allPost <> '';
+          l_allPost += '; ';
+        endif;
+        l_allPost += l_post;
+      endif;
+    endif;
+  endfor;
+
+  // The prototype: the first CALL of a program gives it, the others must match.
+  if l_reason = '';
+    l_known = *off;
+    for l_p = 1 to g_protoCount;
+      if g_protoName(l_p) = l_name;
+        l_known = *on;
+        if g_protoSig(l_p) <> l_sigs;
+          l_reason = 'Program ' + l_name + ' is called with other parameter types'
+                     + ' than before';
+        endif;
+      endif;
+    endfor;
+    if not l_known and l_reason = '';
+      if g_protoCount >= C_MAXPROTO or g_protoLineCount + l_num + 2 > C_MAXPLINE;
+        l_reason = 'Too many programs are called';
+      else;
+        g_protoCount += 1;
+        g_protoName(g_protoCount) = l_name;
+        g_protoSig(g_protoCount) = l_sigs;
+        g_protoLineCount += 1;
+        g_protoLine(g_protoLineCount) = 'dcl-pr ' + l_name + ' extpgm('''
+                                        + l_name + ''');';
+        for l_k = 1 to l_num;
+          g_protoLineCount += 1;
+          g_protoLine(g_protoLineCount) = '  dcl-parm *n like('
+              + %subst(l_protos:1:%scan(';':l_protos + ';') - 1) + ');';
+          if %scan(';':l_protos) > 0;
+            l_protos = %subst(l_protos:%scan(';':l_protos) + 1);
+          endif;
+        endfor;
+        g_protoLineCount += 1;
+        g_protoLine(g_protoLineCount) = 'end-pr;';
+      endif;
+    endif;
+  endif;
+  if l_reason = '' and (%len(l_allPre) + %len(l_allPost) + %len(l_args) > 200);
+    l_reason = 'The parameters of CALL ' + l_name + ' are too long';
+  endif;
+
+  if l_reason <> '';
+    g_parmReason = l_reason;
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  if l_allPre <> '';
+    l_count += 1;
+    l_statements(l_count) = l_allPre;
+  endif;
+  l_count += 1;
+  l_statements(l_count) = 'callp' + l_ext + ' ' + l_name + '(' + l_args + ')';
+  if l_ind <> '';
+    l_count += 1;
+    l_statements(l_count) = l_ind + ' = %error';
+  endif;
+  if l_allPost <> '';
+    l_count += 1;
+    l_statements(l_count) = l_allPost;
+  endif;
+  g_parmMode = 'C';
+  l_rule = i_rule;
+  l_rule.status = C_STS_ASSUMPTION;
+  l_rule.reason = 'CALL is written as a prototype (before the first calculation) and'
+                  + ' CALLP; factor 1 and factor 2 of PARM are moved with = before'
+                  + ' and after the call';
+  EmitStatements(i_c:l_rule:l_statements:l_count:'');
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc ConvertPlist;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+  end-pi;
+
+  if Up(i_c.factor1) = '*ENTRY';
+    g_parmMode = 'X';
+    g_parmReason = 'PLIST *ENTRY: declare the parameters of the program with'
+                   + ' dcl-pi';
+    ReviewHere(i_c.line:i_c.lineNo:g_parmReason);
+    return;
+  endif;
+  g_parmMode = 'P';
+  g_parmReason = '';
+  RptItem(C_STS_CONVERTED:i_c.lineNo:SpecText(i_c.line):'');
+end-proc;
+
+// ------------------------------------------------------------------
+// PARM: the parameter of a CALL or PLIST. Written with the CALL; a length in
+// columns 49-51 defines the field here, where the PARM is.
+dcl-proc ConvertParm;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+  end-pi;
+
+  dcl-s l_field varchar(30) inz('');
+  dcl-s l_reason varchar(150) inz('');
+
+  select;
+    when g_parmMode = ' ';
+      l_reason = 'PARM without a CALL or PLIST before it';
+    when g_parmMode = 'X';
+      l_reason = 'PARM of a CALL or PLIST that is not converted: '
+                 + g_parmReason;
+    when i_c.result = '';
+      l_reason = 'PARM without a result field';
+    when not ConvOperand(i_c.result:l_field:l_reason);
+      l_field = '';
+    other;
+      l_reason = DeclareResult(l_field:i_c.length:i_c.decimals:*off);
+  endsl;
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+  RptItem(C_STS_CONVERTED:i_c.lineNo:SpecText(i_c.line):'');
+end-proc;
+
+// ------------------------------------------------------------------
 // DUMP: dump identifier; The dump is made only when the control specification has
 // the debug entry (converted to debug(*dump), FREE-03), as in RPG/400.
 dcl-proc ConvertDump;
@@ -3301,7 +3669,45 @@ dcl-proc CalcPrescan export;
     return;
   endif;
   l_op = %trim(Fld(l_up:'OPERATION'));
+  if l_op <> '' and l_op <> 'CALL' and l_op <> 'PLIST' and l_op <> 'PARM';
+    g_parmTarget = 0;
+  endif;
   select;
+    when l_op = 'CALL';
+      g_klOpen = *off;
+      g_callCount += 1;
+      if g_callCount <= C_MAXCALL;
+        g_callFirst(g_callCount) = g_pmCount + 1;
+        g_callNum(g_callCount) = 0;
+        g_parmTarget = -g_callCount;
+      else;
+        g_parmTarget = 0;
+      endif;
+    when l_op = 'PLIST';
+      g_klOpen = *off;
+      g_parmTarget = 0;
+      if g_plCount < C_MAXPL and %trim(Fld(l_up:'FACTOR1')) <> '';
+        g_plCount += 1;
+        g_plName(g_plCount) = %trim(Fld(l_up:'FACTOR1'));
+        g_plFirst(g_plCount) = g_pmCount + 1;
+        g_plNum(g_plCount) = 0;
+        g_parmTarget = g_plCount;
+      endif;
+    when l_op = 'PARM';
+      g_klOpen = *off;
+      if g_parmTarget <> 0 and g_pmCount < C_MAXPM;
+        g_pmCount += 1;
+        g_pmF1(g_pmCount) = %trim(Fld(i_line:'FACTOR1'));
+        g_pmF2(g_pmCount) = %trim(Fld(i_line:'FACTOR2'));
+        g_pmRes(g_pmCount) = %trim(Fld(i_line:'RESULT'));
+        g_pmLen(g_pmCount) = %trim(Fld(l_up:'LENGTH'));
+        g_pmDec(g_pmCount) = Fld(l_up:'DECIMALS');
+        if g_parmTarget > 0;
+          g_plNum(g_parmTarget) += 1;
+        else;
+          g_callNum(-g_parmTarget) += 1;
+        endif;
+      endif;
     when l_op = 'KLIST';
       g_klOpen = *off;
       if g_klCount < C_MAXKL and %trim(Fld(l_up:'FACTOR1')) <> '';
@@ -3988,6 +4394,8 @@ dcl-proc CalcFinish export;
   end-pi;
 
   dcl-s l_index int(10);
+  dcl-s l_total int(10);
+  dcl-s l_text varchar(200);
 
   if g_sqlOpen;
     SqlReject('EXEC SQL is not closed by END-EXEC at the end of the source');
@@ -4013,13 +4421,22 @@ dcl-proc CalcFinish export;
   if g_declAt = 0;
     return;
   endif;
-  if g_declCount = 0;
+  // The declarations of the result fields, then the prototypes of the CALLs.
+  l_total = g_declCount + g_protoLineCount;
+  if l_total = 0;
     OutSet(g_declAt:'');
     return;
   endif;
-  OutSet(g_declAt:'dcl-s ' + g_declName(1) + ' ' + g_declType(1) + ';');
-  for l_index = 2 to g_declCount;
-    OutInsertAfter(g_declAt + l_index - 2:'dcl-s ' + g_declName(l_index) + ' '
-                   + g_declType(l_index) + ';');
+  for l_index = 1 to l_total;
+    if l_index <= g_declCount;
+      l_text = 'dcl-s ' + g_declName(l_index) + ' ' + g_declType(l_index) + ';';
+    else;
+      l_text = g_protoLine(l_index - g_declCount);
+    endif;
+    if l_index = 1;
+      OutSet(g_declAt:l_text);
+    else;
+      OutInsertAfter(g_declAt + l_index - 2:l_text);
+    endif;
   endfor;
 end-proc;
