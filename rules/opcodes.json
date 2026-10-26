@@ -1778,11 +1778,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "Data area and data structure operations are not converted yet",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1797,11 +1797,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "Data area and data structure operations are not converted yet",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1820,7 +1820,7 @@
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "Data area and data structure operations are not converted yet",
+  "reason": "OCUR needs a multiple-occurrence data structure (OCCURS of the I specification is not converted yet)",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {

@@ -1,0 +1,27 @@
+      * RPG III data areas: DEFN *NAMVAR, IN, OUT, UNLCK (FREE-17)
+     H
+     IMYDS         DS
+     I                                        1  10 DSFLD
+      * A data structure, a field declared before, a field declared after the DEFN
+     C           *NAMVAR   DEFN *LDA      MYDS
+     C                     Z-ADD0         TOTAL   90
+     C           *NAMVAR   DEFN TOTDA     TOTAL
+     C           *NAMVAR   DEFN CNTDA     CNT
+     C                     Z-ADD0         CNT     50
+      * IN, OUT, UNLCK
+     C           *LOCK     IN   TOTAL
+     C                     OUT  TOTAL
+     C                     IN   MYDS
+     C                     IN   TOTAL                  90
+     C           *LOCK     OUT  TOTAL                  91
+     C                     IN   *NAMVAR
+     C                     OUT  *NAMVAR
+     C                     UNLCKTOTAL
+      * Not converted
+     C           *NAMVAR   DEFN GHOSTD    GHOST
+     C           *NAMVAR   DEFN LENDA     LENF    5
+     C                     IN   NODA
+     C           *LOCK     IN   MYDS
+     C                     IN   TOTAL     X
+     C           *NAMVAR   DEFN TOTDA     TOTAL
+     C                     OCUR MYDS

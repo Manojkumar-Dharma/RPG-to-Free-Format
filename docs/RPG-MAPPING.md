@@ -428,6 +428,34 @@ Reported R: names ending in `...`, keyword literals continued with `+` or `-`,
 FROMFILE, TOFILE, CLASS, PACKEVEN, object types, invalid entries. `**` compile-time
 data sections are kept as is (A). Sample: `samples/FREE4.rpgle`.
 
+## Data areas: DEFN *NAMVAR, IN, OUT, UNLCK (FREE-17, review item RV-11)
+
+Source: SC09-1817 chapter 11 (DEFN *NAMVAR, IN, OUT, UNLCK), the ILE RPG reference (the `DTAARA` keyword for a field, subfield and data structure, `IN`, `OUT`, `UNLOCK`). In RPG/400 the data area is associated with a field or data structure by `*NAMVAR DEFN`; `IN`, `OUT` and `UNLCK` name that field. In free form the association is the `DTAARA` keyword on the declaration; its name is written as a literal in capitals (an unquoted name would be a variable that holds the name).
+
+| Source | Becomes | Status |
+|---|---|---|
+| `*NAMVAR DEFN Area Field`, `Area` a name, `*LDA` or `*PDA` (blank: the name of the field) | the keyword `dtaara('AREA')` on the declaration of `Field` | C |
+| `Field` is a named data structure of the I specifications | `dcl-ds FIELD dtaara('AREA');` (the line already written is changed) | C |
+| `Field` is declared by a result field with a length, before or after the `DEFN` | `dcl-s FIELD type dtaara('AREA');` in the declarations at the top | C |
+| `*LOCK IN Field`, `IN Field`, `OUT Field`, `*LOCK OUT Field` | `in *lock FIELD;`, `in FIELD;`, `out FIELD;`, `out *lock FIELD;` | C |
+| `IN *NAMVAR`, `OUT *NAMVAR` | `in *dtaara;`, `out *dtaara;` | C |
+| error indicator (columns 56-57) | `in(e) FIELD;` and `*INnn = %error;` | C |
+| `UNLCK Field` where `Field` is a data area | `unlock FIELD;` | C |
+
+Reported R: a field that is neither a named data structure of the I specifications nor declared by a result field (a subfield or an input record field; reported at the end of the calculations because the declaration can come after the `DEFN`), a `DEFN *NAMVAR` with a length or with conditioning indicators, a field that is already associated, `IN` or `OUT` of a name that no `DEFN *NAMVAR` defines, `*LOCK` for `*LDA` or `*PDA`, a result field, resulting indicators other than the error indicator. `OCUR` stays R: it needs the multiple-occurrence data structure (`OCCURS` of the I specification is not converted yet).
+
+`samples/FREEDTA.rpg38` has one line for each row. Expected result, written from the design and not from a run:
+
+| Line | Expected |
+|---|---|
+| `*NAMVAR DEFN *LDA MYDS` | `dcl-ds MYDS dtaara('*LDA');` |
+| `TOTAL` declared before, `*NAMVAR DEFN TOTDA TOTAL` | `dcl-s TOTAL zoned(9:0) dtaara('TOTDA');` |
+| `*NAMVAR DEFN CNTDA CNT`, `CNT` declared after | `dcl-s CNT zoned(5:0) dtaara('CNTDA');` |
+| `*LOCK IN TOTAL`, `OUT TOTAL`, `IN MYDS` | `in *lock TOTAL;`, `out TOTAL;`, `in MYDS;` |
+| `IN TOTAL` with 90; `*LOCK OUT TOTAL` with 91 | `in(e) TOTAL;`, `*IN90 = %error;`; `out(e) *lock TOTAL;`, `*IN91 = %error;` |
+| `IN *NAMVAR`, `OUT *NAMVAR`, `UNLCK TOTAL` | `in *dtaara;`, `out *dtaara;`, `unlock TOTAL;` |
+| the "Not converted" lines | each kept as comment, R; the `DEFN` of `GHOST` is reported R at the end |
+
 ## XLATE, MVR, DEFN, DSPLY, DUMP, COMIT, ROLBK (FREE-13, review items RV-02, RV-03, RV-07, RV-09, RV-10)
 
 Source: SC09-1817 chapter 11 (each operation), the ILE RPG reference (`%XLATE`, `%REM`, `LIKE`, `DSPLY`, `DUMP`, `COMMIT`, `ROLBK`).

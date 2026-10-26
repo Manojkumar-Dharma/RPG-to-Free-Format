@@ -29,7 +29,7 @@ Code status and test status follow `PLANNED.md`.
 | RV-08 | `CALL`, `PARM`, `PLIST` (2, 3) | prototype needed | Convert: `dcl-pr` with `extpgm` and `callp`; parameter types from the known fields; done in FREE-16 (`PLIST *ENTRY` stays R) | Written | Not tested |
 | RV-09 | `DSPLY`, `DUMP` (3) | message queue and response operands | Convert: `dsply` and `dump(a)`; the queue operands as written | Written | Not tested |
 | RV-10 | `COMIT`, `ROLBK` (3) | file handling | Convert: `commit`, `rolbk`; the file list as `(e)` where used | Written | Not tested |
-| RV-11 | `IN`, `OUT`, `OCUR` (3) | data areas and data structures | Convert: `in`, `out`, `occur`; `*DTAARA` definitions through `DEFN` (RV-07) | Planned | Not started |
+| RV-11 | `IN`, `OUT`, `*NAMVAR DEFN`, `UNLCK` of a data area written (FREE-17); `OCUR` still R (needs `OCCURS`) | data areas and data structures | Convert: `in`, `out`, `occur`; `*DTAARA` definitions through `DEFN` (RV-07) | Written | Not tested |
 | RV-12 | `EXFMT`, `READC`, `ACQ`, `NEXT`, `POST`, `REL` | WORKSTN file I/O | Convert with the display file of IACNVDSPF; needs the I/O design | Planned | Not started |
 | RV-13 | `EXCPT`, `PAGE`, `PAGE1` to `PAGE7`, O and L specifications | output | FREE-06: exception records done in part 1, the rest is RV-60 to RV-63 | Written | Not tested |
 | RV-14 | `GOTO`, `TAG`, `CABxx` | free-form has no `GOTO` | Decide: rewrite the common patterns (skip forward to a `TAG` in the same group, loop back, jump to the end) with `if`, `dow`, `leave`, `return`; the other patterns stay R | Planned | Not started |

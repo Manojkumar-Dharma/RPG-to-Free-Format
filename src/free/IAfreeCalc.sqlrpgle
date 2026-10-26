@@ -43,6 +43,7 @@ dcl-c C_MAXPROTO 40;
 dcl-c C_MAXPLINE 300;
 dcl-c C_MAXFLD 1000;
 dcl-c C_MAXARR 200;
+dcl-c C_MAXDT 100;
 
 // The parts of one C specification line.
 dcl-ds Calc_t qualified template;
@@ -119,6 +120,15 @@ dcl-s g_arrAlt varchar(10) dim(C_MAXARR);
 dcl-s g_arrTable ind dim(C_MAXARR);
 dcl-s g_arrCount int(10);
 dcl-s g_lookupDeclared ind;
+
+// The fields DEFN *NAMVAR associates with a data area: the field, the quoted name of
+// the data area, whether the DTAARA keyword is in place and the line of the DEFN.
+dcl-s g_dtName varchar(10) dim(C_MAXDT);
+dcl-s g_dtExt varchar(20) dim(C_MAXDT);
+dcl-s g_dtApplied ind dim(C_MAXDT);
+dcl-s g_dtLineNo int(10) dim(C_MAXDT);
+dcl-s g_dtText varchar(75) dim(C_MAXDT);
+dcl-s g_dtCount int(10);
 
 // The operation before this one, and the operands of the last DIV for the MVR that
 // follows it.
@@ -213,6 +223,7 @@ dcl-proc CalcStart export;
   g_divF1 = '';
   g_divF2 = '';
   g_divRes = '';
+  g_dtCount = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -675,6 +686,7 @@ dcl-proc DeclareResult;
   g_declCount += 1;
   g_declName(g_declCount) = Up(i_name);
   g_declType(g_declCount) = l_type;
+  ApplyPendingDtaara(Up(i_name));
   if i_decimals = ' ' and not i_numeric;
     CalcDefineField(Up(i_name):'C':l_length:0);
   else;
@@ -1096,6 +1108,11 @@ dcl-proc CalcLine export;
   if l_rule.kind = 'DISPLAY';
     g_hdrIndex = 0;
     ConvertDsply(l_c:l_rule);
+    return;
+  endif;
+  if l_rule.opcode = 'IN' or l_rule.opcode = 'OUT';
+    g_hdrIndex = 0;
+    ConvertDataArea(l_c:l_rule);
     return;
   endif;
   // Bit operations, TESTN and TESTZ read their own factor 2 (bit numbers).
@@ -2316,6 +2333,178 @@ dcl-proc DeclareHidden;
 end-proc;
 
 // ------------------------------------------------------------------
+dcl-proc IsDataAreaName;
+  dcl-pi *n ind;
+    i_upper varchar(30) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  for l_index = 1 to g_dtCount;
+    if g_dtName(l_index) = i_upper;
+      return *on;
+    endif;
+  endfor;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+// The DTAARA keyword for a field that a result field declares after the DEFN.
+dcl-proc ApplyPendingDtaara;
+  dcl-pi *n;
+    i_upper varchar(30) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  for l_index = 1 to g_dtCount;
+    if g_dtName(l_index) = i_upper and not g_dtApplied(l_index);
+      g_declType(g_declCount) += ' dtaara(' + g_dtExt(l_index) + ')';
+      g_dtApplied(l_index) = *on;
+      RptItem(C_STS_CONVERTED:g_dtLineNo(l_index):g_dtText(l_index):'');
+    endif;
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+// DEFN *NAMVAR (RPG/400 reference, DEFN): the field or data structure in the result
+// field is associated with the data area named in factor 2 (*LDA, *PDA, or the
+// name of the data area; blank: the name of the result field). The DTAARA keyword
+// goes on the declaration of the field: a data structure of the I specifications,
+// or a field that a result field with a length declares (also after the DEFN).
+// IN, OUT and UNLCK name the field (see ConvertDataArea).
+dcl-proc ConvertNamvar;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+  end-pi;
+
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_field varchar(30);
+  dcl-s l_ext varchar(30);
+  dcl-s l_quoted varchar(20);
+  dcl-s l_index int(10);
+  dcl-s l_applied ind inz(*off);
+
+  l_field = Up(i_c.result);
+  l_ext = Up(i_c.factor2);
+  if l_ext = '';
+    l_ext = l_field;
+  endif;
+  select;
+    when i_c.result = '' or not IsName(i_c.result) or %scan(',':i_c.result) > 0;
+      l_reason = 'The result field of DEFN *NAMVAR must be the name of a field or '
+                 + 'data structure';
+    when i_c.length <> '' or i_c.decimals <> ' ';
+      l_reason = 'DEFN *NAMVAR has no length: the field is defined elsewhere';
+    when l_ext <> '*LDA' and l_ext <> '*PDA' and not IsName(l_ext);
+      l_reason = 'The data area name ' + i_c.factor2 + ' is not valid (a name, '
+                 + '*LDA or *PDA)';
+    when IsDataAreaName(l_field);
+      l_reason = l_field + ' is already associated with a data area';
+    when g_dtCount >= C_MAXDT;
+      l_reason = 'Too many data areas';
+  endsl;
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  l_quoted = C_QUOTE + l_ext + C_QUOTE;
+  g_dtCount += 1;
+  g_dtName(g_dtCount) = l_field;
+  g_dtExt(g_dtCount) = l_quoted;
+  g_dtApplied(g_dtCount) = *off;
+  g_dtLineNo(g_dtCount) = i_c.lineNo;
+  g_dtText(g_dtCount) = SpecText(i_c.line);
+
+  // A field that a result field declared before the DEFN.
+  for l_index = 1 to g_declCount;
+    if g_declName(l_index) = l_field and not l_applied;
+      g_declType(l_index) += ' dtaara(' + l_quoted + ')';
+      l_applied = *on;
+    endif;
+  endfor;
+  if not l_applied;
+    l_applied = CvtDtaaraDs(l_field:l_quoted);
+  endif;
+  if l_applied;
+    g_dtApplied(g_dtCount) = *on;
+    RptItem(C_STS_CONVERTED:i_c.lineNo:SpecText(i_c.line):'');
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// IN and OUT (RPG/400 reference, IN and OUT): in(e) *lock NAME; The name is the
+// result field of the DEFN *NAMVAR, or *NAMVAR for all data areas (written
+// *dtaara). *LOCK in factor 1 is not allowed for the local data area and the
+// PIP data area. The error indicator becomes the (e) extender and %error.
+dcl-proc ConvertDataArea;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-s l_name varchar(30);
+  dcl-s l_stmt varchar(100);
+  dcl-s l_ind varchar(20) inz('');
+  dcl-s l_ext varchar(3) inz('');
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_index int(10);
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+  dcl-s l_count int(10) inz(1);
+
+  l_name = Up(i_c.factor2);
+  select;
+    when i_c.result1 <> '  ' or i_c.result3 <> '  ';
+      l_reason = 'Only the error indicator (columns 56-57) is used by '
+                 + i_rule.opcode;
+    when i_c.halfAdjust <> ' ';
+      l_reason = 'Operation extender ' + i_c.halfAdjust + ' is not allowed for '
+                 + i_rule.opcode;
+    when i_c.result <> '';
+      l_reason = 'The result field is not used by ' + i_rule.opcode;
+    when Up(i_c.factor1) <> '' and Up(i_c.factor1) <> '*LOCK';
+      l_reason = 'Factor 1 of ' + i_rule.opcode + ' must be *LOCK or blank';
+    when l_name <> '*NAMVAR' and not IsDataAreaName(l_name);
+      l_reason = i_c.factor2 + ' is not defined as a data area by a DEFN *NAMVAR';
+  endsl;
+  if l_reason = '' and Up(i_c.factor1) = '*LOCK' and l_name <> '*NAMVAR';
+    for l_index = 1 to g_dtCount;
+      if g_dtName(l_index) = l_name
+         and (g_dtExt(l_index) = C_QUOTE + '*LDA' + C_QUOTE
+              or g_dtExt(l_index) = C_QUOTE + '*PDA' + C_QUOTE);
+        l_reason = '*LOCK is not allowed for the local data area or the PIP data '
+                   + 'area';
+      endif;
+    endfor;
+  endif;
+  if l_reason = '' and i_c.result2 <> '  ';
+    l_reason = IndicatorName(i_c.result2:l_ind);
+    l_ext = '(e)';
+  endif;
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  l_stmt = %xlate(C_UPPER:C_LOWER:i_rule.opcode) + l_ext;
+  if Up(i_c.factor1) = '*LOCK';
+    l_stmt += ' *lock';
+  endif;
+  if l_name = '*NAMVAR';
+    l_stmt += ' *dtaara';
+  else;
+    l_stmt += ' ' + i_c.factor2;
+  endif;
+  l_statements(1) = l_stmt;
+  if l_ind <> '';
+    l_count = 2;
+    l_statements(2) = l_ind + ' = %error';
+  endif;
+  EmitStatements(i_c:i_rule:l_statements:l_count:'');
+end-proc;
+
+// ------------------------------------------------------------------
 // MVR: the remainder of the DIV before it. Only for whole numbers, because %REM
 // needs integer operands: dividend, divisor and the quotient field must have no
 // decimal positions. Returns the reason when that cannot be shown.
@@ -2387,7 +2576,8 @@ dcl-proc ConvertDefn;
     when i_c.cond <> '';
       l_reason = 'Conditioning indicators are not allowed for DEFN';
     when Up(i_c.factor1) = '*NAMVAR';
-      l_reason = 'DEFN *NAMVAR (data area) is not converted yet';
+      ConvertNamvar(i_c);
+      return;
     when Up(i_c.factor1) <> '*LIKE';
       l_reason = 'Factor 1 of DEFN must be *LIKE or *NAMVAR';
     when i_c.factor2 = '' or i_c.result = '';
@@ -3813,6 +4003,7 @@ dcl-proc ConvertFileOp;
   dcl-s l_reason varchar(190) inz('');
   dcl-s l_note varchar(190) inz('');
   dcl-s l_slot int(10);
+  dcl-s l_isArea ind inz(*off);
   dcl-s l_statements varchar(250) dim(C_MAXSTMT);
   dcl-s l_count int(10) inz(0);
 
@@ -3858,8 +4049,9 @@ dcl-proc ConvertFileOp;
   l_dsOp = (l_op = 'CHAIN' or l_op = 'READ' or l_op = 'READE' or l_op = 'READP'
             or l_op = 'REDPE' or l_op = 'UPDAT' or l_op = 'WRITE');
 
-  // The file (COMIT and ROLBK name none).
-  if l_reason = '' and l_op <> 'COMIT' and l_op <> 'ROLBK';
+  // The file (COMIT and ROLBK name none; UNLCK can name a data area).
+  l_isArea = (l_op = 'UNLCK' and IsDataAreaName(Up(i_c.factor2)));
+  if l_reason = '' and l_op <> 'COMIT' and l_op <> 'ROLBK' and not l_isArea;
     l_name = %trim(%xlate(C_LOWER:C_UPPER:i_c.factor2));
     if not FileInfo(l_name:l_device:l_type:l_recDs:l_keyed);
       l_reason = 'File ' + i_c.factor2 + ' is not declared by a converted file '
@@ -4417,6 +4609,15 @@ dcl-proc CalcFinish export;
     RptItem(C_STS_REVIEW:g_lastLineNo:'ENDSR':'A subroutine is not closed at the end'
             + ' of the source');
   endif;
+
+  for l_index = 1 to g_dtCount;
+    if not g_dtApplied(l_index);
+      RptItem(C_STS_REVIEW:g_dtLineNo(l_index):g_dtText(l_index)
+              :'The field ' + g_dtName(l_index) + ' must be a data structure of '
+               + 'the I specifications or a field defined by a result field: '
+               + 'DTAARA cannot be added');
+    endif;
+  endfor;
 
   if g_declAt = 0;
     return;

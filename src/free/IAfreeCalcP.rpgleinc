@@ -76,6 +76,12 @@ dcl-pr FileInfo ind;
   o_keyed ind;
 end-pr;
 
+// Adds the DTAARA keyword to a data structure of the I specifications.
+dcl-pr CvtDtaaraDs ind;
+  i_name varchar(10) const;
+  i_external varchar(20) const;
+end-pr;
+
 dcl-pr OutCount int(10);
 end-pr;
 

@@ -27,6 +27,7 @@ dcl-c C_MAXFILES 100;
 dcl-c C_MAXNAMES 3000;
 dcl-c C_MAXBLOCK 600;
 dcl-c C_MAXCT 200;
+dcl-c C_MAXDS 100;
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 dcl-c C_DIGITS '0123456789';
@@ -62,6 +63,11 @@ dcl-s g_blockCount int(10);
 dcl-s g_ctNames varchar(6) dim(C_MAXCT);
 dcl-s g_ctCount int(10);
 dcl-s g_ctSection int(10);
+// The named data structures (I specifications) and the output line of their
+// first line, so DEFN *NAMVAR can add the DTAARA keyword.
+dcl-s g_dsNames varchar(10) dim(C_MAXDS);
+dcl-s g_dsOut int(10) dim(C_MAXDS);
+dcl-s g_dsCount int(10);
 
 // ------------------------------------------------------------------
 dcl-proc FreeConvert export;
@@ -87,6 +93,7 @@ dcl-proc FreeConvert export;
   g_blockCount = 0;
   g_ctCount = 0;
   g_ctSection = 0;
+  g_dsCount = 0;
 
   select;
     when %trim(%xlate(C_LOWER:C_UPPER:i_source.type)) = 'RPG36';
@@ -1242,6 +1249,33 @@ dcl-proc IsOverflowIndicator;
 end-proc;
 
 // ------------------------------------------------------------------
+// DEFN *NAMVAR on a data structure of the I specifications: the line dcl-ds NAME;
+// gets the DTAARA keyword (i_external is the quoted name of the data area).
+// Returns *off when the data structure is not known or has the keyword already.
+dcl-proc CvtDtaaraDs export;
+  dcl-pi *n ind;
+    i_name varchar(10) const;
+    i_external varchar(20) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_line varchar(200);
+
+  for l_index = 1 to g_dsCount;
+    if g_dsNames(l_index) = i_name;
+      l_line = g_outputLines(g_dsOut(l_index));
+      if %scan('dtaara(':l_line) > 0 or %len(l_line) < 2;
+        return *off;
+      endif;
+      OutSet(g_dsOut(l_index):%subst(l_line:1:%len(l_line) - 1) + ' dtaara('
+             + i_external + ');');
+      return *on;
+    endif;
+  endfor;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
 // Number of output lines so far (module IAfreeCalc remembers positions).
 dcl-proc OutCount export;
   dcl-pi *n int(10);
@@ -1489,6 +1523,11 @@ dcl-proc ConvertInput;
   endif;
 
   BlockAdd('end-ds;':g_sourceLineNos(l_last));
+  if l_kind = 'D' and l_name <> '' and g_dsCount < C_MAXDS;
+    g_dsCount += 1;
+    g_dsNames(g_dsCount) = %xlate(C_LOWER:C_UPPER:l_name);
+    g_dsOut(g_dsCount) = g_outputCount + 1;
+  endif;
   for l_k = 1 to g_blockCount;
     AddOut(g_blockText(l_k):g_blockLineNos(l_k));
   endfor;
