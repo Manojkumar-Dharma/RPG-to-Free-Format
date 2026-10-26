@@ -1,0 +1,16 @@
+      * RPG III move zone operations
+     H
+      * Fields
+     C                     MOVEL'JK'      SRC     2
+     C                     MOVEL'12345'   TGT     5
+     C                     Z-ADD12        NUM     30
+      * Zone moves between character fields
+     C                     MHHZOSRC       TGT
+     C                     MHLZOSRC       TGT
+     C                     MLHZOSRC       TGT
+     C                     MLLZOSRC       TGT
+      * Not converted
+     C                     MLLZOSRC       NUM
+     C                     MHHZONUM       TGT
+     C                     MHHZOSRC       TGT        41
+     C                     MHHZOSRC       NOFLD

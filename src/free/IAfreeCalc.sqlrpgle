@@ -1052,6 +1052,12 @@ dcl-proc CalcLine export;
     ConvertBitTest(l_c:l_rule);
     return;
   endif;
+  if l_rule.opcode = 'MHHZO' or l_rule.opcode = 'MHLZO'
+     or l_rule.opcode = 'MLHZO' or l_rule.opcode = 'MLLZO';
+    g_hdrIndex = 0;
+    ConvertZoneMove(l_c:l_rule);
+    return;
+  endif;
   l_isSubrOperand = (l_rule.opcode = 'EXSR' or l_rule.opcode = 'BEGSR'
                      or l_rule.opcode = 'ENDSR' or l_rule.kind = 'CASE');
   if not ConvertFactors(l_c:l_isSubrOperand:l_rule:l_reason);
@@ -2750,6 +2756,79 @@ dcl-proc ConvertBitTest;
   endif;
   l_rule.reason = l_note;
   EmitStatements(i_c:l_rule:l_statements:l_count:'');
+end-proc;
+
+// ------------------------------------------------------------------
+// MHHZO, MHLZO, MLHZO and MLLZO of RPG II and RPG III (RV-06): the zone (left
+// four bits) of the high (first) or low (last) character of factor 2 goes to the
+// zone of the high or low character of the result field. Both fields are
+// character fields here; a numeric field (the sign zone) is reported R.
+dcl-proc ConvertZoneMove;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-ds l_rule likeds(IAfreeOpc_t);
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+  dcl-s l_reason varchar(150) inz('');
+  dcl-s l_src varchar(30) inz('');
+  dcl-s l_res varchar(30) inz('');
+  dcl-s l_kind char(1);
+  dcl-s l_srcLen int(10) inz(0);
+  dcl-s l_resLen int(10) inz(0);
+  dcl-s l_dec int(10);
+  dcl-s l_srcPos int(10);
+  dcl-s l_resPos int(10);
+  dcl-s l_op varchar(5);
+
+  l_op = Up(%trim(i_rule.opcode));
+  if i_c.result1 <> '  ' or i_c.result2 <> '  ' or i_c.result3 <> '  ';
+    l_reason = 'Resulting indicators are not allowed for ' + l_op;
+  elseif i_c.result = '' or i_c.factor2 = '';
+    l_reason = 'Factor 2 and the result field are required for ' + l_op;
+  elseif not ConvOperand(i_c.factor2:l_src:l_reason);
+    l_src = '';
+  elseif not ConvOperand(i_c.result:l_res:l_reason);
+    l_res = '';
+  endif;
+  if l_reason = '' and i_c.length <> '';
+    l_reason = DeclareResult(l_res:i_c.length:i_c.decimals:*off);
+  endif;
+  if l_reason = '';
+    if not OperandType(l_src:l_kind:l_srcLen:l_dec) or l_kind <> 'C';
+      l_reason = 'Factor 2 of ' + l_op + ' must be a character field known'
+                 + ' before this line (a numeric sign zone is not converted)';
+    elseif not OperandType(l_res:l_kind:l_resLen:l_dec) or l_kind <> 'C';
+      l_reason = 'The result field of ' + l_op + ' must be a character field'
+                 + ' known before this line (a numeric sign zone is not'
+                 + ' converted)';
+    endif;
+  endif;
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  // The 2nd letter of the code is the factor 2 side, the 3rd the result side.
+  if %subst(l_op:2:1) = 'H';
+    l_srcPos = 1;
+  else;
+    l_srcPos = l_srcLen;
+  endif;
+  if %subst(l_op:3:1) = 'H';
+    l_resPos = 1;
+  else;
+    l_resPos = l_resLen;
+  endif;
+  l_statements(1) = '%subst(' + l_res + ':' + %char(l_resPos) + ':1) = '
+                    + '%bitor(%bitand(%subst(' + l_res + ':' + %char(l_resPos)
+                    + ':1):x''0F''):%bitand(%subst(' + l_src + ':'
+                    + %char(l_srcPos) + ':1):x''F0''))';
+  l_rule = i_rule;
+  l_rule.status = C_STS_CONVERTED;
+  l_rule.reason = '';
+  EmitStatements(i_c:l_rule:l_statements:1:'');
 end-proc;
 
 // ------------------------------------------------------------------

@@ -473,6 +473,19 @@ Reported R: bit numbers other than 0 to 7, repeated bit numbers, more than 8 bit
 
 `samples/FREEBIT.rpg38` has one line for each row, then the R lines. Expected result, written from the design and not from a run: the masks of the first lines are `x'92'` (bits 0, 3, 6), `x'FE'`, `x'88'`, `x'77'`; the last nine lines are kept as comments, R.
 
+## MHHZO, MHLZO, MLHZO, MLLZO (FREE-15, review item RV-06)
+
+Source: SC09-1817 chapter 11 (Move Zone Operations). Code: `ConvertZoneMove` in `IAfreeCalc`. The second letter of the code is the factor 2 side, the third the result side: H is the first (leftmost) character of the field, L the last.
+
+| Source | Becomes | Status |
+|---|---|---|
+| `MHHZO SRC TGT` (SRC 2, TGT 5) | `%subst(TGT:1:1) = %bitor(%bitand(%subst(TGT:1:1):x'0F'):%bitand(%subst(SRC:1:1):x'F0'));` | C |
+| `MHLZO`, `MLHZO`, `MLLZO` | the same with the positions 1 or the field length: `%subst(TGT:5:1)` and `%subst(SRC:2:1)` for L | C |
+
+The zone is the left four bits of the byte, so the result is the EBCDIC zone of the RPG/400 operation. Reported R: a numeric factor 2 or result field (the sign zone of a zoned field has no free-form equivalent), a field not defined before the line (its length is needed), resulting indicators, a missing factor 2 or result.
+
+`samples/FREEZON.rpg38`: the four operations, then four R lines. Expected result, written from the design and not from a run: `%subst(TGT:1:1)` and `%subst(TGT:5:1)` take the zone of `%subst(SRC:1:1)` or `%subst(SRC:2:1)`.
+
 ## LOKUP and MOVEA (FREE-08, arrays and tables of FREE-07)
 
 Source: SC09-1818 chapter 27 and SC09-1817 chapter 11 (LOKUP: the search argument, the high, low and equal indicators, the index, the second table), the ILE RPG reference (`%LOOKUP`, `%LOOKUPGT`, `%LOOKUPGE`, `%LOOKUPLT`, `%LOOKUPLE`). `IAfreeCvt` gives `IAfreeCalc` the arrays and tables of the E specifications (`CalcDefineArray`: name, sequence, number of entries, alternating array). The statements use the hidden field `LOKUP_IX` (declared once).

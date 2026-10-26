@@ -524,11 +524,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "Move zone operation: not converted",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -543,11 +543,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "Move zone operation: not converted",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -562,11 +562,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "Move zone operation: not converted",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -581,11 +581,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "Move zone operation: not converted",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {

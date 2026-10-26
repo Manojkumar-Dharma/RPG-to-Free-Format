@@ -47,13 +47,14 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-11 | IACNVFREE | Embedded SQL of `SQLRPG` (`C/EXEC SQL`, `C+`, `C/END-EXEC`) to free-form `exec sql ...;` | Written | Not tested | `samples/FREESQL.sqlrpg`; needs a compile and test; `WHENEVER ... GOTO` is A (TAG not converted); SQL in a `/COPY` member is not possible in RPG/400 |
 | FREE-12 | IACNVFREE | RPG III string operations `CAT`, `SCAN`, `SUBST`, `CHECK`, `CHEKR` to `+`, `%scan`, `%subst`, `%check`, `%checkr` (`XLATE` stays R) | Written | Not tested | `samples/FREESTR.rpg38`; needs a compile and test; decision: no `P` is converted with the padded form and marked A; error indicator R; `rules/IACNVRULES.sql` must be run again (new rows and BIFs) |
 | FREE-13 | IACNVFREE | Review items that need no decision, first part: `XLATE`, `MVR` (after `DIV`, whole numbers), `DEFN *LIKE`, `DSPLY`, `DUMP`, `COMIT`, `ROLBK` (RV-02, RV-03, RV-07, RV-09, RV-10 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEOP2.rpg38`; needs a compile and test; `rules/IACNVRULES.sql` must be run again; next: see FREE-14 |
-| FREE-14 | IACNVFREE | Review items that need no decision, second part: `TESTN`, `TESTZ`, `BITON`, `BITOF`, `TESTB` (RV-04, RV-05 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEBIT.rpg38`; needs a compile and test; `rules/IACNVRULES.sql` must be run again; next: zone moves (RV-06), `CALL`/`PARM`/`PLIST` for RPG II and III (RV-08), `IN`/`OUT`/`OCUR` (RV-11) |
+| FREE-14 | IACNVFREE | Review items that need no decision, second part: `TESTN`, `TESTZ`, `BITON`, `BITOF`, `TESTB` (RV-04, RV-05 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEBIT.rpg38`; needs a compile and test; `rules/IACNVRULES.sql` must be run again; next: see FREE-15 |
+| FREE-15 | IACNVFREE | Zone moves `MHHZO`, `MHLZO`, `MLHZO`, `MLLZO` between character fields (RV-06 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEZON.rpg38`; needs a compile and test; `rules/IACNVRULES.sql` must be run again; numeric fields (sign zone) stay R; next: `CALL`/`PARM`/`PLIST` for RPG II and III (RV-08), `IN`/`OUT`/`OCUR` (RV-11) |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-14 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-15 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.
