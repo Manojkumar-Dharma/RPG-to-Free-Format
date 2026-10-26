@@ -1,0 +1,17 @@
+      * RPG III renamed fields of an externally described file (RV-30)
+     H
+     FCUSTMAS IF  E           K        DISK
+      * Renames; a field without an external name needs no statement
+     ICUSTREC
+     I              CUSTNAME                        CNAME
+     I              CUSTBAL                         CBAL
+     I                                              CREDIT
+      * Not converted: control level, name already used, bad external name
+     I              CUSTNUM                         CUSTNOL1
+     I              CUSTCITY                        CNAME
+     I              BAD-NAME                        CBAD
+     C                     MOVEL'A'       KEY     6
+      * The renamed fields are set after a record was read
+     C           KEY       CHAINCUSTMAS              50
+     C                     READ CUSTMAS                  91
+     C                     MOVE CNAME     SAVNAM 10

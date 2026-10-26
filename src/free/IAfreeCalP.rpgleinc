@@ -67,6 +67,12 @@ dcl-pr ReviewSpec;
   i_reason varchar(190) const;
 end-pr;
 
+// The renamed fields of an externally described file as assignments (see
+// IAfreeCvt FileRenames), '' when there is none.
+dcl-pr FileRenames varchar(250);
+  i_name varchar(8) const;
+end-pr;
+
 // A file declared by a converted F specification (see IAfreeCvt FileInfo).
 dcl-pr FileInfo ind;
   i_name varchar(8) const;

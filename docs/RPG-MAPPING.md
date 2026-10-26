@@ -568,6 +568,25 @@ Reported R: an array with a file in columns 11-18 (FROMFILE) or 19-26 (TOFILE), 
 
 `samples/FREEARR.rpg38`: the converted sign arrays, then the R lines. Expected result, written from the design and not from a run: `SGN zoned(2:2) ... extfmt(L)`, `SGR zoned(4:0) ... extfmt(R)`, `ARR1 zoned(6:0) ...` with `ARR2 zoned(3:1) dim(6) extfmt(R) alt(ARR1)`.
 
+## Renamed fields of an externally described file (FREE-24, review item RV-30)
+
+Source: SC09-1817 chapter 8 (I specifications of an externally described file: record line with the record format name, field lines with the external name in columns 21-30 and the program name in 53-58); the ILE RPG reference (`dcl-f` has no per-field rename: `PREFIX` renames all fields of a file, `EXTFLD` only renames subfields of a data structure). Code: `ExternalFileOf`, `ConvertInputExternal`, `ConvertExternalField` and `FileRenames` in `IAfreeCvt`; `ConvertFileOp` in `IAfreeCalc`.
+
+Design (chosen with you): the renamed field is a **copy** of the external field.
+
+| Source | Becomes | Status |
+|---|---|---|
+| Field line `CUSTNAME` in 21-30, `CNAME` in 53-58 | `dcl-s CNAME like(CUSTNAME);` where the line is | A |
+| `CHAIN` or `READ`, `READE`, `READP`, `REDPE` of the file | the operation, then `if %found(FILE)` (CHAIN) or `if not %eof(FILE)` (the others), `CNAME = CUSTNAME; ...`, `endif;` | A |
+| Field line with no external name (name only) | nothing; reported C | C |
+| Record line (record format name) | nothing; reported C | C |
+
+The record line names a record format, so it belongs to the file named in columns 7-14 or, when no file has that name, to the only externally described file of the program. With several externally described files and a format name that is no file name, the block stays R (the format cannot be tied to a file without its DDS). The copy is made only when a record was read, so a failed `CHAIN` or the end of file does not overwrite the renamed field.
+
+Limits: a change of the renamed field is not written back. `WRITE` and `UPDATE` of an externally described file name a record format, which ConvertFileOp does not convert yet, so those lines are R and nothing is lost silently. Reported R: control levels, matching fields and field indicators (columns 59-70), record identifying indicators (19-20), AND/OR lines, a name that is already used, an external name that is not a name (10 characters at most), too many renamed fields for one file.
+
+`samples/FREEREN.rpg38`: two renames and a name-only line, then three R lines, then `CHAIN` and `READ`. Expected result, written from the design and not from a run: `dcl-s CNAME like(CUSTNAME);`, `dcl-s CBAL like(CUSTBAL);`, then `chain KEY CUSTMAS;` followed by `*IN50 = not %found(CUSTMAS);`, `if %found(CUSTMAS);`, `CNAME = CUSTNAME; CBAL = CUSTBAL;`, `endif;`.
+
 ## LOKUP and MOVEA (FREE-08, arrays and tables of FREE-07)
 
 Source: SC09-1818 chapter 27 and SC09-1817 chapter 11 (LOKUP: the search argument, the high, low and equal indicators, the index, the second table), the ILE RPG reference (`%LOOKUP`, `%LOOKUPGT`, `%LOOKUPGE`, `%LOOKUPLT`, `%LOOKUPLE`). `IAfreeCvt` gives `IAfreeCalc` the arrays and tables of the E specifications (`CalcDefineArray`: name, sequence, number of entries, alternating array). The statements use the hidden field `LOKUP_IX` (declared once).

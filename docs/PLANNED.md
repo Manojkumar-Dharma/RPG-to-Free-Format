@@ -57,6 +57,7 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-21 | IACNVFREE | RPG IV: conditioning indicators on `IF`, `DOW`, `DOU`, `FOR`, `DO` (outer `if`, RV-52) and `DO` without an index field (hidden index, RV-54) | Written | Not tested | `samples/FREE4C.rpgle`; needs a compile and test; other conditioned group operations and `ANDxx`/`ORxx` with indicators stay R |
 | FREE-22 | IACNVFREE | RPG IV: `BITON`, `BITOF`, `TESTB`, `TESTZ` (RV-50 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4C.rpgle`; needs a compile and test; `MOVE`/`MOVEL` of other type pairs and `MOVEA` stay R for RPG IV |
 | FREE-23 | IACNVFREE | RPG IV: I specifications of program described files to `FILE_REC` data structures and the result field of `READ`, `CHAIN`, `UPDATE` (RV-55 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4I.rpgle`; needs a compile and test; external renames (RV-30) and the cycle entries stay R |
+| FREE-24 | IACNVFREE | RPG III: renamed fields of externally described files (I specifications) as copies set after READ and CHAIN (RV-30 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEREN.rpg38`; needs a compile and test; a change of a renamed field is not written back; control levels, matching fields and field indicators stay R |
 
 ## Notes
 

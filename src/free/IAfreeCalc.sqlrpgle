@@ -4059,6 +4059,7 @@ dcl-proc ConvertFileOp;
   dcl-s l_ext varchar(3) inz('');
   dcl-s l_stmt varchar(250);
   dcl-s l_ind varchar(250);
+  dcl-s l_copy varchar(250) inz('');
   dcl-s l_reason varchar(190) inz('');
   dcl-s l_note varchar(190) inz('');
   dcl-s l_slot int(10);
@@ -4183,6 +4184,27 @@ dcl-proc ConvertFileOp;
   if l_reason <> '';
     ReviewHere(i_c.line:i_c.lineNo:l_reason);
     return;
+  endif;
+
+  // The renamed fields of an externally described file (I specifications, RV-30)
+  // are copies: set after an input operation that read a record.
+  if l_device = 'X' and (l_op = 'CHAIN' or l_op = 'READ' or l_op = 'READE'
+                         or l_op = 'READP' or l_op = 'REDPE');
+    l_copy = FileRenames(l_name);
+    if l_copy <> '';
+      l_count += 1;
+      if l_op = 'CHAIN';
+        l_statements(l_count) = 'if %found(' + l_name + ')';
+      else;
+        l_statements(l_count) = 'if not %eof(' + l_name + ')';
+      endif;
+      l_count += 1;
+      l_statements(l_count) = '  ' + l_copy;
+      l_count += 1;
+      l_statements(l_count) = 'endif';
+      AddReason(l_note:'The renamed fields of file ' + l_name + ' (I specification) '
+                + 'are copied after the operation when a record was read');
+    endif;
   endif;
 
   // The note: a character key of a program-described file.

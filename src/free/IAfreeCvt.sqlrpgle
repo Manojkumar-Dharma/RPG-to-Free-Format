@@ -28,6 +28,7 @@ dcl-c C_MAXNAMES 3000;
 dcl-c C_MAXBLOCK 600;
 dcl-c C_MAXCT 200;
 dcl-c C_MAXDS 100;
+dcl-c C_MAXREN 200;
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 dcl-c C_DIGITS '0123456789';
@@ -48,6 +49,12 @@ dcl-s g_fileLens int(10) dim(C_MAXFILES);
 dcl-s g_fileDevices char(1) dim(C_MAXFILES);
 dcl-s g_fileTypes char(1) dim(C_MAXFILES);
 dcl-s g_fileHasLayout ind dim(C_MAXFILES);
+
+// The renamed fields of externally described files (RV-30).
+dcl-s g_renFile varchar(8) dim(C_MAXREN);
+dcl-s g_renExt varchar(10) dim(C_MAXREN);
+dcl-s g_renNew varchar(6) dim(C_MAXREN);
+dcl-s g_renCount int(10);
 dcl-s g_fileKeyed ind dim(C_MAXFILES);
 dcl-s g_fileCount int(10);
 // Names defined so far (files, data structures, fields) and the line of each.
@@ -90,6 +97,7 @@ dcl-proc FreeConvert export;
   g_overflow = *off;
   g_headerSeen = *off;
   g_fileCount = 0;
+  g_renCount = 0;
   g_nameCount = 0;
   g_blockCount = 0;
   g_ctCount = 0;
@@ -1622,6 +1630,14 @@ dcl-proc ConvertInput;
     ReviewSpec(i_lineNo:i_line:'Field line without a record or data structure line');
     return 0;
   endif;
+  // A record line of an externally described file: only the renames (RV-30).
+  if %subst(l_up:19:2) <> 'DS' and %subst(l_up:19:2) <> '**'
+     and not IsInputContinuation(l_up);
+    l_file = ExternalFileOf(%trim(%subst(l_up:7:8)));
+    if l_file > 0;
+      return ConvertInputExternal(i_index:i_lineNo:i_line:l_file);
+    endif;
+  endif;
   if IsInputContinuation(l_up);
     ReviewSpec(i_lineNo:i_line:'AND/OR line without a record line');
     return 0;
@@ -2104,6 +2120,202 @@ dcl-proc FindFile;
     endif;
   endfor;
   return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// The externally described file a record line of the I specifications belongs
+// to (RV-30): the file named in columns 7-14, or the only externally described
+// file of the program (the line names a record format). 0 when there is none.
+dcl-proc ExternalFileOf;
+  dcl-pi *n int(10);
+    i_name varchar(8) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_found int(10) inz(0);
+  dcl-s l_count int(10) inz(0);
+
+  l_i = FindFile(i_name);
+  if l_i > 0;
+    if g_fileDevices(l_i) = 'X';
+      return l_i;
+    endif;
+    return 0;
+  endif;
+  for l_i = 1 to g_fileCount;
+    if g_fileDevices(l_i) = 'X';
+      l_count += 1;
+      l_found = l_i;
+    endif;
+  endfor;
+  if l_count = 1;
+    return l_found;
+  endif;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// The renamed fields of a file as assignments (NEW = EXT; ...), for the input
+// operations of ConvertFileOp. '' when the file has none.
+dcl-proc FileRenames export;
+  dcl-pi *n varchar(250);
+    i_name varchar(8) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_text varchar(250) inz('');
+
+  for l_i = 1 to g_renCount;
+    if g_renFile(l_i) = i_name;
+      if l_text <> '';
+        l_text += '; ';
+      endif;
+      l_text += g_renNew(l_i) + ' = ' + g_renExt(l_i);
+    endif;
+  endfor;
+  return l_text;
+end-proc;
+
+// ------------------------------------------------------------------
+// One field line of an externally described record (RV-30). A rename (external
+// name in columns 21-30, program name in 53-58) is a copy: dcl-s NEW like(EXT),
+// set after each input operation of the file (ConvertFileOp). Control levels,
+// matching fields and field indicators (columns 59-70) are not converted.
+// Returns '' or the reason the line is not converted.
+dcl-proc ConvertExternalField;
+  dcl-pi *n varchar(190);
+    i_lineNo int(10) const;
+    i_line char(100) const;
+    i_file int(10) const;
+  end-pi;
+
+  dcl-s l_up char(100);
+  dcl-s l_ext varchar(10);
+  dcl-s l_new varchar(6);
+
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  l_ext = %trim(%subst(l_up:21:10));
+  l_new = %trim(%subst(l_up:53:6));
+  select;
+    when %trim(%subst(l_up:7:14)) <> '';
+      return 'Columns 7-20 of a field line of an externally described file must be'
+             + ' blank';
+    when %trim(%subst(l_up:31:22)) <> '';
+      return 'Columns 31-52 of a field line of an externally described file must be'
+             + ' blank';
+    when %trim(%subst(l_up:59:12)) <> '';
+      return 'Control levels, matching fields and field indicators of an externally'
+             + ' described file are not converted';
+    when l_new = '' or not IsRpgName(l_new:6);
+      return 'The field name (columns 53-58) is not a valid name';
+    when l_ext = '' or l_ext = l_new;
+      return '';
+    when not ContName(l_ext);
+      return 'The external field name ' + l_ext + ' is not a valid name';
+    when FindName(l_new) > 0;
+      return 'Field name ' + l_new + ' is already used at line '
+             + %char(FindName(l_new));
+    when g_renCount >= C_MAXREN
+         or %len(FileRenames(g_fileNames(i_file))) + %len(l_ext) + %len(l_new) + 8
+            > 230;
+      return 'Too many renamed fields for file ' + g_fileNames(i_file);
+  endsl;
+
+  g_renCount += 1;
+  g_renFile(g_renCount) = g_fileNames(i_file);
+  g_renExt(g_renCount) = l_ext;
+  g_renNew(g_renCount) = l_new;
+  DefineName(l_new:i_lineNo);
+  AddOut('dcl-s ' + l_new + ' like(' + l_ext + ');':i_lineNo);
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// The I specifications of an externally described file (RV-30): the record line
+// (the record format name) and its field lines. Only the renames are converted.
+dcl-proc ConvertInputExternal;
+  dcl-pi *n int(10);
+    i_index int(10) const;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+    i_file int(10) const;
+  end-pi;
+
+  dcl-s l_up char(100);
+  dcl-s l_nextUp char(100);
+  dcl-s l_last int(10);
+  dcl-s l_next int(10);
+  dcl-s l_k int(10);
+  dcl-s l_multi ind inz(*off);
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_text varchar(80);
+
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  l_last = i_index;
+  l_next = i_index + 1;
+  dow l_next <= g_sourceCount;
+    l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_next));
+    if IsInputField(l_nextUp);
+      l_last = l_next;
+    elseif IsInputContinuation(l_nextUp);
+      l_multi = *on;
+      l_last = l_next;
+    elseif not IsCommentOrBlank(l_nextUp);
+      leave;
+    endif;
+    l_next += 1;
+  enddo;
+
+  select;
+    when l_multi;
+      l_reason = 'More than one record type (AND/OR lines) is not supported in '
+                 + 'free-form';
+    when %trim(%subst(l_up:15:4)) <> '';
+      l_reason = 'Sequence, number and option entries (columns 15-18) are not valid '
+                 + 'for an externally described record';
+    when %trim(%subst(l_up:19:2)) <> '';
+      l_reason = 'Record-identifying indicator ' + %trim(%subst(l_up:19:2))
+                 + ' is not set by free-form I/O';
+    when %trim(%subst(l_up:21:54)) <> '';
+      l_reason = 'Columns 21-74 of the record line of an externally described '
+                 + 'file must be blank';
+    when not ContName(%trim(%subst(l_up:7:8)));
+      l_reason = 'The record format name is not valid';
+  endsl;
+  if l_reason <> '';
+    ReviewBlock(i_index:l_last:l_reason);
+    return l_last - i_index;
+  endif;
+
+  RptItem(C_STS_CONVERTED:i_lineNo:%trimr(%subst(i_line:6:69)):'');
+  for l_k = i_index + 1 to l_last;
+    l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
+    l_text = %trimr(%subst(g_sourceLines(l_k):6:69));
+    if IsCommentOrBlank(l_nextUp);
+      if %subst(l_nextUp:7:1) = '*';
+        AddOut('//' + %trimr(%subst(g_sourceLines(l_k):8:73)):g_sourceLineNos(l_k));
+      else;
+        AddOut('':g_sourceLineNos(l_k));
+      endif;
+    else;
+      l_reason = ConvertExternalField(g_sourceLineNos(l_k):g_sourceLines(l_k)
+                                      :i_file);
+      if l_reason = '';
+        if %trim(%subst(l_nextUp:21:10)) = '' or %trim(%subst(l_nextUp:21:10))
+           = %trim(%subst(l_nextUp:53:6));
+          RptItem(C_STS_CONVERTED:g_sourceLineNos(l_k):l_text:'');
+        else;
+          RptItem(C_STS_ASSUMPTION:g_sourceLineNos(l_k):l_text
+                  :'The renamed field is a copy (dcl-s like): it is set after each'
+                  + ' READ and CHAIN of the file; a change of it is not written back');
+        endif;
+      else;
+        AddOut('// ' + RulDialectLabel() + ': ' + l_text:g_sourceLineNos(l_k));
+        RptItem(C_STS_REVIEW:g_sourceLineNos(l_k):l_text:l_reason);
+      endif;
+    endif;
+  endfor;
+  return l_last - i_index;
 end-proc;
 
 // ------------------------------------------------------------------
