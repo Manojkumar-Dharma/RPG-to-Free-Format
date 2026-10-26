@@ -5,6 +5,9 @@
      DName             S        10     A
      DShort            S        4      A
      DFlag             S               N
+     DQ                S        5      I
+     DRem              S        5      I
+     DDigits           S        10     A
      DIdx              S        5      I
      DNow              S        6      P0
      DPos              S        3      P0
@@ -63,3 +66,8 @@
      C                   CALL      'OTHER'       PL1
      C     PL1           PLIST
      C                   PARM                    Count
+     C     'abc':'ABC'   XLATE     Name          Full
+     C     Count         DIV       3             Q
+     C                   MVR                     Rem
+     C     *LIKE         DEFN      Name          Copy
+     C                   TESTN                   Digits               61  62

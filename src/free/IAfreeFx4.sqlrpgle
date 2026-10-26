@@ -53,6 +53,12 @@ dcl-s g_protoName varchar(10) dim(40);
 dcl-s g_protoSig varchar(300) dim(40);
 dcl-s g_protoCount int(10) inz(0);
 dcl-s g_cStarted ind inz(*off);
+// The last DIV (for a following MVR).
+dcl-s g_divIdx int(10) inz(0);
+dcl-s g_divF1 varchar(14);
+dcl-s g_divF2 varchar(14);
+dcl-s g_divRes varchar(14);
+dcl-s g_divHalf ind inz(*off);
 dcl-s g_quoted ind inz(*off);           // a name was written as a literal
 dcl-s g_constName varchar(21) dim(C_MAXCONST);
 dcl-s g_constCount int(10) inz(0);
@@ -126,6 +132,7 @@ dcl-proc Fx4Start export;
   g_symCount = 0;
   g_cStarted = *off;
   g_protoCount = 0;
+  g_divIdx = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1799,6 +1806,19 @@ dcl-proc StringStmt;
       o_post = '*in' + i_found + ' = (' + l_expr + ' > 0)';
       return '';
 
+    when i_op = 'XLATE';
+      if i_f1 = '' or i_f2 = '' or i_res = '' or l_b = '' or i_found <> '';
+        o_reason = 'XLATE needs from:to in factor 1, a string in factor 2 and a '
+                   + 'result field, and has no found indicator';
+        return '';
+      endif;
+      l_expr = '%xlate(' + l_a + ':' + l_b + ':' + l_c;
+      if l_d <> '';
+        l_expr += ':' + l_d;
+      endif;
+      l_expr += ')';
+      return i_res + ' = ' + l_expr;
+
     when i_op = 'SUBST';
       if i_f2 = '' or i_res = '';
         o_reason = 'SUBST needs factor 2 and a result field';
@@ -1831,7 +1851,7 @@ dcl-proc IsStringOp;
   end-pi;
 
   return i_op = 'CAT' or i_op = 'SCAN' or i_op = 'CHECK' or i_op = 'CHEKR'
-         or i_op = 'SUBST';
+         or i_op = 'SUBST' or i_op = 'XLATE';
 end-proc;
 
 
@@ -1991,6 +2011,17 @@ dcl-proc WritePrototypes;
   g_protoCount = 0;
   for l_k = 1 to SrcCount();
     l_line = SrcLine(l_k);
+    if IsCOp(l_line) and OpOf(l_line) = 'DEFN'
+       and Up(Txt('C':'FACTOR1':l_line)) = '*LIKE'
+       and SymType(Txt('C':'FACTOR2':l_line)) <> ''
+       and Txt('C':'RESULT':l_line) <> ''
+       and SymType(Txt('C':'RESULT':l_line)) = ''
+       and Txt('C':'DECIMALS':l_line) = '' and Txt('C':'LENGTH':l_line) = '';
+      AddOut('dcl-s ' + Txt('C':'RESULT':l_line) + ' like('
+             + Txt('C':'FACTOR2':l_line) + ');':SrcLineNo(l_k));
+      AddSym(Txt('C':'RESULT':l_line):SymType(Txt('C':'FACTOR2':l_line)));
+      iter;
+    endif;
     if not IsCOp(l_line) or OpOf(l_line) <> 'CALL';
       iter;
     endif;
@@ -2120,6 +2151,115 @@ dcl-proc CallStatements;
     l_call += '; ' + l_post;
   endif;
   return l_call;
+end-proc;
+
+
+// ------------------------------------------------------------------
+// MVR directly after a DIV with integer operands and no half adjust: the
+// remainder is %REM of the operands of the DIV. Returns '' or the reason.
+dcl-proc MvrCheck;
+  dcl-pi *n varchar(150);
+    i_index int(10) const;
+    i_f1 varchar(14) const;
+    i_f2 varchar(14) const;
+    i_ext varchar(6) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_prev int(10) inz(0);
+
+  if i_f1 <> '' or i_f2 <> '' or i_ext <> '';
+    return 'MVR with factors or an extender is not converted';
+  endif;
+  for l_k = i_index - 1 downto 1;
+    if IsCOp(SrcLine(l_k));
+      l_prev = l_k;
+      leave;
+    endif;
+  endfor;
+  if g_divIdx = 0 or l_prev <> g_divIdx;
+    return 'MVR is converted only directly after its DIV';
+  endif;
+  if g_divHalf;
+    return 'MVR after DIV with half adjust is not converted';
+  endif;
+  if not IsIntegerOperand(g_divF1) or not IsIntegerOperand(g_divF2)
+     or not IsIntegerOperand(g_divRes);
+    return '%REM needs integer operands: the DIV above has decimals';
+  endif;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc IsIntegerOperand;
+  dcl-pi *n ind;
+    i_text varchar(14) const;
+  end-pi;
+
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+
+  if %len(i_text) > 0 and %check(C_DIGITS:i_text) = 0;
+    return *on;
+  endif;
+  if SymType(i_text) = '';
+    return *off;
+  endif;
+  ParseType(SymType(i_text):l_kind:l_len:l_dec);
+  return l_kind = 'N' and l_dec = 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// TESTN: NU (columns 71-72) all digits, BN (73-74) blanks and then digits,
+// BL (75-76) all blanks. '; ' separated statements.
+dcl-proc TestnStmts;
+  dcl-pi *n varchar(400);
+    i_line char(100) const;
+    i_res varchar(14) const;
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_out varchar(400) inz('');
+  dcl-s l_ind varchar(2);
+  dcl-s l_k int(10);
+  dcl-s l_test varchar(160);
+
+  o_reason = '';
+  if i_res = '' or SymType(i_res) = '' or %subst(SymType(i_res):1:4) <> 'char';
+    o_reason = 'TESTN needs a declared character result field';
+    return '';
+  endif;
+  for l_k = 1 to 3;
+    select;
+      when l_k = 1;
+        l_ind = Txt('C':'HI':i_line);
+      when l_k = 2;
+        l_ind = Txt('C':'LO':i_line);
+      other;
+        l_ind = Txt('C':'EQ':i_line);
+    endsl;
+    if l_ind = '';
+      iter;
+    endif;
+    select;
+      when l_k = 1;
+        l_test = '%check(''0123456789'' : ' + i_res + ') = 0';
+      when l_k = 2;
+        l_test = i_res + ' <> *blanks and %subst(' + i_res + ':1:1) = '' '' and '
+                 + '%check(''0123456789'' : %trim(' + i_res + ')) = 0';
+      other;
+        l_test = i_res + ' = *blanks';
+    endsl;
+    if %len(l_out) > 0;
+      l_out += '; ';
+    endif;
+    l_out += '*in' + l_ind + ' = (' + l_test + ')';
+  endfor;
+  if l_out = '';
+    o_reason = 'TESTN needs a resulting indicator';
+  endif;
+  return l_out;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -2401,7 +2541,7 @@ dcl-proc ConvertC;
       l_reason = 'Indicator RT is not converted';
     when (Txt('C':'HI':i_line) <> '' or Txt('C':'LO':i_line) <> ''
          or Txt('C':'EQ':i_line) <> '') and l_op <> 'SETON' and l_op <> 'SETOFF'
-         and not IsStringOp(l_op);
+         and not IsStringOp(l_op) and l_op <> 'TESTN';
       l_post = ResultInds(l_op:l_f1:l_f2:l_res:i_line:l_err:l_reason);
       l_hasInd = l_reason = '';
     when IsAndOr(l_op);
@@ -2409,7 +2549,7 @@ dcl-proc ConvertC;
   endsl;
   if l_reason = '' and l_op <> 'BEGSR' and l_op <> 'ENDSR' and l_f1 <> ''
      and l_op <> 'KLIST' and l_op <> 'COMP' and not IsStringOp(l_op)
-     and l_op <> 'CALL' and l_op <> 'PLIST' and l_op <> 'PARM'
+     and l_op <> 'DEFN' and l_op <> 'CALL' and l_op <> 'PLIST' and l_op <> 'PARM'
      and l_op <> 'DO' and l_op <> 'DSPLY' and l_op <> 'COMIT' and l_op <> 'COMMIT'
      and not IsArith(l_op) and not (l_op = 'CHAIN' or l_op = 'SETLL'
      or l_op = 'SETGT' or l_op = 'READE' or l_op = 'READPE' or l_op = 'DELETE')
@@ -2488,6 +2628,28 @@ dcl-proc ConvertC;
           l_stmt = 'for ' + l_res + ' = ' + l_start + ' to ' + l_limit;
           l_kind = 'F';
         endif;
+      when l_op = 'MVR';
+        l_reason = MvrCheck(i_index:l_f1:l_f2:l_ext);
+        if l_reason = '' and (l_res = '' or Txt('C':'LENGTH':i_line) <> ''
+           or Txt('C':'DECIMALS':i_line) <> '');
+          l_reason = 'MVR needs a declared result field';
+        endif;
+        if l_reason = '';
+          l_stmt = l_res + ' = %rem(' + g_divF1 + ' : ' + g_divF2 + ')';
+          l_note = 'MVR converted with %rem on the operands of the DIV above';
+        endif;
+      when l_op = 'DEFN';
+        if Up(l_f1) = '*LIKE' and l_res <> '' and SymType(l_res) <> '';
+          l_stmt = '';
+          l_kind = 'k';
+        else;
+          l_reason = 'DEFN is converted for *LIKE only (declared before the '
+                     + 'first calculation)';
+        endif;
+      when l_op = 'TESTN';
+        l_post = TestnStmts(i_line:l_res:l_reason);
+        l_stmt = '';
+        l_note = 'TESTN approximated with %check: check the blank rules';
       when l_op = 'CALL';
         if l_f1 <> '' or Txt('C':'LENGTH':i_line) <> ''
            or (l_ext <> '' and l_ext <> '(e)');
@@ -2688,6 +2850,14 @@ dcl-proc ConvertC;
           endif;
           if l_op = 'DIV';
             l_note = 'DIV followed by MVR needs a review';
+            g_divIdx = i_index;
+            g_divF1 = l_f1;
+            if l_f1 = '';
+              g_divF1 = l_res;
+            endif;
+            g_divF2 = l_f2;
+            g_divRes = l_res;
+            g_divHalf = l_half;
           endif;
         endif;
       when IsStringOp(l_op);
