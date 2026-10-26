@@ -201,11 +201,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "DEFN (*LIKE) is not converted yet",
+  "reason": "",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -676,11 +676,11 @@
   "ind2": "-",
   "ind3": "Z",
   "halfAdjust": "N",
-  "status": "R",
-  "template": "",
+  "status": "A",
+  "template": "{RES} = %rem({F1}:{F2})",
   "templateNoF1": "",
-  "bifs": "",
-  "reason": "MVR (remainder after DIV) is not converted: %REM needs integer operands",
+  "bifs": "%REM",
+  "reason": "Written with %REM of the operands of the DIV before it; only for whole numbers",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -1531,11 +1531,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "A",
   "template": "",
   "templateNoF1": "",
-  "bifs": "",
-  "reason": "XLATE needs the colon operands",
+  "bifs": "%XLATE",
+  "reason": "Written with %XLATE. Without P the rest of the result field keeps its old value in RPG III; free-form pads it with blanks",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1569,11 +1569,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "DSPLY: message queue and response operands are not converted yet",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1588,11 +1588,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "DUMP is not converted yet",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1683,11 +1683,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1702,11 +1702,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "C",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {

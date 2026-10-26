@@ -20,15 +20,15 @@ Code status and test status follow `PLANNED.md`.
 | ID | Operation (dialect) | Why R today | Resolution | Code status | Test status |
 |----|---------------------|-------------|------------|-------------|-------------|
 | RV-01 | `LOKUP`, `MOVEA` (2, 3) | arrays | Convert: done in FREE-08 | Written | Not tested |
-| RV-02 | `XLATE` (3) | colon operands | Convert: `%xlate(from:to:string:start)`; the no-`P` rule as for `CAT` | Planned | Not started |
-| RV-03 | `MVR` (2, 3) | `%rem` needs integer operands | Convert for integer `DIV`/`MVR` pairs; R for decimals | Planned | Not started |
+| RV-02 | `XLATE` (3) | colon operands | Convert: `%xlate(from:to:string:start)`; the no-`P` rule as for `CAT` | Written | Not tested |
+| RV-03 | `MVR` (2, 3) | `%rem` needs integer operands | Convert for integer `DIV`/`MVR` pairs; R for decimals | Written | Not tested |
 | RV-04 | `TESTN` (3), `TESTZ` (2, 3) | no direct built-in function | Convert: `%check` on the digits / zone test with `%bitand` | Planned | Not started |
 | RV-05 | `BITON`, `BITOF`, `TESTB` (2, 3) | bit operations | Convert: `%bitor`, `%bitand` with `%bitnot`; test with `%bitand` | Planned | Not started |
 | RV-06 | `MHHZO`, `MHLZO`, `MLHZO`, `MLLZO` (2, 3) | zone moves | Convert with `%bitand`/`%bitor` on one byte, or No form | Planned | Not started |
-| RV-07 | `DEFN` (`*LIKE`) (2, 3) | declaration | Convert: `dcl-s NAME like(OTHER)` with the length of `OTHER` | Planned | Not started |
+| RV-07 | `DEFN` (`*LIKE`) (2, 3) | declaration | Convert: `dcl-s NAME like(OTHER)` with the length of `OTHER` | Written | Not tested |
 | RV-08 | `CALL`, `PARM`, `PLIST` (2, 3) | prototype needed | Convert: `dcl-pr` with `extpgm` and `callp`; parameter types from the known fields | Planned | Not started |
-| RV-09 | `DSPLY`, `DUMP` (3) | message queue and response operands | Convert: `dsply` and `dump(a)`; the queue operands as written | Planned | Not started |
-| RV-10 | `COMIT`, `ROLBK` (3) | file handling | Convert: `commit`, `rolbk`; the file list as `(e)` where used | Planned | Not started |
+| RV-09 | `DSPLY`, `DUMP` (3) | message queue and response operands | Convert: `dsply` and `dump(a)`; the queue operands as written | Written | Not tested |
+| RV-10 | `COMIT`, `ROLBK` (3) | file handling | Convert: `commit`, `rolbk`; the file list as `(e)` where used | Written | Not tested |
 | RV-11 | `IN`, `OUT`, `OCUR` (3) | data areas and data structures | Convert: `in`, `out`, `occur`; `*DTAARA` definitions through `DEFN` (RV-07) | Planned | Not started |
 | RV-12 | `EXFMT`, `READC`, `ACQ`, `NEXT`, `POST`, `REL` | WORKSTN file I/O | Convert with the display file of IACNVDSPF; needs the I/O design | Planned | Not started |
 | RV-13 | `EXCPT`, `PAGE`, `PAGE1` to `PAGE7`, O and L specifications | output | FREE-06 (picked up by another session) | In progress | Not tested |
@@ -69,9 +69,10 @@ FREE-10 is being worked on in another session; its R items are tracked there.
 
 ## Order of work
 
-1. Open items first: RV-01 (done), then FREE-06 and FREE-10 when the other
+1. Open items first: RV-01 (written), then FREE-06 and FREE-10 when the other
    session is finished.
-2. The Convert items that need no decision: RV-02 to RV-11, RV-32, RV-35.
+2. The Convert items that need no decision: RV-02, RV-03, RV-07, RV-09 and RV-10
+   are written (FREE-13); RV-04, RV-05, RV-06, RV-08, RV-11, RV-32, RV-35 are next.
 3. The Decide items: RV-14, RV-20/21, RV-30, RV-36.
 4. The Sample items when the members arrive: RV-33, RV-41, RV-42.
 5. RV-12 and RV-31 together with the display file converter.

@@ -115,6 +115,13 @@ dcl-s g_arrTable ind dim(C_MAXARR);
 dcl-s g_arrCount int(10);
 dcl-s g_lookupDeclared ind;
 
+// The operation before this one, and the operands of the last DIV for the MVR that
+// follows it.
+dcl-s g_prevOp varchar(5) inz('');
+dcl-s g_divF1 varchar(60) inz('');
+dcl-s g_divF2 varchar(60) inz('');
+dcl-s g_divRes varchar(60) inz('');
+
 // Key lists (KLIST and KFLD), collected before the conversion: the name, the key
 // fields joined with ':', their number and whether a KFLD was not a plain name.
 dcl-s g_klName varchar(10) dim(C_MAXKL);
@@ -158,6 +165,10 @@ dcl-proc CalcStart export;
   g_fldCount = 0;
   g_arrCount = 0;
   g_lookupDeclared = *off;
+  g_prevOp = '';
+  g_divF1 = '';
+  g_divF2 = '';
+  g_divRes = '';
 end-proc;
 
 // ------------------------------------------------------------------
@@ -814,6 +825,7 @@ dcl-proc CalcLine export;
   dcl-s l_list varchar(300);
   dcl-s l_isStructure ind;
   dcl-s l_isSubrOperand ind;
+  dcl-s l_prevOp varchar(5);
 
   g_lastLineNo = i_lineNo;
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
@@ -966,6 +978,8 @@ dcl-proc CalcLine export;
   g_condBad = '';
 
   // ---- The operation code ---------------------------------------------------
+  l_prevOp = g_prevOp;
+  g_prevOp = '';
   if l_c.operation = '';
     ReviewHere(i_line:i_lineNo:'No operation code');
     return;
@@ -1013,6 +1027,17 @@ dcl-proc CalcLine export;
     ConvertLookup(l_c:l_rule);
     return;
   endif;
+  // DEFN, DSPLY: factor 1 and factor 2 can hold *LIKE, *EXT and *M entries.
+  if l_rule.kind = 'DEFN';
+    g_hdrIndex = 0;
+    ConvertDefn(l_c:l_rule);
+    return;
+  endif;
+  if l_rule.kind = 'DISPLAY';
+    g_hdrIndex = 0;
+    ConvertDsply(l_c:l_rule);
+    return;
+  endif;
   l_isSubrOperand = (l_rule.opcode = 'EXSR' or l_rule.opcode = 'BEGSR'
                      or l_rule.opcode = 'ENDSR' or l_rule.kind = 'CASE');
   if not ConvertFactors(l_c:l_isSubrOperand:l_rule:l_reason);
@@ -1039,6 +1064,25 @@ dcl-proc CalcLine export;
 
   if l_rule.kind <> 'ANDOR';
     g_hdrIndex = 0;
+  endif;
+
+  // DIV keeps its operands for the MVR after it, which divides again with %rem.
+  g_prevOp = l_rule.opcode;
+  if l_rule.opcode = 'DIV';
+    g_divF1 = l_c.factor1C;
+    g_divF2 = l_c.factor2C;
+    g_divRes = l_c.resultC;
+  endif;
+  if l_rule.opcode = 'MVR';
+    l_reason = MvrOperands(l_prevOp);
+    if l_reason <> '';
+      ReviewHere(i_line:i_lineNo:l_reason);
+      return;
+    endif;
+    l_c.factor1 = g_divF1;
+    l_c.factor1C = g_divF1;
+    l_c.factor2 = g_divF2;
+    l_c.factor2C = g_divF2;
   endif;
   select;
     when l_rule.kind = 'IF';
@@ -1081,6 +1125,8 @@ dcl-proc CalcLine export;
       ConvertMove(l_c:l_rule);
     when l_rule.kind = 'OUTPUT';
       ConvertExcept(l_c:l_rule);
+    when l_rule.kind = 'DEBUG' and l_rule.opcode = 'DUMP';
+      ConvertDump(l_c:l_rule);
     other;
       ConvertTemplate(l_c:l_rule);
   endsl;
@@ -2183,6 +2229,274 @@ dcl-proc DeclareHidden;
 end-proc;
 
 // ------------------------------------------------------------------
+// MVR: the remainder of the DIV before it. Only for whole numbers, because %REM
+// needs integer operands: dividend, divisor and the quotient field must have no
+// decimal positions. Returns the reason when that cannot be shown.
+dcl-proc MvrOperands;
+  dcl-pi *n varchar(190);
+    i_prevOp varchar(5) const;
+  end-pi;
+
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+
+  if i_prevOp <> 'DIV';
+    return 'MVR must come immediately after the DIV it belongs to';
+  endif;
+  if g_divF1 = '';
+    return 'MVR after a DIV without factor 1 is not converted: the dividend is '
+           + 'the quotient field';
+  endif;
+  if not OperandType(g_divF1:l_kind:l_len:l_dec);
+    return 'Length and type of ' + g_divF1 + ' are not known: %REM needs a whole '
+           + 'number';
+  endif;
+  if l_kind <> 'N' or l_dec <> 0;
+    return '%REM needs whole numbers: ' + g_divF1 + ' has decimal positions or '
+           + 'is not numeric';
+  endif;
+  if not OperandType(g_divF2:l_kind:l_len:l_dec);
+    return 'Length and type of ' + g_divF2 + ' are not known: %REM needs a whole '
+           + 'number';
+  endif;
+  if l_kind <> 'N' or l_dec <> 0;
+    return '%REM needs whole numbers: ' + g_divF2 + ' has decimal positions or '
+           + 'is not numeric';
+  endif;
+  if not OperandType(g_divRes:l_kind:l_len:l_dec);
+    return 'Length and type of the quotient field ' + g_divRes + ' are not known';
+  endif;
+  if l_dec <> 0;
+    return 'The quotient field ' + g_divRes + ' has decimal positions: the '
+           + 'remainder is not the %REM of the operands';
+  endif;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// DEFN *LIKE: dcl-s NAME like(OTHER); with the length change of columns 49-51
+// (+n or -n) as like(OTHER:+n). The declaration goes with the others at the top.
+// *NAMVAR (data areas) is converted with IN and OUT.
+dcl-proc ConvertDefn;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_base varchar(30);
+  dcl-s l_res varchar(30);
+  dcl-s l_adj varchar(10) inz('');
+  dcl-s l_len varchar(3);
+  dcl-s l_comma int(10);
+  dcl-s l_kind char(1);
+  dcl-s l_flen int(10);
+  dcl-s l_fdec int(10);
+  dcl-s l_delta int(10) inz(0);
+  dcl-s l_sign char(1);
+
+  select;
+    when i_c.cond <> '';
+      l_reason = 'Conditioning indicators are not allowed for DEFN';
+    when Up(i_c.factor1) = '*NAMVAR';
+      l_reason = 'DEFN *NAMVAR (data area) is not converted yet';
+    when Up(i_c.factor1) <> '*LIKE';
+      l_reason = 'Factor 1 of DEFN must be *LIKE or *NAMVAR';
+    when i_c.factor2 = '' or i_c.result = '';
+      l_reason = 'DEFN *LIKE needs the referenced field in factor 2 and the '
+                 + 'defined field in the result field';
+    when i_c.result1 <> '  ' or i_c.result2 <> '  ' or i_c.result3 <> '  ';
+      l_reason = 'Resulting indicators are not used by DEFN';
+    when i_c.halfAdjust <> ' ';
+      l_reason = 'Operation extender ' + i_c.halfAdjust + ' is not allowed for DEFN';
+  endsl;
+
+  // Factor 2: a field, an array (an element is the model) or a table.
+  if l_reason = '';
+    l_base = i_c.factor2;
+    l_comma = %scan(',':l_base);
+    if l_comma > 1;
+      l_base = %subst(l_base:1:l_comma - 1);
+    endif;
+    if %subst(l_base:1:1) = C_QUOTE or IsNumberLiteral(l_base)
+       or not IsName(l_base);
+      l_reason = 'Factor 2 of DEFN *LIKE must be the name of a field';
+    elseif %scan(',':i_c.result) > 0 or not IsName(i_c.result);
+      l_reason = 'The result field of DEFN *LIKE must be a field name';
+    elseif ArrayInfoQuick(i_c.result);
+      l_reason = 'The result field of DEFN *LIKE cannot be an array or table';
+    endif;
+  endif;
+
+  // The change of length: + or - in column 49, the number in 50-51.
+  if l_reason = '' and i_c.length <> '';
+    l_sign = %subst(i_c.length:1:1);
+    if (l_sign <> '+' and l_sign <> '-') or %len(i_c.length) < 2;
+      l_reason = 'The length of DEFN *LIKE must be + or - and a number '
+                 + '(columns 49-51)';
+    else;
+      l_len = %trim(%subst(i_c.length:2));
+      if l_len = '' or %check(C_DIGITS:l_len) > 0;
+        l_reason = 'The length of DEFN *LIKE must be + or - and a number '
+                   + '(columns 49-51)';
+      else;
+        l_delta = %int(l_len);
+        l_adj = ':' + l_sign + %trim(%char(l_delta));
+        if l_sign = '-';
+          l_delta = -l_delta;
+        endif;
+      endif;
+    endif;
+  endif;
+
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  DeclareHidden(Up(i_c.result):'like(' + l_base + l_adj + ')');
+  if OperandType(l_base:l_kind:l_flen:l_fdec) and l_kind <> 'F';
+    CalcDefineField(Up(i_c.result):l_kind:l_flen + l_delta:l_fdec);
+  endif;
+  RptItem(C_STS_CONVERTED:i_c.lineNo:SpecText(i_c.line):'');
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc ArrayInfoQuick;
+  dcl-pi *n ind;
+    i_name varchar(30) const;
+  end-pi;
+
+  dcl-s l_table ind;
+  dcl-s l_seq char(1);
+  dcl-s l_dim int(10);
+  dcl-s l_alt varchar(10);
+
+  return ArrayInfo(i_name:l_table:l_seq:l_dim:l_alt);
+end-proc;
+
+// ------------------------------------------------------------------
+// DSPLY (RPG/400 reference chapter 11): dsply message msgq response; with the
+// error indicator as dsply(e) and *INnn = %error. A response without an output
+// queue uses *EXT (the requester) where RPG/400 uses the job type; a message
+// identifier (*M) and a missing message are not converted.
+dcl-proc ConvertDsply;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-ds l_rule likeds(IAfreeOpc_t);
+  dcl-s l_msg varchar(30) inz('');
+  dcl-s l_queue varchar(30) inz('');
+  dcl-s l_res varchar(30) inz('');
+  dcl-s l_ext varchar(3) inz('');
+  dcl-s l_ind varchar(20) inz('');
+  dcl-s l_reason varchar(150) inz('');
+  dcl-s l_note varchar(190) inz('');
+  dcl-s l_stmt varchar(250);
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+  dcl-s l_count int(10) inz(0);
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+
+  select;
+    when i_c.result1 <> '  ' or i_c.result3 <> '  ';
+      l_reason = 'Only the error indicator (columns 56-57) is used by DSPLY';
+    when i_c.halfAdjust <> ' ';
+      l_reason = 'Operation extender ' + i_c.halfAdjust + ' is not allowed for '
+                 + 'DSPLY';
+    when i_c.factor1 = '';
+      l_reason = 'DSPLY without factor 1 is not converted';
+    when %scan('*M':Up(i_c.factor1)) = 1;
+      l_reason = 'DSPLY with a message identifier (*M) is not converted: the '
+                 + 'message comes from QUSERMSG';
+  endsl;
+  if l_reason = '';
+    if not ConvOperand(i_c.factor1:l_msg:l_reason);
+      l_msg = '';
+    endif;
+  endif;
+  if l_reason = '' and i_c.factor2 <> '';
+    if Up(i_c.factor2) = '*EXT';
+      l_queue = '*EXT';
+    elseif not ConvOperand(i_c.factor2:l_queue:l_reason);
+      l_queue = '';
+    endif;
+  endif;
+  if l_reason = '' and i_c.result <> '';
+    if not ConvOperand(i_c.result:l_res:l_reason);
+      l_res = '';
+    elseif i_c.length <> '';
+      l_reason = DeclareResult(l_res:i_c.length:i_c.decimals:*off);
+    endif;
+  endif;
+  if l_reason = '' and %len(l_msg) > 0;
+    if OperandType(l_msg:l_kind:l_len:l_dec);
+      if l_kind = 'N';
+        l_reason = 'The message of DSPLY must be alphanumeric';
+      endif;
+    endif;
+  endif;
+  if l_reason = '' and i_c.result2 <> '  ';
+    l_reason = IndicatorName(i_c.result2:l_ind);
+    l_ext = '(e)';
+  endif;
+
+  if l_reason <> '';
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  l_stmt = 'dsply' + l_ext + ' ' + l_msg;
+  if l_res <> '';
+    if l_queue = '';
+      l_queue = '*EXT';
+      l_note = 'No output queue: *EXT (the requester) is used; RPG/400 uses '
+               + 'QSYSOPR for a batch job';
+    endif;
+    l_stmt += ' ' + l_queue + ' ' + l_res;
+  elseif l_queue <> '';
+    l_stmt += ' ' + l_queue;
+  endif;
+  l_count = 1;
+  l_statements(1) = l_stmt;
+  if l_ind <> '';
+    l_count += 1;
+    l_statements(l_count) = l_ind + ' = %error';
+  endif;
+
+  l_rule = i_rule;
+  l_rule.reason = l_note;
+  if l_note = '';
+    l_rule.status = C_STS_CONVERTED;
+  else;
+    l_rule.status = C_STS_ASSUMPTION;
+  endif;
+  EmitStatements(i_c:l_rule:l_statements:l_count:'');
+end-proc;
+
+// ------------------------------------------------------------------
+// DUMP: dump identifier; The dump is made only when the control specification has
+// the debug entry (converted to debug(*dump), FREE-03), as in RPG/400.
+dcl-proc ConvertDump;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-s l_statements varchar(250) dim(C_MAXSTMT);
+
+  l_statements(1) = 'dump';
+  if i_c.factor1 <> '';
+    l_statements(1) += ' ' + i_c.factor1C;
+  endif;
+  EmitStatements(i_c:i_rule:l_statements:1:'');
+end-proc;
+
+// ------------------------------------------------------------------
 // LOKUP (RPG II guide chapter 27; RPG/400 reference chapter 11) on an array or a
 // table of the E specifications. Resulting indicators: high (54-55), low (56-57)
 // and equal (58-59); one or two of them, high and low not together.
@@ -2214,7 +2528,7 @@ dcl-proc ConvertLookup;
   dcl-s l_resSeq char(1);
   dcl-s l_resDim int(10);
   dcl-s l_resAlt varchar(10);
-  dcl-s l_f1 varchar(60);
+  dcl-s l_f1 varchar(30);
   dcl-s l_hi varchar(20) inz('');
   dcl-s l_lo varchar(20) inz('');
   dcl-s l_eq varchar(20) inz('');
@@ -2222,7 +2536,7 @@ dcl-proc ConvertLookup;
   dcl-s l_func varchar(12);
   dcl-s l_search varchar(150);
   dcl-s l_element varchar(60);
-  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_reason varchar(150) inz('');
   dcl-s l_note varchar(190) inz('');
   dcl-s l_kind1 char(1);
   dcl-s l_len1 int(10);
@@ -2773,6 +3087,10 @@ dcl-proc ConvertFileOp;
       l_free = 'feod';
     when l_op = 'UNLCK';
       l_free = 'unlock';
+    when l_op = 'COMIT';
+      l_free = 'commit';
+    when l_op = 'ROLBK';
+      l_free = 'rolbk';
     other;
       l_reason = l_op + ' is not converted';
   endsl;
@@ -2781,8 +3099,8 @@ dcl-proc ConvertFileOp;
   l_dsOp = (l_op = 'CHAIN' or l_op = 'READ' or l_op = 'READE' or l_op = 'READP'
             or l_op = 'REDPE' or l_op = 'UPDAT' or l_op = 'WRITE');
 
-  // The file.
-  if l_reason = '';
+  // The file (COMIT and ROLBK name none).
+  if l_reason = '' and l_op <> 'COMIT' and l_op <> 'ROLBK';
     l_name = %trim(%xlate(C_LOWER:C_UPPER:i_c.factor2));
     if not FileInfo(l_name:l_device:l_type:l_recDs:l_keyed);
       l_reason = 'File ' + i_c.factor2 + ' is not declared by a converted file '
@@ -2828,7 +3146,13 @@ dcl-proc ConvertFileOp;
     if l_key <> '';
       l_stmt += ' ' + l_key;
     endif;
-    l_stmt += ' ' + i_c.factor2C;
+    if l_op = 'COMIT' or l_op = 'ROLBK';
+      if l_op = 'COMIT' and i_c.factor1 <> '';
+        l_stmt += ' ' + i_c.factor1C;
+      endif;
+    else;
+      l_stmt += ' ' + i_c.factor2C;
+    endif;
     if l_ds <> '';
       l_stmt += ' ' + l_ds;
     endif;
@@ -2926,8 +3250,10 @@ dcl-proc ConvertString;
     SplitColon(i_c.factor1:l_f1a:l_f1b:l_has1);
     SplitColon(i_c.factor2:l_f2a:l_f2b:l_has2);
     select;
-      when l_has1 and l_op <> 'SCAN';
+      when l_has1 and l_op <> 'SCAN' and l_op <> 'XLATE';
         l_reason = 'Factor 1 of ' + l_op + ' has no colon operand';
+      when l_op = 'XLATE' and not l_has1;
+        l_reason = 'Factor 1 of XLATE needs the From:To strings';
       when (l_has1 and l_f1b = '') or (l_has2 and l_f2b = '')
            or (l_has1 and l_f1a = '') or l_f2a = '';
         l_reason = 'A colon operand is not complete';
@@ -2995,6 +3321,12 @@ dcl-proc ConvertString;
           l_expr += ':' + l_c2b;
         endif;
         l_expr += ')';
+      when l_op = 'XLATE';
+        l_expr = '%xlate(' + l_c1a + ':' + l_c1b + ':' + l_c2a;
+        if l_has2;
+          l_expr += ':' + l_c2b;
+        endif;
+        l_expr += ')';
       when l_op = 'SUBST';
         l_expr = '%subst(' + l_c2a + ':';
         if l_has2;
@@ -3057,7 +3389,7 @@ dcl-proc ConvertString;
 
   // The status: A with the note of the table, C when P was given.
   l_rule = i_rule;
-  if (l_op = 'CAT' or l_op = 'SUBST') and l_pad;
+  if (l_op = 'CAT' or l_op = 'SUBST' or l_op = 'XLATE') and l_pad;
     l_rule.status = C_STS_CONVERTED;
     l_rule.reason = '';
   else;

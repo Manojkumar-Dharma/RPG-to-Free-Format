@@ -117,5 +117,19 @@
   "use": "LOKUP",
   "note": "Element equal to or nearest less",
   "source": "ILE RPG reference, built-in functions (release not checked on a system)"
+ },
+ {
+  "name": "%REM",
+  "since": "V5R1",
+  "use": "MVR",
+  "note": "Remainder of a division of whole numbers",
+  "source": "ILE RPG reference, built-in functions (release not checked on a system)"
+ },
+ {
+  "name": "%XLATE",
+  "since": "V5R1",
+  "use": "XLATE",
+  "note": "Translate characters of a string",
+  "source": "ILE RPG reference, built-in functions (release not checked on a system)"
  }
 ]

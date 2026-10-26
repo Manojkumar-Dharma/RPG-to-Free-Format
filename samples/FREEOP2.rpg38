@@ -1,0 +1,37 @@
+      * RPG III XLATE, MVR, DEFN, DSPLY, DUMP, COMIT, ROLBK
+     H
+      * MVR after DIV with whole numbers
+     C                     Z-ADD10        N1      50
+     C                     Z-ADD3         N2      50
+     C           N1        DIV  N2        Q       50
+     C                     MVR            R       50
+      * XLATE with a start, with P
+     C                     MOVEL'hello'   STR    10
+     C           'abc':'ABCXLATESTR:2     OUT    10
+     C           'abc':'ABCXLATESTR       OUT2   10 P
+      * DEFN *LIKE
+     C           *LIKE     DEFN STR       COPY
+     C           *LIKE     DEFN STR       LONGER+ 5
+     C                     MOVEL'x'       COPY
+      * DSPLY, DUMP, COMIT, ROLBK
+     C           'Hello'   DSPLY
+     C           'Name?'   DSPLY*EXT      ANSWER 10
+     C           'Name?'   DSPLY          ANSWER
+     C           'Name?'   DSPLY                       91
+     C           'AT END'  DUMP
+     C                     DUMP
+     C           'B1'      COMIT                       90
+     C                     ROLBK
+      * Not converted
+     C           N1        DIV  N2        Q2      72
+     C                     MVR            R2      50
+     C                     ADD  1         N1
+     C                     MVR            R3
+     C           'abc':'ABCXLATESTR       OUT          92
+     C           'abc'     XLATESTR       OUT
+     C           *LIKE     DEFN 'ABC'     LIT
+     C           *NAMVAR   DEFN LDA       AREA
+     C           *LIKE     DEFN STR       BADLEN  5
+     C           *MABC1    DSPLY
+     C                     DSPLY
+     C           N1        DSPLY

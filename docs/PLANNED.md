@@ -34,7 +34,7 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | DSP-04 | IACNVDSPF | Confirm assumptions: CFnn(nn) command keys, INDARA and INVITE added, OVRDTA/OVRATR override keywords | Done | Not tested | Checked against the manuals, see `docs/DSPF-MAPPING.md`; open: `CFnn(nn)` response indicator, `CF` against `CA`, `PUTOVR` and `ERASEINP` behaviour need a compile or display test |
 | DSP-05 | IACNVDSPF | Check the layout against a real QS36SRC DSPF36 member | Planned | Not started | Blocked: needs a sample member from the user |
 | DSP-06 | IACNVDSPF | Subfile candidates: detect repeated continuous rows of the same D specifications and report them (status R, output unchanged); subfile DDS (`SFL`, `SFLCTL`) only once a real example shows how the program was changed | Planned | Not started | Blocked: waiting for a DSPF36 member that was converted to a subfile, from the user |
-| FREE-01 | IACNVFREE | RPG to fully free format, based on the S/36-compatible RPG II guide (SC09-1818). Umbrella for FREE-03 to FREE-12; decisions and evidence in `docs/RPG-MAPPING.md` | In progress | Not tested | Umbrella: status follows FREE-03 to FREE-10 |
+| FREE-01 | IACNVFREE | RPG to fully free format, based on the S/36-compatible RPG II guide (SC09-1818). Umbrella for FREE-03 to FREE-13; decisions and evidence in `docs/RPG-MAPPING.md` | In progress | Not tested | Umbrella: status follows FREE-03 to FREE-10 |
 | FREE-02 | IACNVFREE | Evaluate CVTRPGSRC as stage 1 | Done | N/A | Answered from the manual: CVTRPGSRC does not convert RPG36 or RPT36, SC09-2507 Table 125; no stage 1 for RPG36 |
 | FREE-03 | IACNVFREE | Command, driver, report; H and F specifications to `ctl-opt` and `dcl-f` (E specifications moved to FREE-07) | Written | Not tested | Needs a compile and test; `samples/FREEHF.rpg36` |
 | FREE-04 | IACNVFREE | I specifications to D statements (data structure: file record layouts and `DS` lines) | Written | Not tested | `samples/FREEIN.rpg36`; record-identifying indicators, record codes and the cycle entries are R |
@@ -46,12 +46,13 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-10 | IACNVFREE | RPG IV fixed form (`RPGLE`, `SQLRPGLE`): H, F, D, I, C, O, P specifications read through `IACNVLAY`; extended factor 2 and the free-form syntax lines of SC09-2508 as templates | In progress | Not tested | Part 1 (H, F, D, P, directives, /FREE; module `IAfreeFx4`) and part 2a (C specifications: extended factor 2, structured ops, arithmetic, file ops without indicators) written, not compiled. Part 2b (resulting indicators of file operations, arithmetic and COMP; ANDxx/ORxx) written. Conditioning indicators on simple operations written. MOVE/MOVEL between declared fields written. String operations CAT, SCAN, CHECK, CHEKR, SUBST written. Open: other MOVE type pairs, MOVEA, XLATE, CALL/PARM, I and O specs. 7.3 manuals are in `docs/ref`. Picked up 2026-10-25; do not start it in parallel. |
 | FREE-11 | IACNVFREE | Embedded SQL of `SQLRPG` (`C/EXEC SQL`, `C+`, `C/END-EXEC`) to free-form `exec sql ...;` | Written | Not tested | `samples/FREESQL.sqlrpg`; needs a compile and test; `WHENEVER ... GOTO` is A (TAG not converted); SQL in a `/COPY` member is not possible in RPG/400 |
 | FREE-12 | IACNVFREE | RPG III string operations `CAT`, `SCAN`, `SUBST`, `CHECK`, `CHEKR` to `+`, `%scan`, `%subst`, `%check`, `%checkr` (`XLATE` stays R) | Written | Not tested | `samples/FREESTR.rpg38`; needs a compile and test; decision: no `P` is converted with the padded form and marked A; error indicator R; `rules/IACNVRULES.sql` must be run again (new rows and BIFs) |
+| FREE-13 | IACNVFREE | Review items that need no decision, first part: `XLATE`, `MVR` (after `DIV`, whole numbers), `DEFN *LIKE`, `DSPLY`, `DUMP`, `COMIT`, `ROLBK` (RV-02, RV-03, RV-07, RV-09, RV-10 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEOP2.rpg38`; needs a compile and test; `rules/IACNVRULES.sql` must be run again; next: `TESTN`/`TESTZ`, bit operations, zone moves, `CALL`/`PARM`/`PLIST`, `IN`/`OUT`/`OCUR` |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-12 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-13 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.

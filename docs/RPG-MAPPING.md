@@ -424,6 +424,33 @@ Reported R: names ending in `...`, keyword literals continued with `+` or `-`,
 FROMFILE, TOFILE, CLASS, PACKEVEN, object types, invalid entries. `**` compile-time
 data sections are kept as is (A). Sample: `samples/FREE4.rpgle`.
 
+## XLATE, MVR, DEFN, DSPLY, DUMP, COMIT, ROLBK (FREE-13, review items RV-02, RV-03, RV-07, RV-09, RV-10)
+
+Source: SC09-1817 chapter 11 (each operation), the ILE RPG reference (`%XLATE`, `%REM`, `LIKE`, `DSPLY`, `DUMP`, `COMMIT`, `ROLBK`).
+
+| Source | Becomes | Status |
+|---|---|---|
+| `From:To XLATE String:start Result` | `R = %xlate(From:To:String:start);` (start defaults to 1, characters before it are copied unchanged, as in RPG III) | A without `P` (the rest of a longer result keeps its old value in RPG III, free-form pads it), C with `P` |
+| `DIV` followed by `MVR` | `R = %rem(dividend:divisor);` with the operands of that `DIV` | A; only when the dividend, the divisor and the quotient field are known whole numbers (`%REM` needs integers; with decimals the remainder is not the `%REM`); `MVR` not directly after a `DIV`, or after a `DIV` without factor 1, is R |
+| `*LIKE DEFN Other New` | `dcl-s New like(Other);` with the declarations at the top; `+ n` or `- n` in columns 49-51 gives `like(Other:+n)` | C |
+| `DSPLY Message Queue Response` | `dsply message queue response;` with the error indicator as `dsply(e)` and `*INnn = %error;` | C; A when there is a response and no queue: `*EXT` is used, RPG/400 uses `QSYSOPR` for a batch job |
+| `DUMP Identifier` | `dump identifier;` (made only with `debug(*dump)`, which the control specification column 15 gives) | C |
+| `COMIT Boundary`, `ROLBK` | `commit boundary;`, `rolbk;`, the error indicator as `commit(e)` and `*INnn = %error;` | C |
+
+Reported R: `XLATE` with an error indicator, with a factor 1 that is not `From:To`, or with a figurative constant; `DEFN *NAMVAR` (data areas, RV-11), `DEFN` with a literal in factor 2, with conditioning indicators, or with a length that is not `+n` or `-n`; `DSPLY` without factor 1, with a `*M` message identifier, or with a numeric message field; resulting indicators other than the error indicator.
+
+`samples/FREEOP2.rpg38` has one line for each row. Expected result, written from the design and not from a run:
+
+| Line | Expected |
+|---|---|
+| `N1 DIV N2 Q`, `MVR R` (all 5,0) | `Q = N1 / N2;`, `R = %rem(N1:N2);`, A |
+| `'abc':'ABC' XLATE STR:2 OUT 10` | `OUT = %xlate('abc':'ABC':STR:2);`, A; with `P` and `OUT2` C |
+| `*LIKE DEFN STR COPY`, `... LONGER + 5` | `dcl-s COPY like(STR);`, `dcl-s LONGER like(STR:+5);` at the top |
+| `DSPLY 'Hello'`; with `*EXT` and a response; with a response only; with an error indicator | `dsply 'Hello';`; `dsply 'Name?' *EXT ANSWER;`; `dsply 'Name?' *EXT ANSWER;` (A); `dsply(e) 'Name?';` and `*IN91 = %error;` |
+| `DUMP 'AT END'`, `DUMP` | `dump 'AT END';`, `dump;` |
+| `COMIT 'B1'` with error indicator 90, `ROLBK` | `commit(e) 'B1';` and `*IN90 = %error;`, `rolbk;` |
+| `DIV` to 2 decimals then `MVR`; `MVR` after `ADD`; `XLATE` with an error indicator; `XLATE` with no `From:To`; `*LIKE DEFN` of a literal; `*NAMVAR DEFN`; `DEFN` with a length `5`; `DSPLY *MABC1`; `DSPLY` without factor 1; `DSPLY` of a numeric field | each kept as comment, R |
+
 ## LOKUP and MOVEA (FREE-08, arrays and tables of FREE-07)
 
 Source: SC09-1818 chapter 27 and SC09-1817 chapter 11 (LOKUP: the search argument, the high, low and equal indicators, the index, the second table), the ILE RPG reference (`%LOOKUP`, `%LOOKUPGT`, `%LOOKUPGE`, `%LOOKUPLT`, `%LOOKUPLE`). `IAfreeCvt` gives `IAfreeCalc` the arrays and tables of the E specifications (`CalcDefineArray`: name, sequence, number of entries, alternating array). The statements use the hidden field `LOKUP_IX` (declared once).
