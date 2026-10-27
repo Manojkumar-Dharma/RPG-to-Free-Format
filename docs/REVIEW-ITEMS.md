@@ -52,7 +52,7 @@ Code status and test status follow `PLANNED.md`.
 | RV-33 | Alternate collating sequence, file translation, transparent literals | tables | Sample: needs the tables | Planned | Not started |
 | RV-34 | Record address and table files, address output (T), limits processing, direct file load, file addition output, packed key, noncontiguous key | not in free form | No form for most; `EXTK`: R by design | Done | N/A |
 | RV-35 | Arrays from a file (E, columns 11-18), to a file, packed or binary format (columns 43, 55) | not converted | Not possible: `FROMFILE` and `TOFILE` are not allowed in a free-form definition, `EXTFMT(P/B)` is only for such arrays (decided in FREE-19, stays R with that reason); `L` and `R` of compile-time arrays converted to `extfmt` | Written | Not tested |
-| RV-36 | Compiler directives (`/COPY`, `/TITLE` etc.) | members are fixed form | Decide: `/copy` only when the member is converted too; the other directives are dropped with a note. Written as in RPG IV (FREE-29): `/COPY` and `/INCLUDE` are kept with status A in RPG II and III too; the owner can still ask for the other rule | Written (kept as A) | Not tested |
+| RV-36 | Compiler directives (`/COPY`, `/TITLE` etc.) | members are fixed form | Decide: `/copy` only when the member is converted too; the other directives are dropped with a note. Decided: convert the directive. Written as in RPG IV (FREE-29): `/COPY` and `/INCLUDE` are kept with status A in RPG II and III too | Written (kept as A) | Not tested |
 | RV-37 | Embedded SQL: `WHENEVER ... GOTO`, `C/EXEC SQL` with indicators | needs `TAG` (RV-14) | with RV-14 | Planned | Not started |
 
 ## IACNVFREE: RPG IV
