@@ -423,8 +423,9 @@ C specifications (part 2, `ConvertC` in `IAfreeFx4`, sample `samples/FREE4C.rpgl
 R: level indicators (columns 7-8), a conditioning indicator on a group operation (`IF`, `DOW`, `BEGSR`...) or on `RT`, resulting indicators of other operations,
 `ANDxx` and `ORxx` with indicators or after a comment line, traditional `DO`, `MOVE`,
 `MOVEL`, `CALL`/`PARM`, string and other operations, a result field defined by
-length and decimals, a literal continued with `+` or `-`. Statements of a
-converted `/EXEC SQL` are not indented with the groups.
+length and decimals, a literal continued with `+` or `-`.
+
+Embedded SQL in RPG IV (FREE-26, review item RV-59): the statements of a converted `/EXEC SQL` are written by `IAfreeCalc` and indented with the open groups of `IAfreeFx4`: `IndentText` adds two positions for each level that `Fx4Depth` reports (the same width as the RPG IV statements); for RPG II and III the depth is 0 and nothing changes. `samples/FREE4SQL.sqlrpgle`: expected result, written from the design and not from a run: `if Key > 0;` then `  exec sql UPDATE CUSTMAS SET STATUS = 'A'` with its `WHERE` line and the `;` one level further in, the inner `if Count > 1;` with `    exec sql DELETE FROM WORKFILE;` and `  endif;`, then `else;` with `  exec sql SELECT COUNT(*) INTO :COUNT FROM CUSTMAS;` and `endif;`.
 
 Reported R: names ending in `...`, keyword literals continued with `+` or `-`,
 FROMFILE, TOFILE, CLASS, PACKEVEN, object types, invalid entries. `**` compile-time

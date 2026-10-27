@@ -252,17 +252,24 @@ dcl-proc IndentText;
 
   dcl-s l_width int(10);
   dcl-s l_levels int(10);
+  dcl-s l_columns int(10) inz(0);
 
   l_width = %int(RulConfig('INDENT':'2'));
   l_levels = g_depth;
   if %parms >= 1;
     l_levels += i_extra;
   endif;
-  if l_levels <= 0 or l_width <= 0;
+  if l_levels > 0 and l_width > 0;
+    l_columns = l_levels * l_width;
+  endif;
+  // RPG IV: the groups are kept by IAfreeFx4, two positions a level as there
+  // (RV-59); the depth is 0 for RPG II and III.
+  l_columns += 2 * Fx4Depth();
+  if l_columns <= 0;
     return '';
   endif;
   return %subst('                                                            '
-                :1:%min(l_levels * l_width:60));
+                :1:%min(l_columns:60));
 end-proc;
 
 // ------------------------------------------------------------------

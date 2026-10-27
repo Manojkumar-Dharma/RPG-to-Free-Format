@@ -71,7 +71,7 @@ FREE-10 (module `IAfreeFx4`): the R items of the RPG IV source types `RPGLE` and
 | RV-56 | O specifications of RPG IV | columns differ | With FREE-06 part 3 | Planned | Not started |
 | RV-57 | D specifications: names continued with `...`, keyword literals continued with `+` or `-`, `FROMFILE`, `TOFILE`, `CLASS`, `PACKEVEN`, object types; the F spec designations P, S, R, T, sequence, limits | not valid or no form | Convert the continuations; No form for the rest | Planned | Not started |
 | RV-58 | `/COPY` and `/INCLUDE` members | the member is fixed form | with RV-36 | Planned | Not started |
-| RV-59 | SQL statements inside RPG IV groups are not indented with the group | `CalcSqlLine` keeps the RPG II/III indentation | Convert: indent with the group depth of `IAfreeFx4` | Planned | Not started |
+| RV-59 | SQL statements inside RPG IV groups are not indented with the group | `CalcSqlLine` keeps the RPG II/III indentation | Convert: indent with the group depth of `IAfreeFx4` (`Fx4Depth`, FREE-26) | Written | Not tested |
 
 FREE-06 (module `IAfreeOut`): the R items of the output specifications.
 

@@ -124,6 +124,16 @@ dcl-proc IsDigits;
 end-proc;
 
 // ------------------------------------------------------------------
+// The number of open groups (IF, DO, SELECT, ...) of the C specifications, for
+// the SQL statements that IAfreeCalc writes inside them (RV-59).
+dcl-proc Fx4Depth export;
+  dcl-pi *n int(10);
+  end-pi;
+
+  return g_depth;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc Fx4Start export;
   dcl-pi *n;
   end-pi;

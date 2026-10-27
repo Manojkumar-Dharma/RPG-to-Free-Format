@@ -59,6 +59,7 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-23 | IACNVFREE | RPG IV: I specifications of program described files to `FILE_REC` data structures and the result field of `READ`, `CHAIN`, `UPDATE` (RV-55 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4I.rpgle`; needs a compile and test; external renames (RV-30) and the cycle entries stay R |
 | FREE-24 | IACNVFREE | RPG III: renamed fields of externally described files (I specifications) as copies set after READ and CHAIN (RV-30 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEREN.rpg38`; needs a compile and test; the write back is FREE-25; control levels, matching fields and field indicators stay R |
 | FREE-25 | IACNVFREE | RPG III: `WRITE` and `UPDAT` of a record format of an externally described file, with the renamed fields copied back to the external fields first (RV-30 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEREN.rpg38`; needs a compile and test; the record format must be named by the record line of an I specification (no DDS is read); a file with several record formats copies all its renamed fields; RPG IV renames stay R |
+| FREE-26 | IACNVFREE | RPG IV: embedded SQL (`C/EXEC SQL`, `C+`) inside `IF`, `DO`, `SELECT` groups indented with the group depth of `IAfreeFx4` (RV-59 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4SQL.sqlrpgle`; needs a compile and test; `Fx4Depth` is exported by `IAfreeFx4` and used by `IndentText` in `IAfreeCalc`; RPG II and III are unchanged (depth 0) |
 
 ## Notes
 

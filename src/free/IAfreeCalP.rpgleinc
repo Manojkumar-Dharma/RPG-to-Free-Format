@@ -73,6 +73,11 @@ dcl-pr FileRenames varchar(250);
   i_name varchar(8) const;
 end-pr;
 
+// The number of open groups of the RPG IV C specifications (IAfreeFx4), 0 for
+// RPG II and III: SQL statements are indented with it (RV-59).
+dcl-pr Fx4Depth int(10);
+end-pr;
+
 // The renamed fields of a file as assignments back to the external fields
 // (EXT = NEW), for WRITE and UPDAT; '' when there is none (FREE-25).
 dcl-pr FileRenamesBack varchar(250);
