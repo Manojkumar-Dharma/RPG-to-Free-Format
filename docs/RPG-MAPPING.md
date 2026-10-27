@@ -832,3 +832,17 @@ Source: SC09-2508 (7.3), `DEFINE`, `IN`, `OUT`, and the `DTAARA` keyword. In RPG
 | `IN *DTAARA`, `OUT *DTAARA` | `in *dtaara;`, `out *dtaara;` | C |
 
 Reported R: a `DEFINE *DTAARA` with a length, decimals or a conditioning indicator (the field is defined by the result field), whose result field is a subfield or is not declared in the D specifications, `IN` or `OUT` with another factor 1 than `*LOCK`, without factor 2 or with a result field, resulting indicators (the error indicator is not converted; use the `(E)` extender). The data area of a field is not checked by the converter: `IN Plain` for a field without the keyword is left to the compiler. `UNLOCK` of a data area is written by the file operation path, which gives the same `unlock NAME;`.
+
+## RPG IV: MOVE(P) of character fields (FREE-34, RV-50)
+
+`samples/FREE4MV.rpgle` (last lines). `MoveStmt` of `IAfreeFx4`: with the `(P)` extender the result field is blanked and the source is placed at the right end (`MOVE`) or the left end (`MOVEL`); both fields must be declared character fields of a known length. Expected result, written from the design and not from a run (`Wide` 10, `Narrow` 4):
+
+| RPG IV | Free-form | Status |
+|--------|-----------|--------|
+| `MOVE(P) Narrow Wide` (source shorter) | `Wide = *blanks;` then `%subst(Wide : 7 : 4) = Narrow;` | A |
+| `MOVE(P) Wide Narrow` (source longer) | `Narrow = %subst(Wide : 7);` | A |
+| `MOVE(P)` of two fields of the same length | `Wide = Same;` | A |
+| `MOVE(P) 'AB' Wide` | `Wide = *blanks;` then `%subst(Wide : 9 : 2) = 'AB';` | A |
+| `MOVEL(P) Narrow Wide` | `Wide = Narrow;` (was already converted) | A |
+
+`MOVE`/`MOVEL` of other type pairs (character and numeric, numeric of another length or decimal positions) stay R: the digits are moved without the decimal point and the sign goes into the zone, so no assignment gives the same result.

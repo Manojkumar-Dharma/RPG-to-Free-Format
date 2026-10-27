@@ -12,6 +12,9 @@
      DQuo              S              9P2
      DRemd             S              9P2
      DQuo0             S              9P0
+     DWide             S             10A
+     DNarrow           S              4A
+     DSame             S             10A
       * MOVEA: same DIM and element type; *BLANKS and *ZEROS
      C                   MOVEA     Names         Copy
      C                   MOVEA     *BLANKS       Names
@@ -39,3 +42,9 @@
      C                   MVR                     Remd
      C     Dvd           DIV(H)    Dvr           Quo0
      C                   MVR                     Remd
+      * MOVE(P) of character fields: the result is blanked first (FREE-34)
+     C                   MOVE(P)   Narrow        Wide
+     C                   MOVE(P)   Wide          Narrow
+     C                   MOVE(P)   Same          Wide
+     C                   MOVE(P)   'AB'          Wide
+     C                   MOVEL(P)  Narrow        Wide

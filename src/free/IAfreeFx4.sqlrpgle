@@ -2203,7 +2203,8 @@ end-proc;
 // ------------------------------------------------------------------
 // MOVE and MOVEL (SC09-2508, the operation codes): converted only when both
 // fields are declared in this source, have a known type and the result is the
-// same as an assignment or a %SUBST of it. Returns the statement, or '' with
+// same as an assignment or a %SUBST of it (MOVE(P) may give two statements
+// separated by '; '). Returns the statement, or '' with
 // o_reason set.
 dcl-proc MoveStmt;
   dcl-pi *n varchar(300);
@@ -2300,8 +2301,16 @@ dcl-proc MoveStmt;
         return i_res + ' = ' + i_f2;
       endif;
       if i_pad;
-        o_reason = 'MOVE(P) is not converted';
-        return '';
+        // MOVE(P): the result is blanked, the source ends at its last position.
+        if l_sLen >= l_rLen;
+          if l_sLen = l_rLen;
+            return i_res + ' = ' + i_f2;
+          endif;
+          return i_res + ' = %subst(' + i_f2 + ':' + %char(l_sLen - l_rLen + 1)
+                 + ')';
+        endif;
+        return i_res + ' = *blanks; %subst(' + i_res + ':'
+               + %char(l_rLen - l_sLen + 1) + ':' + %char(l_sLen) + ') = ' + i_f2;
       endif;
       if l_sLen = l_rLen;
         return i_res + ' = ' + i_f2;
@@ -4038,6 +4047,11 @@ dcl-proc ConvertC;
           l_stmt = MoveStmt(l_op:l_ext = '(p)':l_f2:l_res:l_reason);
           if l_reason = '' and l_stmt <> '';
             l_note = l_op + ' converted from the declared field types: check';
+          endif;
+          // Two statements (MOVE(P) to a longer result): written one by one.
+          if %scan('; ':l_stmt) > 0;
+            l_post = l_stmt;
+            l_stmt = '';
           endif;
         endif;
       when l_op = 'COMP';

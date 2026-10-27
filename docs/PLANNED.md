@@ -67,12 +67,13 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-31 | IACNVFREE | RPG IV: `MOVEA` of whole arrays (same `DIM` and element type, `*BLANKS`, `*ZEROS`) and `*LIKE DEFINE` with a length change (`+n`, `-n`); `DEFINE` is read as the RPG IV name of `DEFN` (RV-50 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4MV.rpgle`; needs a compile and test; `samples/FREE4C.rpgle` used `DEFN`, now `DEFINE`; `MOVE`/`MOVEL` of other type pairs, `MVR` with decimals, `*DTAARA DEFINE` and `IN`/`OUT` stay R |
 | FREE-32 | IACNVFREE | RPG IV: `MVR` after a `DIV` with decimals (dividend less quotient times divisor); `MVR` is R when the `DIV` result field is its own dividend or divisor (RV-50 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4MV.rpgle`; needs a compile and test; check the decimal positions of the remainder field |
 | FREE-33 | IACNVFREE | RPG IV: `*DTAARA DEFINE` to the `DTAARA` keyword of the definition (`ConvertD` reads the C specifications), `IN`, `OUT` (`*LOCK`, `(E)`, `*DTAARA`) (RV-11, RV-50 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4DA.rpgle`; needs a compile and test; a `DEFINE` with a length, a subfield, an undeclared field and resulting indicators stay R |
+| FREE-34 | IACNVFREE | RPG IV: `MOVE(P)` of character fields (result blanked, source at the right end) (RV-50 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4MV.rpgle`; needs a compile and test; `MOVE`/`MOVEL` of character to numeric and numeric to character or of another length or decimals stay R by design |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-33 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-34 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.
