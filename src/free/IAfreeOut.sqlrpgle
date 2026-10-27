@@ -51,6 +51,8 @@ dcl-s g_fEnd int(10) dim(C_MAXFLD);
 dcl-s g_fConst varchar(30) dim(C_MAXFLD);
 dcl-s g_fCond varchar(30) dim(C_MAXFLD);
 dcl-s g_fReason varchar(120) dim(C_MAXFLD);
+dcl-s g_fBlank ind dim(C_MAXFLD);           // blank after (column 39)
+dcl-s g_fSpecial char(1) dim(C_MAXFLD);     // P PAGE, J UDATE, S *DATE
 dcl-s g_fCount int(10) inz(0);
 // The DDS source.
 dcl-s g_dds varchar(80) dim(C_MAXDDS);
@@ -303,6 +305,8 @@ dcl-proc OutBuild;
   dcl-s l_fmt char(1);
   dcl-s l_const varchar(30);
   dcl-s l_used ind;
+  dcl-s l_relative ind;
+  dcl-s l_digits varchar(5);
 
   if g_built;
     return;
@@ -332,31 +336,71 @@ dcl-proc OutBuild;
       g_fConst(g_fCount) = Cols(l_line:45:70);
       g_fReason(g_fCount) = '';
       g_fEnd(g_fCount) = 0;
+      g_fBlank(g_fCount) = *off;
+      g_fSpecial(g_fCount) = ' ';
       l_end = Cols(l_line:40:43);
       l_fmt = %subst(Up(%subst(l_line:44:1) + ' '):1:1);
       l_cond = IndicatorCond(l_line:l_reason:' ');
       g_fCond(g_fCount) = l_cond;
+      l_relative = (%subst(l_end:1:1) = '+');
+      l_digits = l_end;
+      if l_relative;
+        l_digits = %trim(%subst(l_end:2));
+      endif;
+      select;
+        when g_fName(g_fCount) = 'PAGE';
+          g_fSpecial(g_fCount) = 'P';
+        when g_fName(g_fCount) = 'UDATE';
+          g_fSpecial(g_fCount) = 'J';
+        when g_fName(g_fCount) = '*DATE';
+          g_fSpecial(g_fCount) = 'S';
+      endsl;
       select;
         when l_reason <> '';
           g_fReason(g_fCount) = l_reason;
-        when l_end = '' or %check(C_DIGITS:l_end) > 0;
+        when l_digits = '' or %check(C_DIGITS:l_digits) > 0;
           g_fReason(g_fCount) = 'End position (columns 40-43) ' + l_end
-                                + ' is not a plain position';
+                                + ' is not a plain or relative position';
+        when l_relative and (g_gFields(l_g) = 0 or g_fEnd(g_fCount - 1) = 0);
+          g_fReason(g_fCount) = 'A relative end position needs an end position '
+                                + 'before it in the same record';
         when l_fmt <> ' ';
           g_fReason(g_fCount) = 'Data format ' + l_fmt + ' (column 44) is not '
                                 + 'converted';
-        when Up(%subst(l_line:39:1)) = 'B';
-          g_fReason(g_fCount) = 'Blank after (column 39) is not converted';
+        when Up(%subst(l_line:39:1)) <> ' ' and Up(%subst(l_line:39:1)) <> 'B';
+          g_fReason(g_fCount) = 'Entry ' + %subst(l_line:39:1) + ' in column 39 '
+                                + 'is not valid';
+        when Up(%subst(l_line:39:1)) = 'B' and g_fName(g_fCount) = '';
+          g_fReason(g_fCount) = 'Blank after (column 39) needs a field';
         when g_fName(g_fCount) = '' and not IsConstant(g_fConst(g_fCount));
           g_fReason(g_fCount) = 'A field line needs a field name or a constant';
-        when g_fName(g_fCount) <> '' and g_fConst(g_fCount) <> '';
-          g_fReason(g_fCount) = 'Edit words (columns 45-70) are not converted yet';
-        when IsSpecialName(g_fName(g_fCount));
+        when g_fName(g_fCount) <> '' and g_fConst(g_fCount) <> ''
+             and not ((g_fEdit(g_fCount) = ' ' and IsConstant(g_fConst(g_fCount)))
+                      or (g_fEdit(g_fCount) <> ' '
+                          and (g_fConst(g_fCount) = '''*'''
+                               or g_fConst(g_fCount) = '''$''')));
+          g_fReason(g_fCount) = 'The entry in columns 45-70 is not an edit word, '
+                                + 'a * or a $ with an edit code';
+        when g_fSpecial(g_fCount) = ' ' and IsSpecialName(g_fName(g_fCount));
           g_fReason(g_fCount) = 'Field ' + g_fName(g_fCount) + ' (special word, '
                                 + 'array element or table) is not converted';
+        when g_fName(g_fCount) <> '' and g_fEdit(g_fCount) <> ' '
+             and %scan(g_fEdit(g_fCount):'1234ABCDJKLMNOPQXZY') = 0;
+          g_fReason(g_fCount) = 'Edit code ' + g_fEdit(g_fCount) + ' is not '
+                                + 'converted (user-defined codes depend on the '
+                                + 'system)';
+        when g_fEdit(g_fCount) = 'Y' and g_fSpecial(g_fCount) <> 'J'
+             and g_fSpecial(g_fCount) <> 'S';
+          g_fReason(g_fCount) = 'Edit code Y of a field other than UDATE or *DATE '
+                                + 'is not converted';
       endsl;
-      if l_end <> '' and %check(C_DIGITS:l_end) = 0;
-        g_fEnd(g_fCount) = %int(l_end);
+      if g_fReason(g_fCount) = '';
+        if l_relative;
+          g_fEnd(g_fCount) = g_fEnd(g_fCount - 1) + %int(l_digits);
+        else;
+          g_fEnd(g_fCount) = %int(l_digits);
+        endif;
+        g_fBlank(g_fCount) = (Up(%subst(l_line:39:1)) = 'B');
       endif;
       g_gFields(l_g) += 1;
       g_gEnd(l_g) = l_index;
@@ -836,6 +880,201 @@ dcl-proc DdsRow;
 end-proc;
 
 // ------------------------------------------------------------------
+// The field name in the DDS: *DATE becomes SYSDATE.
+dcl-proc DdsName;
+  dcl-pi *n varchar(10);
+    i_field int(10) const;
+  end-pi;
+
+  if g_fSpecial(i_field) = 'S';
+    return 'SYSDATE';
+  endif;
+  return g_fName(i_field);
+end-proc;
+
+// ------------------------------------------------------------------
+// The edit code or edit word of a numeric output field (RV-61): the printed width
+// and the DDS keywords. Returns the reason when it cannot be converted.
+dcl-proc NumericEdit;
+  dcl-pi *n varchar(150);
+    i_field int(10) const;
+    i_digits int(10) const;
+    i_decimals int(10) const;
+    o_width int(10);
+    o_keyword varchar(40);
+  end-pi;
+
+  dcl-s l_code char(1);
+  dcl-s l_currency ind inz(*off);
+  dcl-s l_fill varchar(2) inz('');
+  dcl-s l_keyword varchar(80) inz('');
+
+  o_width = i_digits;
+  o_keyword = '';
+  l_code = g_fEdit(i_field);
+  if g_fSpecial(i_field) = 'P' and (l_code <> ' ' or g_fConst(i_field) <> '');
+    return 'PAGE has its own editing: an edit code or edit word is not converted';
+  endif;
+  select;
+    when g_fSpecial(i_field) = 'P';
+      l_keyword = 'PAGNBR EDTCDE(Z)';
+    when g_fSpecial(i_field) = 'J';
+      l_keyword = 'DATE(*JOB)';
+    when g_fSpecial(i_field) = 'S';
+      l_keyword = 'DATE(*SYS)';
+  endsl;
+  select;
+    when l_code <> ' ';
+      if g_fConst(i_field) = '''$''';
+        l_currency = *on;
+        l_fill = ' $';
+      elseif g_fConst(i_field) = '''*''';
+        l_fill = ' *';
+      endif;
+      if l_code = 'Y';
+        o_width = 8;
+      else;
+        o_width = EditWidth(l_code:i_digits:i_decimals:l_currency);
+        if o_width = 0;
+          return 'Edit code ' + l_code + ' is not converted';
+        endif;
+      endif;
+      if l_keyword <> '';
+        l_keyword += ' ';
+      endif;
+      l_keyword += 'EDTCDE(' + l_code + l_fill + ')';
+    when g_fConst(i_field) <> '';
+      o_width = EditWordLength(g_fConst(i_field));
+      if l_keyword <> '';
+        l_keyword += ' ';
+      endif;
+      l_keyword += 'EDTWRD(' + g_fConst(i_field) + ')';
+  endsl;
+  if %len(l_keyword) > 40 or o_width < 1;
+    return 'The edit word is too long for one DDS line';
+  endif;
+  o_keyword = l_keyword;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// The printed width of an edited numeric field (RV-61): digits, the decimal point,
+// the commas of the codes 1, 2, A, B, J, K, N and O, the sign (CR, minus) and a
+// floating currency symbol. i_code X and Z print the digits only. 0 when the code
+// is not converted.
+dcl-proc EditWidth;
+  dcl-pi *n int(10);
+    i_code char(1) const;
+    i_digits int(10) const;
+    i_decimals int(10) const;
+    i_currency ind const;
+  end-pi;
+
+  dcl-s l_width int(10);
+  dcl-s l_integer int(10);
+
+  if i_code = 'X' or i_code = 'Z';
+    return i_digits;
+  endif;
+  if %scan(i_code:'1234ABCDJKLMNOPQ') = 0;
+    return 0;
+  endif;
+  l_width = i_digits;
+  if i_decimals > 0;
+    l_width += 1;
+  endif;
+  l_integer = i_digits - i_decimals;
+  if %scan(i_code:'12ABJKNO') > 0 and l_integer > 3;
+    l_width += (l_integer - 1) / 3;
+  endif;
+  select;
+    when %scan(i_code:'ABCD') > 0;
+      l_width += 2;
+    when %scan(i_code:'JKLMNOPQ') > 0;
+      l_width += 1;
+  endsl;
+  if i_currency;
+    l_width += 1;
+  endif;
+  return l_width;
+end-proc;
+
+// ------------------------------------------------------------------
+// The length of an edit word between its apostrophes (a doubled apostrophe is one).
+dcl-proc EditWordLength;
+  dcl-pi *n int(10);
+    i_text varchar(30) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_len int(10) inz(0);
+
+  l_k = 2;
+  dow l_k < %len(i_text);
+    l_len += 1;
+    if %subst(i_text:l_k:2) = '''''';
+      l_k += 1;
+    endif;
+    l_k += 1;
+  enddo;
+  return l_len;
+end-proc;
+
+// ------------------------------------------------------------------
+// The statements that clear the fields with blank after (column 39) of a record,
+// 'clear A; clear B', '' when there is none.
+dcl-proc GroupAfter;
+  dcl-pi *n varchar(120);
+    i_group int(10) const;
+  end-pi;
+
+  dcl-s l_f int(10);
+  dcl-s l_text varchar(120) inz('');
+
+  for l_f = g_gFirst(i_group) to g_gFirst(i_group) + g_gFields(i_group) - 1;
+    if g_fBlank(l_f) and g_fName(l_f) <> '';
+      if l_text <> '';
+        l_text += '; ';
+      endif;
+      l_text += 'clear ' + g_fName(l_f);
+    endif;
+  endfor;
+  return l_text;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc OutExceptAfter export;
+  dcl-pi *n varchar(120);
+    i_name varchar(6) const;
+    i_number int(10) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  l_g = OutGroupNumber(i_name:i_number);
+  if l_g = 0;
+    return '';
+  endif;
+  return GroupAfter(l_g);
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc OutCycleAfter export;
+  dcl-pi *n varchar(120);
+    i_part char(1) const;
+    i_number int(10) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  l_g = OutCycleGroup(i_part:i_number);
+  if l_g = 0;
+    return '';
+  endif;
+  return GroupAfter(l_g);
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc CycleNote;
   dcl-pi *n varchar(120);
     i_type char(1) const;
@@ -879,6 +1118,10 @@ dcl-proc OutFinish export;
   dcl-s l_keys varchar(60);
   dcl-s l_word varchar(20);
   dcl-s l_blank int(10);
+  dcl-s l_width int(10);
+  dcl-s l_keyword varchar(40);
+  dcl-s l_special char(1);
+  dcl-s l_known ind;
 
   OutBuild();
   g_ddsCount = 0;
@@ -892,23 +1135,43 @@ dcl-proc OutFinish export;
     l_first = g_gFirst(l_g);
     l_last = l_first + g_gFields(l_g) - 1;
     for l_f = l_first to l_last;
+      l_keyword = '';
+      l_special = ' ';
       select;
         when g_fReason(l_f) <> '';
           l_reason = g_fReason(l_f);
         when g_fName(l_f) = '';
           // A constant: 'text' ending at the end position.
           l_len = ConstLength(g_fConst(l_f));
+          l_width = l_len;
           l_start = g_fEnd(l_f) - l_len + 1;
           l_type = '';
           l_decText = '';
         other;
-          if not CalcFieldInfo(g_fName(l_f):l_kind:l_len:l_dec);
+          l_known = *on;
+          select;
+            when g_fSpecial(l_f) = 'P';
+              l_kind = 'N';
+              l_len = 4;
+              l_dec = 0;
+            when g_fSpecial(l_f) = 'J' or g_fSpecial(l_f) = 'S';
+              l_kind = 'N';
+              l_len = 6;
+              l_dec = 0;
+            other;
+              l_known = CalcFieldInfo(g_fName(l_f):l_kind:l_len:l_dec);
+          endsl;
+          l_width = l_len;
+          if not l_known;
             l_reason = 'Field ' + g_fName(l_f) + ' has no known length and type';
-          elseif l_kind = 'N' and g_fEdit(l_f) <> ' ';
-            l_reason = 'Edit code ' + g_fEdit(l_f) + ' of ' + g_fName(l_f)
-                       + ' is not converted yet';
+          elseif l_kind <> 'N' and (g_fEdit(l_f) <> ' ' or g_fConst(l_f) <> '');
+            l_reason = 'Edit code or edit word of the character field '
+                       + g_fName(l_f) + ' is not valid';
           else;
-            l_start = g_fEnd(l_f) - l_len + 1;
+            l_reason = NumericEdit(l_f:l_len:l_dec:l_width:l_keyword);
+          endif;
+          if l_reason = '';
+            l_start = g_fEnd(l_f) - l_width + 1;
             if l_kind = 'N';
               l_type = 'S';
               l_decText = %char(l_dec);
@@ -916,6 +1179,7 @@ dcl-proc OutFinish export;
               l_type = 'A';
               l_decText = '';
             endif;
+            l_special = g_fSpecial(l_f);
           endif;
       endsl;
       if l_reason = '' and l_start < 1;
@@ -927,16 +1191,20 @@ dcl-proc OutFinish export;
       if l_reason <> '';
         leave;
       endif;
-      l_prevStart = l_start + l_len - 1;
+      l_prevStart = l_start + l_width - 1;
       if l_rowCount < 100;
         l_rowCount += 1;
         if g_fName(l_f) = '';
           l_rows(l_rowCount) = DdsRow(DdsCond(g_fCond(l_f)):'':'':'':'':
                                       %char(l_start):g_fConst(l_f));
         else;
-          l_rows(l_rowCount) = DdsRow(DdsCond(g_fCond(l_f)):g_fName(l_f)
+          l_rows(l_rowCount) = DdsRow(DdsCond(g_fCond(l_f)):DdsName(l_f)
                                       :%char(l_len):l_type:l_decText
-                                      :%char(l_start):'');
+                                      :%char(l_start):l_keyword);
+          if l_special <> ' ';
+            // PAGNBR and DATE fields are supplied by the system: no usage.
+            %subst(l_rows(l_rowCount):38:1) = ' ';
+          endif;
         endif;
       endif;
     endfor;

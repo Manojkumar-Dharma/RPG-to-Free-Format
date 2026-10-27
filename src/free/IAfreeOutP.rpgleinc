@@ -57,6 +57,18 @@ dcl-pr OutCycleCond varchar(200);
   i_number int(10) const;
 end-pr;
 
+// The statements that clear the fields with blank after (column 39) of the nth
+// record, 'clear A; clear B', '' when there is none.
+dcl-pr OutExceptAfter varchar(120);
+  i_name varchar(6) const;
+  i_number int(10) const;
+end-pr;
+
+dcl-pr OutCycleAfter varchar(120);
+  i_part char(1) const;
+  i_number int(10) const;
+end-pr;
+
 // Builds the DDS source after the whole source is converted (the field types
 // are known then). Returns the number of DDS lines.
 dcl-pr OutFinish int(10);

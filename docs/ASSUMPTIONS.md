@@ -34,6 +34,7 @@ cannot check. The R list is in `REVIEW-ITEMS.md`. Audit of 2026-10-27.
 | `EXTFMT` length includes the sign | E specification | keep |
 | Printer file DDS comments, or the DDS member with `DDSTGT` (FREE-06) | `IAfreeCvt` | keep until tested |
 | H, D, T output records of the cycle skeleton (FREE-37) | `OutFinish`, `CycOutput` | new: written at step 1 and in `IA_TOTALS`; the DDS is not tested |
+| Edited output fields: width of the edit codes, `PAGNBR`, `DATE` (FREE-38) | `IAfreeOut` | new: the DDS positions come from the manual's tables, not from a run |
 
 ## Proposed changes
 

@@ -1,0 +1,15 @@
+      * Edited output fields (FREE-38, RV-61)
+     H
+     FREPORT  O         132     OA     PRINTER
+     C                     Z-ADD1234567   AMT     92
+     C                     Z-ADD12        CNT     50
+     C                     EXCPT LINE
+     OREPORT  E  1             LINE
+     O                         AMT   1   14
+     O                         AMT   J   28
+     O                         AMT   Z   40
+     O                         CNT   3B  50
+     O                         AMT       60 ' 0 ,  0 .  '
+     O                         PAGE      70
+     O                         UDATE Y   80
+     O                         AMT   1 + 15

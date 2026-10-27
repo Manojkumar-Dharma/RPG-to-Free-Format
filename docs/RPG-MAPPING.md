@@ -672,7 +672,8 @@ Decision (user, 2026-10-25): the output of a PRINTER file is made as an external
 | Heading, detail and total records (types H, D, T) with the cycle skeleton (FREE-36) | a record format `HEAD01`, `DETAIL01`, `TOTAL01` (next free number); H and D are written at step 1 of the cycle, T at the end of `IA_TOTALS` (see below) | A |
 | Heading, detail and total records without the cycle skeleton | whole record as comments | R |
 | `MR`, `RT` output indicators; ADD, DEL, fetch overflow, release (16-18) | comments | R |
-| Edit codes (38) on a numeric field, edit words, blank after (39), data format P, B, L, R (44), relative end positions, `PAGE`, `UDATE` and the like, `*PLACE`, array elements | comments | R |
+| Edit codes, edit words, blank after, relative end positions, `PAGE`, `UDATE`, `*DATE` | see the section below (FREE-38) | A |
+| Data format P, B, L, R (44), `PAGE1`-`PAGE7`, `UDAY`, `UMONTH`, `UYEAR`, `*PLACE`, array elements, edit codes 5-9 | comments | R |
 | A field without a known length (not defined by I, E or a result field) | the record format is not generated | R (the `write` has to be fixed by hand) |
 | A second printer file, a file that is not a converted PRINTER file | comments | R |
 
@@ -914,3 +915,36 @@ Source: SC09-1817 (output indicators, the 1P indicator, the program cycle). The 
 | `MR`, `RT`, `1P` on T, a field line with a level indicator | R |
 
 A heading or detail record without any indicator is also written on the first cycle (fields still blank), as RPG does. The numbers of the record formats follow the source order for each type.
+
+## Edited output fields (FREE-38, RV-61)
+
+Source: SC09-1817 chapter 14 (edit codes, tables 37 to 40; the end position is the end of the edited field). The DDS field has the length and decimals of the field; its position is the end position less the **edited width**, which the converter works out:
+
+width = digits + 1 for a decimal point (decimals > 0) + commas + sign (+ 1 for a floating `$`)
+
+| Code | Commas | Sign | Notes |
+|---|---|---|---|
+| `1`, `2` | yes (one for each three integer digits after the first) | none | `1` prints a zero balance, `2` blanks it |
+| `3`, `4` | no | none | |
+| `A`, `B` | yes | `CR`, 2 positions | |
+| `C`, `D` | no | `CR` | |
+| `J`, `K` | yes | `-` after, 1 position | |
+| `L`, `M` | no | `-` after | |
+| `N`, `O` | yes | floating minus, 1 position | |
+| `P`, `Q` | no | floating minus | |
+| `X`, `Z` | no | none, the width is the digits | |
+| `Y` | | `UDATE` and `*DATE` only: 8 positions | other fields stay R |
+
+| Source | DDS and free-form |
+|---|---|
+| edit code | `EDTCDE(code)`; with `'$'` in columns 45-47: `EDTCDE(code $)`, with `'*'`: `EDTCDE(code *)` |
+| edit word (a quoted constant with a field name) | `EDTWRD('...')`, the width is the length of the word; longer than one DDS line: R |
+| blank after (`B`, column 39) | `clear FIELD` after the `write` of the record, inside its condition |
+| relative end position (`+  5`) | the end position of the field before in the same record plus the number |
+| `PAGE` | field of 4 digits with `PAGNBR EDTCDE(Z)`, no usage |
+| `UDATE`, `*DATE` | field of 6 digits with `DATE(*JOB)` or `DATE(*SYS)` (name `SYSDATE`), no usage; edit codes as above |
+| edit code on a character field, codes 5-9, `Y` on other fields | R |
+
+Fields must be in ascending order of their positions (the edited start is compared with the end of the field before). Written from the manual and not from a run: check the first `CRTPRTF`, in particular the usage of `PAGNBR` and `DATE` fields and the position of edited fields.
+
+Sample `samples/FREEEDT.rpg36`. Expected, with `AMT` 9 digits and 2 decimals (`1`: width 12, start 3; `J`: width 13, start 16; `Z`: width 9, start 32), `CNT` 5 digits with code `3` (width 5, start 46) and blank after (`write LINE; clear CNT;`), the edit word (11 positions, start 50), `PAGE` (start 67), `UDATE` with `Y` (width 8, start 73) and the last field relative (+ 15, end 95).
