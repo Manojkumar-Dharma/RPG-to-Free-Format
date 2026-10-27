@@ -64,12 +64,13 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-28 | IACNVFREE | RPG IV: `ANDxx` and `ORxx` after comment lines (comments between `IFxx`, `DOWxx`, `DOUxx`, `WHxx` and the `ANDxx`/`ORxx` lines; RV-54 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4C.rpgle`; needs a compile and test; the comment lines are written after the header; with conditioning indicators the `ANDxx`/`ORxx` line stays R (not allowed in RPG) |
 | FREE-29 | IACNVFREE | RPG II and III: `/COPY` and `/INCLUDE` kept with status A, as in RPG IV (RV-36, RV-58 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEHF.rpg36` (line 24); needs a compile and test; RV-36 decided: the directive is converted (kept as A) |
 | FREE-30 | IACNVFREE | RPG IV: names continued with `...` (D and P specifications and inside keywords) and keyword literals continued with `+` or `-` (RV-57 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4NM.rpgle`; needs a compile and test; names up to 150 characters (tables widened); a comment line between continued name lines, a numeric constant continued on the next line, `FROMFILE`, `TOFILE`, `CLASS`, `PACKEVEN` and object types stay R |
+| FREE-31 | IACNVFREE | RPG IV: `MOVEA` of whole arrays (same `DIM` and element type, `*BLANKS`, `*ZEROS`) and `*LIKE DEFINE` with a length change (`+n`, `-n`); `DEFINE` is read as the RPG IV name of `DEFN` (RV-50 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4MV.rpgle`; needs a compile and test; `samples/FREE4C.rpgle` used `DEFN`, now `DEFINE`; `MOVE`/`MOVEL` of other type pairs, `MVR` with decimals, `*DTAARA DEFINE` and `IN`/`OUT` stay R |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-19 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-31 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.

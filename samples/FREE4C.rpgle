@@ -80,7 +80,7 @@
      C     'abc':'ABC'   XLATE     Name          Full
      C     Count         DIV       3             Q
      C                   MVR                     Rem
-     C     *LIKE         DEFN      Name          Copy
+     C     *LIKE         DEFINE    Name          Copy
      C                   TESTN                   Digits               61  62
       * Conditioned groups and DO without an index (FREE-21)
      C   01Count         IFEQ      1

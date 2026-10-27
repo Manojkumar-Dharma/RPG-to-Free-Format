@@ -47,6 +47,7 @@ dcl-s g_symCount int(10) inz(0);
 dcl-c C_MAXARR 200;
 dcl-s g_arrName varchar(150) dim(C_MAXARR);
 dcl-s g_arrSeq char(1) dim(C_MAXARR);        // A ascending, D descending, blank
+dcl-s g_arrDim varchar(30) dim(C_MAXARR);    // the DIM text, for MOVEA
 dcl-s g_arrCount int(10) inz(0);
 // CALL, PARM and PLIST: the parameters read last and the prototypes written.
 dcl-c C_MAXPARM 20;
@@ -1752,6 +1753,7 @@ dcl-proc ConvertD;
      and KwFind('DIM') > 0 and g_arrCount < C_MAXARR;
     g_arrCount += 1;
     g_arrName(g_arrCount) = Up(l_name);
+    g_arrDim(g_arrCount) = Up(KwParam(KwFind('DIM')));
     select;
       when KwFind('DESCEND') > 0;
         g_arrSeq(g_arrCount) = 'D';
@@ -2001,6 +2003,141 @@ dcl-proc ParseType;
          or l_word = 'bindec';
       o_kind = 'N';
   endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+// The length column of DEFINE *LIKE: blank, or +n or -n (blanks allowed between
+// the sign and the digits). o_delta is the signed change; returns *off when the
+// text is not valid.
+dcl-proc LengthDelta;
+  dcl-pi *n ind;
+    i_text varchar(10) const;
+    o_delta int(10);
+  end-pi;
+
+  dcl-s l_t varchar(10);
+  dcl-s l_sign char(1);
+
+  o_delta = 0;
+  l_t = %scanrpl(' ':'':i_text);
+  if l_t = '';
+    return *on;
+  endif;
+  l_sign = %subst(l_t:1:1);
+  if (l_sign <> '+' and l_sign <> '-') or %len(l_t) < 2
+     or %check(C_DIGITS:%subst(l_t:2)) > 0;
+    return *off;
+  endif;
+  o_delta = %int(%subst(l_t:2));
+  if l_sign = '-';
+    o_delta = -o_delta;
+  endif;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc DeltaText;
+  dcl-pi *n varchar(12);
+    i_delta int(10) const;
+  end-pi;
+
+  if i_delta < 0;
+    return '-' + %char(-i_delta);
+  endif;
+  return '+' + %char(i_delta);
+end-proc;
+
+// ------------------------------------------------------------------
+// The type text with its length changed by i_delta (length adjustment of
+// DEFINE *LIKE, SC09-2508: character and numeric fields only). Returns '' when
+// the type is not char, packed or zoned or the new length is not valid.
+dcl-proc AdjustType;
+  dcl-pi *n varchar(60);
+    i_text varchar(60) const;
+    i_delta int(10) const;
+  end-pi;
+
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+  dcl-s l_word varchar(20);
+  dcl-s l_new int(10);
+
+  l_word = %subst(i_text:1:%max(%scan('(':i_text) - 1:0));
+  if l_word <> 'char' and l_word <> 'packed' and l_word <> 'zoned';
+    return '';
+  endif;
+  ParseType(i_text:l_kind:l_len:l_dec);
+  if l_kind <> 'C' and l_kind <> 'N';
+    return '';
+  endif;
+  l_new = l_len + i_delta;
+  if l_new < 1 or (l_word = 'char' and l_new > 16773100)
+     or (l_word <> 'char' and (l_new > 63 or l_new <= l_dec));
+    return '';
+  endif;
+  if l_word = 'char';
+    return 'char(' + %char(l_new) + ')';
+  endif;
+  return l_word + '(' + %char(l_new) + ' : ' + %char(l_dec) + ')';
+end-proc;
+
+// ------------------------------------------------------------------
+// MOVEA of whole arrays of the D specifications (SC09-2508): the same DIM and the
+// same element type, or *BLANK(S) and *ZERO(S) to an array. An index, a field
+// instead of an array and arrays of another size or type are not converted.
+dcl-proc MoveaStmt;
+  dcl-pi *n varchar(300);
+    i_f2 varchar(14) const;
+    i_res varchar(14) const;
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_kR int(10);
+  dcl-s l_kS int(10);
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+  dcl-s l_up varchar(14);
+
+  o_reason = '';
+  l_up = Up(i_f2);
+  if %scan('(':i_f2) > 0 or %scan('(':i_res) > 0;
+    o_reason = 'MOVEA with an array index is not converted';
+    return '';
+  endif;
+  l_kR = ArrayFind(i_res);
+  if l_kR = 0 or SymType(i_res) = '';
+    o_reason = 'MOVEA to ' + i_res + ': not an array of the D specifications';
+    return '';
+  endif;
+  ParseType(SymType(i_res):l_kind:l_len:l_dec);
+  select;
+    when l_up = '*BLANK' or l_up = '*BLANKS';
+      if l_kind = 'C' or l_kind = 'V';
+        return i_res + ' = *blanks';
+      endif;
+      o_reason = 'MOVEA of *BLANK needs an alphanumeric array';
+      return '';
+    when l_up = '*ZERO' or l_up = '*ZEROS';
+      return i_res + ' = *zeros';
+  endsl;
+  l_kS = ArrayFind(i_f2);
+  if l_kS = 0 or SymType(i_f2) = '';
+    o_reason = 'MOVEA from ' + i_f2 + ': not an array of the D specifications '
+               + '(MOVEA from a field is not converted)';
+    return '';
+  endif;
+  if g_arrDim(l_kS) <> g_arrDim(l_kR);
+    o_reason = 'MOVEA between arrays of a different DIM is not converted';
+    return '';
+  endif;
+  if SymType(i_f2) <> SymType(i_res);
+    o_reason = 'MOVEA between arrays of a different element type or length is '
+               + 'not converted';
+    return '';
+  endif;
+  return i_res + ' = ' + i_f2;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -2473,6 +2610,7 @@ dcl-proc WritePrototypes;
   dcl-s l_semi int(10);
   dcl-s l_f int(10);
   dcl-s l_known ind;
+  dcl-s l_delta int(10);
 
   g_protoCount = 0;
   for l_k = 1 to SrcCount();
@@ -2482,10 +2620,21 @@ dcl-proc WritePrototypes;
        and SymType(Txt('C':'FACTOR2':l_line)) <> ''
        and Txt('C':'RESULT':l_line) <> ''
        and SymType(Txt('C':'RESULT':l_line)) = ''
-       and Txt('C':'DECIMALS':l_line) = '' and Txt('C':'LENGTH':l_line) = '';
-      AddOut('dcl-s ' + Txt('C':'RESULT':l_line) + ' like('
-             + Txt('C':'FACTOR2':l_line) + ');':SrcLineNo(l_k));
-      AddSym(Txt('C':'RESULT':l_line):SymType(Txt('C':'FACTOR2':l_line)));
+       and Txt('C':'DECIMALS':l_line) = ''
+       and LengthDelta(Txt('C':'LENGTH':l_line):l_delta)
+       and (l_delta = 0 or AdjustType(SymType(Txt('C':'FACTOR2':l_line)):l_delta)
+            <> '');
+      if l_delta = 0;
+        AddOut('dcl-s ' + Txt('C':'RESULT':l_line) + ' like('
+               + Txt('C':'FACTOR2':l_line) + ');':SrcLineNo(l_k));
+        AddSym(Txt('C':'RESULT':l_line):SymType(Txt('C':'FACTOR2':l_line)));
+      else;
+        AddOut('dcl-s ' + Txt('C':'RESULT':l_line) + ' like('
+               + Txt('C':'FACTOR2':l_line) + ' : ' + DeltaText(l_delta) + ');'
+               :SrcLineNo(l_k));
+        AddSym(Txt('C':'RESULT':l_line)
+               :AdjustType(SymType(Txt('C':'FACTOR2':l_line)):l_delta));
+      endif;
       iter;
     endif;
     // DO without an index field: a hidden index, named after the line.
@@ -3157,7 +3306,10 @@ dcl-proc OpOf;
   l_text = Up(Txt('C':'OPERATION':i_line));
   l_paren = %scan('(':l_text);
   if l_paren > 1;
-    return %subst(l_text:1:l_paren - 1);
+    l_text = %subst(l_text:1:l_paren - 1);
+  endif;
+  if l_text = 'DEFINE';
+    return 'DEFN';
   endif;
   return l_text;
 end-proc;
@@ -3321,6 +3473,9 @@ dcl-proc ConvertC;
   else;
     l_op = l_opText;
   endif;
+  if l_op = 'DEFINE';
+    l_op = 'DEFN';
+  endif;
   l_f1 = Txt('C':'FACTOR1':i_line);
   l_f2 = Txt('C':'FACTOR2':i_line);
   l_res = Txt('C':'RESULT':i_line);
@@ -3463,8 +3618,13 @@ dcl-proc ConvertC;
           l_stmt = '';
           l_kind = 'k';
         else;
-          l_reason = 'DEFN is converted for *LIKE only (declared before the '
-                     + 'first calculation)';
+          if Up(l_f1) = '*DTAARA';
+            l_reason = '*DTAARA DEFINE has no free-form form: add the DTAARA '
+                       + 'keyword to the definition of ' + l_res;
+          else;
+            l_reason = 'DEFINE is converted for *LIKE only, with a declared '
+                       + 'factor 2, a new result field and a valid length change';
+          endif;
         endif;
       when l_op = 'BITON' or l_op = 'BITOF' or l_op = 'TESTB' or l_op = 'TESTZ';
         if l_ext <> '' or (l_op = 'TESTZ' and l_f2 <> '')
@@ -3727,6 +3887,18 @@ dcl-proc ConvertC;
           if l_reason = '' and not (l_ext = '(p)' and l_op <> 'SCAN');
             l_note = l_op + ' converted: the unused part of the result is not '
                      + 'padded the same way, check';
+          endif;
+        endif;
+      when l_op = 'MOVEA';
+        if l_f1 <> '' or l_f2 = '' or l_res = ''
+           or Txt('C':'LENGTH':i_line) <> '' or Txt('C':'DECIMALS':i_line) <> ''
+           or l_ext <> '';
+          l_reason = 'MOVEA with factor 1, extender, length or without both '
+                     + 'arrays is not converted';
+        else;
+          l_stmt = MoveaStmt(l_f2:l_res:l_reason);
+          if l_reason = '' and l_stmt <> '';
+            l_note = 'MOVEA of whole arrays converted: check';
           endif;
         endif;
       when l_op = 'MOVE' or l_op = 'MOVEL';

@@ -800,3 +800,18 @@ Reported R: the error indicator of `OCUR` (occurrence out of range; needs `MONIT
 
 Reported R: an externally described file (field renames and field indicators: RV-30), a file that no converted F specification declares, a file that is not DISK or SEQ, a second record type (AND/OR lines, record identification codes, a second record line for the file), a record identifying indicator, `**` (look-ahead), sequence checking (numeric sequence, columns 19-20), control level, matching fields, field record relation and field indicators, data attributes (`*VAR`, date and time formats), the formats `L`, `R`, `D`, `T`, `Z`, `C`, `G`, a field name that is not a simple name (array element, `*IN`, `PAGE`), a field already declared, and a field past the record length. A field that cannot be converted is kept as a comment inside the data structure; when none can be converted the whole block stays R.
 
+
+## RPG IV: MOVEA of arrays and DEFINE *LIKE with a length change (FREE-31, RV-50)
+
+`samples/FREE4MV.rpgle` has one line for each row. `IAfreeFx4` knows the `DIM` text of every array of the D specifications (`g_arrDim`) and its type through the symbol table. The operation code of RPG IV is `DEFINE`; `DEFN` is the RPG II and III name. `OpOf` and `ConvertC` read both as `DEFN`, so the converted `*LIKE` lines of `samples/FREE4C.rpgle` (written there as `DEFN`, which RPG IV does not accept) now use the real name. Expected result, written from the design and not from a run:
+
+| RPG IV | Free-form | Status |
+|--------|-----------|--------|
+| `MOVEA Names Copy`, same `DIM` and same element type | `Copy = Names;` | C |
+| `MOVEA *BLANKS Names` (alphanumeric array) | `Names = *blanks;` | C |
+| `MOVEA *ZEROS Nums` | `Nums = *zeros;` | C |
+| `*LIKE DEFINE Name Name2` | `dcl-s Name2 like(Name);` (before the first calculation) | C |
+| `*LIKE DEFINE Name Longer + 5`, `- 4` | `dcl-s Longer like(Name : +5);`, `like(Name : -4)`; the symbol table gets the changed length | C |
+| `*LIKE DEFINE Amt Bigger + 2` (packed, zoned) | `dcl-s Bigger like(Amt : +2);` | C |
+
+Reported R: `MOVEA` with an index, from or to a field, between arrays of another `DIM`, another element type or length, `MOVEA *BLANKS` to a numeric array, a length change on a type other than `char`, `packed` or `zoned` (integer, float, date), a length that falls below 1 or the decimal positions, a result field that is already declared, and `*DTAARA DEFINE` (the reason names the `DTAARA` keyword: the definition is already written when the C specification is read). Open: `MOVE`/`MOVEL` of other type pairs and `MVR` with decimals (no `%rem` for decimals), `IN`/`OUT` of a data area for RPG IV.
