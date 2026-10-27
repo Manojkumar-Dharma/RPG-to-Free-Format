@@ -1,0 +1,11 @@
+      * Update of the record read (RV-62): FILE_REC of the I specifications
+     H
+     FMASTER  UF         40  4AI     1 DISK
+     IMASTER  AA
+     I                                        1   40CUSTNO
+     I                                        5  14 NAME
+     C           CUSTNO    CHAINMASTER               90
+     C  N90                MOVE 'NEWNAME' NAME
+     C  N90                EXCPT UPDREC
+     OMASTER  E                UPDREC
+     O                         NAME   B  14

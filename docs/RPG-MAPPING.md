@@ -965,7 +965,7 @@ Source: SC09-1818 chapter 24 (output specifications of disk files: `ADD` and `DE
 | Blank after (`B`, column 39) | `clear FIELD;` after the `write` | C |
 | `dcl-ds FILE_OUT len(n) end-ds;` | declared once before the first calculation | A |
 | Heading, detail and total records (`H`, `D`, `T`) | R: only exception records | R |
-| Update of the record read (update file, blank in columns 16-18) | R (needs the record layout `FILE_REC`) | R |
+| Update of the record read (update file, blank in columns 16-18) | `%subst(FILE_REC:start:len) = FIELD;` for each field (bytes no field names keep the record read), `update FILE FILE_REC;`; the layout `FILE_REC` of the I specifications (FREE-04) must exist, otherwise R | A |
 | Edit codes, edit words, `PAGE`, `UDATE`, `*DATE`, data formats (column 44), output indicators on a field, a field outside the record length | R | R |
 | A field the converter does not know when the `EXCPT` is converted | the `EXCPT` is R: define the field before the `EXCPT` (printer records are checked at the end, disk records at the `EXCPT`) | R |
 
@@ -976,3 +976,5 @@ Sample `samples/FREEDSK.rpg36`: `NEWREC` (file ORDHIST; `CUSTNO` 4 digits at 1-4
 ## Several printer files (FREE-40, RV-62)
 
 Each printer file with converted exception, heading, detail or total records gets its own DDS (up to 9 files). Format names stay unique over the whole source (`HEAD`, a number when a name is used twice), because the program writes formats by name. With `DDSTGT` and `*PRTF` as the member each DDS goes to a member named like its file (`REPORT1`, `REPORT2`) in the same DDS file and library, so the targets must differ from each other and from `TGT` (IAC0105). With a member name given and more than one printer file the run ends before writing with IAC0106. Without `DDSTGT` each DDS follows as comments at the end of the source, with its own header. Sample `samples/FREEPR2.rpg36`: `write HEAD1;` and `write HEAD2;`, DDS members `REPORT1` and `REPORT2`. Not tested.
+
+Update (FREE-41, RV-62, last part): sample `samples/FREEUPD.rpg36` gives `%subst(MASTER_REC:5:10) = NAME; update MASTER MASTER_REC; clear NAME;`. Not tested; `FREEDSK.rpg36` keeps `UPDREC` R because its MASTER has no I specification.

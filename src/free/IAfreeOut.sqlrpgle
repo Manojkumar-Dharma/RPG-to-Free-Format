@@ -502,9 +502,11 @@ dcl-proc OutBuild;
                         + 'converted: only exception records (E)';
           when l_ad = '' and l_ftype = 'O';
             l_act = 'W';
+          when l_ad = '' and l_ftype = 'U' and l_recDs = '';
+            l_diskWhy = 'Update of the record read needs the record layout of '
+                        + 'file ' + l_file + ' (I specification, FREE-04)';
           when l_ad = '' and l_ftype = 'U';
-            l_diskWhy = 'Update of the record read (update file, no ADD or DEL) is '
-                        + 'not converted';
+            l_act = 'U';
           when l_ad = '';
             l_diskWhy = 'An input file with file addition needs ADD (columns 16-18)';
           when l_ad = 'ADD' and l_out;
@@ -1384,8 +1386,8 @@ dcl-proc OutExceptFile export;
   dcl-s l_g int(10);
 
   l_g = OutGroupNumber(i_name:i_number);
-  if l_g = 0;
-    return '';
+  if l_g = 0 or g_gAct(l_g) = 'U';
+    return '';      // an update uses FILE_REC of the I specifications
   endif;
   return g_gFile(l_g);
 end-proc;
@@ -1438,6 +1440,9 @@ dcl-proc DiskBuild;
 
   o_reason = '';
   l_ds = g_gFile(i_g) + '_OUT';
+  if g_gAct(i_g) = 'U';
+    l_ds = g_gFile(i_g) + '_REC';
+  endif;
   l_cond = g_gCond(i_g);
 
   if l_cond <> '';
@@ -1453,7 +1458,11 @@ dcl-proc DiskBuild;
     l_count += 1;
     o_stmts(l_count) = 'delete ' + g_gFile(i_g);
   else;
-    l_acc = l_ds + ' = *blanks';
+    // An update keeps the bytes of the record read that no field names.
+    l_acc = '';
+    if g_gAct(i_g) <> 'U';
+      l_acc = l_ds + ' = *blanks';
+    endif;
     for l_f = g_gFirst(i_g) to g_gFirst(i_g) + g_gFields(i_g) - 1;
       if g_fReason(l_f) <> '';
         o_reason = g_fReason(l_f);
@@ -1504,6 +1513,8 @@ dcl-proc DiskBuild;
         l_count += 1;
         o_stmts(l_count) = l_acc;
         l_acc = l_one;
+      elseif l_acc = '';
+        l_acc = l_one;
       else;
         l_acc += '; ' + l_one;
       endif;
@@ -1512,11 +1523,17 @@ dcl-proc DiskBuild;
         return 0;
       endif;
     endfor;
-    l_count += 1;
-    o_stmts(l_count) = l_acc;
+    if l_acc <> '';
+      l_count += 1;
+      o_stmts(l_count) = l_acc;
+    endif;
     l_after = GroupAfter(i_g);
     l_count += 1;
-    o_stmts(l_count) = 'write ' + g_gFile(i_g) + ' ' + l_ds;
+    if g_gAct(i_g) = 'U';
+      o_stmts(l_count) = 'update ' + g_gFile(i_g) + ' ' + l_ds;
+    else;
+      o_stmts(l_count) = 'write ' + g_gFile(i_g) + ' ' + l_ds;
+    endif;
     if l_after <> '';
       l_count += 1;
       o_stmts(l_count) = l_after;
@@ -1541,7 +1558,12 @@ dcl-proc DiskFinish;
   dcl-s l_reason varchar(190);
   dcl-s l_count int(10);
   dcl-s l_j int(10);
+  dcl-s l_suffix varchar(4);
 
+  l_suffix = '_OUT';
+  if g_gAct(i_g) = 'U';
+    l_suffix = '_REC';
+  endif;
   l_count = DiskBuild(i_g:l_stmts:l_reason);
   if l_count = 0;
     g_gOk(i_g) = *off;
@@ -1555,7 +1577,9 @@ dcl-proc DiskFinish;
   RptItem(C_STS_ASSUMPTION:SrcLineNo(g_gStart(i_g)):%trimr(%subst(
           SrcLine(g_gStart(i_g)):6:75))
           :'Record of the DISK file ' + g_gFile(i_g) + ' written by the EXCPT '
-          + 'with the data structure ' + g_gFile(i_g) + '_OUT (fields placed by '
+          + 'with the data structure ' + g_gFile(i_g)
+          + l_suffix
+          + ' (fields placed by '
           + '%SUBST at their end positions, numeric fields as zoned digits '
           + 'with %EDITC code X); not tested');
   for l_j = g_gStart(i_g) + 1 to g_gEnd(i_g);
