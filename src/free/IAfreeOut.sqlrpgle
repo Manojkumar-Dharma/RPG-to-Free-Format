@@ -32,7 +32,7 @@ end-pr;
 
 // Output records (a record line with its field lines).
 dcl-s g_gFile varchar(8) dim(C_MAXGRP);
-dcl-s g_gName varchar(6) dim(C_MAXGRP);
+dcl-s g_gName varchar(10) dim(C_MAXGRP);
 dcl-s g_gFmt varchar(10) dim(C_MAXGRP);
 dcl-s g_gStart int(10) dim(C_MAXGRP);
 dcl-s g_gEnd int(10) dim(C_MAXGRP);
@@ -49,7 +49,7 @@ dcl-s g_gAct char(1) dim(C_MAXGRP);          // disk: W write (blank or ADD), D 
 dcl-s g_gRecLen int(10) dim(C_MAXGRP);       // disk: record length
 dcl-s g_gCount int(10) inz(0);
 // Output fields and constants.
-dcl-s g_fName varchar(10) dim(C_MAXFLD);
+dcl-s g_fName varchar(14) dim(C_MAXFLD);
 dcl-s g_fEdit char(1) dim(C_MAXFLD);
 dcl-s g_fEnd int(10) dim(C_MAXFLD);
 dcl-s g_fConst varchar(30) dim(C_MAXFLD);
@@ -66,6 +66,14 @@ dcl-s g_pName varchar(8) dim(C_MAXPRT);      // printer files with a converted r
 dcl-s g_pCount int(10) inz(0);
 dcl-s g_curFile int(10) inz(0);
 dcl-s g_built ind inz(*off);
+// RPG IV output specifications (RV-56): Norm4 turns the line into the RPG II/III
+// column layout for the rest of the module; the names are longer there and are
+// kept here, with the reason when an entry does not fit the layout.
+dcl-s g_n4 ind inz(*off);
+dcl-s g_n4File varchar(10) inz('');
+dcl-s g_n4Name varchar(14) inz('');
+dcl-s g_n4Exc varchar(10) inz('');
+dcl-s g_n4Reason varchar(150) inz('');
 
 // ------------------------------------------------------------------
 dcl-proc Up;
@@ -281,6 +289,187 @@ dcl-proc IsSpecialName;
 end-proc;
 
 // ------------------------------------------------------------------
+// RPG IV output specifications (SC09-2508, program described files) as an RPG II/III
+// line (record line: file 7-14, type 15, ADD/DEL 16-18, spacing 17-22, indicators
+// 23-31, EXCPT name 32-37; field line: indicators 23-31, name 32-37, edit code 38,
+// blank after 39, end 40-43, format 44, constant 45-70). The long names stay in
+// g_n4File, g_n4Name and g_n4Exc. A source of RPG II or III is returned unchanged.
+dcl-proc Norm4;
+  dcl-pi *n char(100);
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_out char(100) inz(' ');
+  dcl-s l_t varchar(30);
+  dcl-s l_ao varchar(3);
+
+  g_n4 = *off;
+  g_n4File = '';
+  g_n4Name = '';
+  g_n4Exc = '';
+  g_n4Reason = '';
+  if SrcDialect() <> '4' or not IsOLine(i_line);
+    return i_line;
+  endif;
+  g_n4 = *on;
+  %subst(l_out:6:1) = %subst(i_line:6:1);
+  %subst(l_out:23:9) = %subst(i_line:21:9);
+  l_ao = Up(Cols(i_line:16:18));
+  select;
+    // ---- a field line: columns 7-20 blank ----
+    when Cols(i_line:7:20) = '';
+      g_n4Name = Up(Cols(i_line:30:43));
+      if g_n4Name <> '';
+        l_t = %subst(g_n4Name:1:%min(6:%len(g_n4Name)));
+        %subst(l_out:32:%len(l_t)) = l_t;
+      endif;
+      %subst(l_out:38:1) = %subst(i_line:44:1);
+      %subst(l_out:39:1) = %subst(i_line:45:1);
+      %subst(l_out:44:1) = %subst(i_line:52:1);
+      if %subst(i_line:46:1) <> ' ';
+        g_n4Reason = 'Entry in column 46 is not converted';
+      endif;
+      l_t = Cols(i_line:47:51);
+      if %len(l_t) > 4;
+        g_n4Reason = 'End position (columns 47-51) ' + l_t + ' has more than 4 '
+                     + 'characters';
+      elseif %len(l_t) > 0;
+        %subst(l_out:44 - %len(l_t):%len(l_t)) = l_t;
+      endif;
+      l_t = Cols(i_line:53:80);
+      if %len(l_t) > 26;
+        g_n4Reason = 'The constant or edit word (columns 53-80) is longer than 26 '
+                     + 'characters';
+      elseif %len(l_t) > 0;
+        %subst(l_out:45:%len(l_t)) = l_t;
+      endif;
+    // ---- an AND or OR line ----
+    when Cols(i_line:7:15) = '' and (l_ao = 'AND' or l_ao = 'OR');
+      %subst(l_out:14:3) = %subst(i_line:16:3);
+    // ---- a record line ----
+    other;
+      g_n4File = Up(Cols(i_line:7:16));
+      l_t = %subst(g_n4File:1:%min(8:%len(g_n4File)));
+      if %len(l_t) > 0;
+        %subst(l_out:7:%len(l_t)) = l_t;
+      endif;
+      %subst(l_out:15:1) = %subst(i_line:17:1);
+      %subst(l_out:16:3) = %subst(i_line:18:3);
+      g_n4Exc = Up(Cols(i_line:30:39));
+      if g_n4Exc <> '';
+        l_t = %subst(g_n4Exc:1:%min(6:%len(g_n4Exc)));
+        %subst(l_out:32:%len(l_t)) = l_t;
+      endif;
+      Norm4Space(i_line:l_out);
+  endsl;
+  return l_out;
+end-proc;
+
+// ------------------------------------------------------------------
+// Space before and after (columns 40-42 and 43-45, 0 to 3) and skip before and after
+// (columns 46-48 and 49-51, up to 99) of an RPG IV record line, into the RPG II/III
+// columns 17, 18, 19-20 and 21-22. They share columns with ADD and DEL.
+dcl-proc Norm4Space;
+  dcl-pi *n;
+    i_line char(100) const;
+    io_out char(100);
+  end-pi;
+
+  dcl-s l_sb varchar(10);
+  dcl-s l_sa varchar(10);
+  dcl-s l_kb varchar(10);
+  dcl-s l_ka varchar(10);
+
+  l_sb = Cols(i_line:40:42);
+  l_sa = Cols(i_line:43:45);
+  l_kb = Cols(i_line:46:48);
+  l_ka = Cols(i_line:49:51);
+  if l_sb = '' and l_sa = '' and l_kb = '' and l_ka = '';
+    return;
+  endif;
+  if Cols(i_line:18:20) <> '';
+    g_n4Reason = 'ADD, DEL or fetch overflow (columns 18-20) together with spacing '
+                 + 'or skipping is not converted';
+    return;
+  endif;
+  select;
+    when %len(l_sb) > 1 or (l_sb <> '' and %check('0123':l_sb) > 0);
+      g_n4Reason = 'Space before (columns 40-42) ' + l_sb + ' is not 0 to 3';
+    when %len(l_sa) > 1 or (l_sa <> '' and %check('0123':l_sa) > 0);
+      g_n4Reason = 'Space after (columns 43-45) ' + l_sa + ' is not 0 to 3';
+    when %len(l_kb) > 2 or %check(C_DIGITS:l_kb) > 0
+         or %len(l_ka) > 2 or %check(C_DIGITS:l_ka) > 0;
+      g_n4Reason = 'Skip before or after (columns 46-51) is not 1 to 99';
+    other;
+      if l_sb <> '';
+        %subst(io_out:17:1) = l_sb;
+      endif;
+      if l_sa <> '';
+        %subst(io_out:18:1) = l_sa;
+      endif;
+      if l_kb <> '';
+        %subst(io_out:21 - %len(l_kb):%len(l_kb)) = l_kb;
+      endif;
+      if l_ka <> '';
+        %subst(io_out:23 - %len(l_ka):%len(l_ka)) = l_ka;
+      endif;
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+// The file name, the EXCPT name and the field name of the line that Norm4 read last:
+// the long names of RPG IV, else the columns of RPG II and III.
+dcl-proc LineFile;
+  dcl-pi *n varchar(14);
+    i_line char(100) const;
+  end-pi;
+
+  if g_n4;
+    return g_n4File;
+  endif;
+  return Up(Cols(i_line:7:14));
+end-proc;
+
+dcl-proc LineExc;
+  dcl-pi *n varchar(14);
+    i_line char(100) const;
+  end-pi;
+
+  if g_n4;
+    return g_n4Exc;
+  endif;
+  return Up(Cols(i_line:32:37));
+end-proc;
+
+dcl-proc LineField;
+  dcl-pi *n varchar(14);
+    i_line char(100) const;
+  end-pi;
+
+  if g_n4;
+    return g_n4Name;
+  endif;
+  return Up(Cols(i_line:32:37));
+end-proc;
+
+// ------------------------------------------------------------------
+// Kind, length and decimals of a field: RPG II and III from the calculations, RPG IV
+// from the D specifications and the result fields.
+dcl-proc FieldInfoAny;
+  dcl-pi *n ind;
+    i_name varchar(14) const;
+    o_kind char(1);
+    o_length int(10);
+    o_decimals int(10);
+  end-pi;
+
+  if SrcDialect() = '4';
+    return Fx4FieldInfo(i_name:o_kind:o_length:o_decimals);
+  endif;
+  return CalcFieldInfo(i_name:o_kind:o_length:o_decimals);
+end-proc;
+
+// ------------------------------------------------------------------
 // Parses all O specifications once (the EXCPT operations in the calculations
 // come before them in the source and need the record format names).
 dcl-proc OutBuild;
@@ -335,7 +524,7 @@ dcl-proc OutBuild;
   g_built = *on;
 
   for l_index = 1 to SrcCount();
-    l_line = SrcLine(l_index);
+    l_line = Norm4(SrcLine(l_index));
     if not IsOLine(l_line);
       iter;
     endif;
@@ -346,10 +535,10 @@ dcl-proc OutBuild;
         iter;
       endif;
       g_fCount += 1;
-      g_fName(g_fCount) = Up(Cols(l_line:32:37));
+      g_fName(g_fCount) = LineField(l_line);
       g_fEdit(g_fCount) = Up(%subst(l_line:38:1));
       g_fConst(g_fCount) = Cols(l_line:45:70);
-      g_fReason(g_fCount) = '';
+      g_fReason(g_fCount) = g_n4Reason;
       g_fEnd(g_fCount) = 0;
       g_fBlank(g_fCount) = *off;
       g_fSpecial(g_fCount) = ' ';
@@ -371,6 +560,7 @@ dcl-proc OutBuild;
           g_fSpecial(g_fCount) = 'S';
       endsl;
       select;
+        when g_fReason(g_fCount) <> '';
         when l_reason <> '';
           g_fReason(g_fCount) = l_reason;
         when l_digits = '' or %check(C_DIGITS:l_digits) > 0;
@@ -458,12 +648,12 @@ dcl-proc OutBuild;
     endif;
     g_gCount += 1;
     l_g = g_gCount;
-    if Cols(l_line:7:14) <> '';
-      l_file = Up(Cols(l_line:7:14));
+    if LineFile(l_line) <> '';
+      l_file = LineFile(l_line);
     endif;
     l_type = %subst(Up(%subst(l_line:15:1) + ' '):1:1);
     g_gFile(l_g) = l_file;
-    g_gName(l_g) = Up(Cols(l_line:32:37));
+    g_gName(l_g) = LineExc(l_line);
     g_gFmt(l_g) = '';
     g_gStart(l_g) = l_index;
     g_gEnd(l_g) = l_index;
@@ -523,6 +713,8 @@ dcl-proc OutBuild;
       endif;
     endif;
     select;
+      when g_n4Reason <> '';
+        g_gReason(l_g) = g_n4Reason;
       when l_reason <> '';
         g_gReason(l_g) = l_reason;
       when l_type <> 'E' and l_type <> 'H' and l_type <> 'D' and l_type <> 'T';
@@ -660,7 +852,7 @@ end-proc;
 // ------------------------------------------------------------------
 dcl-proc OutExceptCount export;
   dcl-pi *n int(10);
-    i_name varchar(6) const;
+    i_name varchar(10) const;
   end-pi;
 
   dcl-s l_k int(10);
@@ -678,7 +870,7 @@ end-proc;
 // ------------------------------------------------------------------
 dcl-proc OutGroupNumber;
   dcl-pi *n int(10);
-    i_name varchar(6) const;
+    i_name varchar(10) const;
     i_number int(10) const;
   end-pi;
 
@@ -699,7 +891,7 @@ end-proc;
 // ------------------------------------------------------------------
 dcl-proc OutExceptFormat export;
   dcl-pi *n varchar(10);
-    i_name varchar(6) const;
+    i_name varchar(10) const;
     i_number int(10) const;
   end-pi;
 
@@ -715,7 +907,7 @@ end-proc;
 // ------------------------------------------------------------------
 dcl-proc OutExceptCond export;
   dcl-pi *n varchar(200);
-    i_name varchar(6) const;
+    i_name varchar(10) const;
     i_number int(10) const;
   end-pi;
 
@@ -1123,7 +1315,7 @@ end-proc;
 // ------------------------------------------------------------------
 dcl-proc OutExceptAfter export;
   dcl-pi *n varchar(120);
-    i_name varchar(6) const;
+    i_name varchar(10) const;
     i_number int(10) const;
   end-pi;
 
@@ -1252,7 +1444,7 @@ dcl-proc OutFinish export;
               l_len = 6;
               l_dec = 0;
             other;
-              l_known = CalcFieldInfo(g_fName(l_f):l_kind:l_len:l_dec);
+              l_known = FieldInfoAny(g_fName(l_f):l_kind:l_len:l_dec);
           endsl;
           l_width = l_len;
           if not l_known;
@@ -1362,7 +1554,7 @@ end-proc;
 // program described DISK file (statements, no DDS).
 dcl-proc OutExceptDisk export;
   dcl-pi *n ind;
-    i_name varchar(6) const;
+    i_name varchar(10) const;
     i_number int(10) const;
   end-pi;
 
@@ -1379,7 +1571,7 @@ end-proc;
 // RV-62: the file of the nth record of an EXCPT name.
 dcl-proc OutExceptFile export;
   dcl-pi *n varchar(8);
-    i_name varchar(6) const;
+    i_name varchar(10) const;
     i_number int(10) const;
   end-pi;
 
@@ -1400,7 +1592,7 @@ end-proc;
 // statements, 0 with the reason when the record cannot be converted.
 dcl-proc OutDiskStatements export;
   dcl-pi *n int(10);
-    i_name varchar(6) const;
+    i_name varchar(10) const;
     i_number int(10) const;
     o_stmts varchar(250) dim(40);
     o_reason varchar(190);
@@ -1489,7 +1681,7 @@ dcl-proc DiskBuild;
                      + ' are not converted for a DISK file';
           return 0;
         endif;
-        l_known = CalcFieldInfo(g_fName(l_f):l_kind:l_len:l_dec);
+        l_known = FieldInfoAny(g_fName(l_f):l_kind:l_len:l_dec);
         if not l_known;
           o_reason = 'Field ' + g_fName(l_f) + ' has no known length and type '
                      + 'at this point (define it before the EXCPT)';

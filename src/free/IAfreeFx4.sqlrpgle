@@ -13,6 +13,7 @@ ctl-opt nomain option(*srcstmt:*nodebugio);
 /copy qcpysrc,IAfreeRulP
 /copy qcpysrc,IAfreeCalP
 /copy qcpysrc,IAfreeFx4P
+/copy qcpysrc,IAfreeOutP
 
 dcl-c C_LOWER 'abcdefghijklmnopqrstuvwxyz';
 dcl-c C_UPPER 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -673,6 +674,7 @@ dcl-proc ConvertF;
   dcl-s l_note varchar(190) inz('');
   dcl-s l_reason varchar(190) inz('');
   dcl-s l_isLike ind;
+  dcl-s l_progPrinter ind inz(*off);
   dcl-s l_index int(10);
 
   if not CollectKeywords('F':i_index:i_line:l_kwText:l_extra);
@@ -763,6 +765,13 @@ dcl-proc ConvertF;
       FlAdd(l_name:%int(l_recLen):l_type:l_device);
     endif;
   endif;
+  // A program described printer file: the output records become printer file DDS
+  // (IAfreeOut), the file is declared externally described (RV-56).
+  l_progPrinter = not l_isLike and l_fmt = 'F' and l_type = 'O' and l_device = 'PRINTER'
+                  and %len(l_name) <= 8;
+  if l_progPrinter;
+    CvtRegisterFile(l_name:0:'P':l_type:i_lineNo:*off);
+  endif;
   if not l_isLike;
     select;
       when l_type = 'I' and l_add = 'A';
@@ -797,6 +806,14 @@ dcl-proc ConvertF;
     l_stmt = 'dcl-f ' + l_name + ' ' + l_deviceText + ' usage(' + l_usage + ')';
     if l_keyed <> '';
       l_stmt += ' ' + l_keyed;
+    endif;
+    if l_progPrinter;
+      l_stmt = 'dcl-f ' + l_name + ' printer';
+      if l_note <> '';
+        l_note += '; ';
+      endif;
+      l_note += 'declared externally described: the printer file comes from the O '
+                + 'specifications (FREE-42)';
     endif;
   else;
     l_stmt = 'dcl-f ' + l_name;
@@ -2140,6 +2157,97 @@ dcl-proc DtaaraApplied;
     endif;
   endfor;
   return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+// EXCEPT (RV-56): writes the record formats of the printer DDS that were made from
+// the exception records (type E) of the O specifications (module IAfreeOut). The
+// statements are separated by '; '.
+dcl-proc ExceptStmt;
+  dcl-pi *n varchar(500);
+    i_f2 varchar(14) const;
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_name varchar(10);
+  dcl-s l_count int(10);
+  dcl-s l_k int(10);
+  dcl-s l_cond varchar(200);
+  dcl-s l_after varchar(120);
+  dcl-s l_one varchar(300);
+  dcl-s l_text varchar(500) inz('');
+
+  o_reason = '';
+  l_name = Up(i_f2);
+  if %len(l_name) > 10;
+    o_reason = 'EXCEPT name ' + l_name + ' is too long';
+    return '';
+  endif;
+  l_count = OutExceptCount(l_name);
+  if l_count = 0;
+    o_reason = 'No exception output record named ' + l_name + ' was converted '
+               + '(see the O specifications)';
+    return '';
+  endif;
+  for l_k = 1 to l_count;
+    if OutExceptDisk(l_name:l_k);
+      o_reason = 'EXCEPT of the record of a DISK file is not converted for RPG IV yet';
+      return '';
+    endif;
+    l_cond = OutExceptCond(l_name:l_k);
+    l_after = OutExceptAfter(l_name:l_k);
+    l_one = 'write ' + OutExceptFormat(l_name:l_k);
+    if l_after <> '';
+      l_one += '; ' + l_after;
+    endif;
+    if l_cond <> '';
+      l_one = 'if ' + l_cond + '; ' + l_one + '; endif';
+    endif;
+    if %len(l_text) + %len(l_one) + 2 > 500;
+      o_reason = 'EXCEPT ' + l_name + ' writes too many statements for one line';
+      return '';
+    endif;
+    if l_text <> '';
+      l_text += '; ';
+    endif;
+    l_text += l_one;
+  endfor;
+  return l_text;
+end-proc;
+
+// ------------------------------------------------------------------
+// For the DDS of the output records (IAfreeOut): kind, length and decimal positions
+// of a character, varying or packed/zoned field of the D specifications or of a
+// result field.
+dcl-proc Fx4FieldInfo export;
+  dcl-pi *n ind;
+    i_name varchar(14) const;
+    o_kind char(1);
+    o_length int(10);
+    o_decimals int(10);
+  end-pi;
+
+  dcl-s l_type varchar(60);
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+
+  l_type = SymType(i_name);
+  if l_type = '';
+    return *off;
+  endif;
+  ParseType(l_type:l_kind:l_len:l_dec);
+  select;
+    when l_kind = 'C' or l_kind = 'V';
+      o_kind = 'C';
+    when l_kind = 'N' and (%subst(l_type:1:6) = 'packed' or %subst(l_type:1:5) = 'zoned');
+      o_kind = 'N';
+    other;
+      return *off;
+  endsl;
+  o_length = l_len;
+  o_decimals = l_dec;
+  return *on;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -4023,6 +4131,18 @@ dcl-proc ConvertC;
             l_stmt += ' *dtaara';
           else;
             l_stmt += ' ' + l_f2;
+          endif;
+        endif;
+      when l_op = 'EXCEPT';
+        if l_f1 <> '' or l_res <> '' or Txt('C':'LENGTH':i_line) <> ''
+           or Txt('C':'DECIMALS':i_line) <> '' or l_ext <> '';
+          l_reason = 'EXCEPT with factor 1, a result field or an extender is not '
+                     + 'converted';
+        else;
+          l_stmt = ExceptStmt(l_f2:l_reason);
+          if l_reason = '' and %scan('; ':l_stmt) > 0;
+            l_post = l_stmt;
+            l_stmt = '';
           endif;
         endif;
       when l_op = 'MOVEA';

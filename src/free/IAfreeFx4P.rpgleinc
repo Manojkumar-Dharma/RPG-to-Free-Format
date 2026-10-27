@@ -44,3 +44,28 @@ end-pr;
 dcl-pr SrcLineNo int(10);
   i_index int(10) const;
 end-pr;
+
+// ---- IAfreeCvt / IAfreeFx4 (RV-56, RPG IV output specifications) ---------
+// The dialect of the member: 2 RPG II, 3 RPG III, 4 RPG IV.
+dcl-pr SrcDialect char(1);
+end-pr;
+
+// A converted file description of RPG IV for the output specifications and
+// IAfreeCvt FileInfo.
+dcl-pr CvtRegisterFile;
+  i_name varchar(8) const;
+  i_recLen int(10) const;
+  i_device char(1) const;
+  i_type char(1) const;
+  i_lineNo int(10) const;
+  i_keyed ind const;
+end-pr;
+
+// Kind (C character, N numeric), length and decimals of a field of the D
+// specifications or a result field of RPG IV, for the DDS of the output records.
+dcl-pr Fx4FieldInfo ind;
+  i_name varchar(14) const;
+  o_kind char(1);
+  o_length int(10);
+  o_decimals int(10);
+end-pr;

@@ -978,3 +978,19 @@ Sample `samples/FREEDSK.rpg36`: `NEWREC` (file ORDHIST; `CUSTNO` 4 digits at 1-4
 Each printer file with converted exception, heading, detail or total records gets its own DDS (up to 9 files). Format names stay unique over the whole source (`HEAD`, a number when a name is used twice), because the program writes formats by name. With `DDSTGT` and `*PRTF` as the member each DDS goes to a member named like its file (`REPORT1`, `REPORT2`) in the same DDS file and library, so the targets must differ from each other and from `TGT` (IAC0105). With a member name given and more than one printer file the run ends before writing with IAC0106. Without `DDSTGT` each DDS follows as comments at the end of the source, with its own header. Sample `samples/FREEPR2.rpg36`: `write HEAD1;` and `write HEAD2;`, DDS members `REPORT1` and `REPORT2`. Not tested.
 
 Update (FREE-41, RV-62, last part): sample `samples/FREEUPD.rpg36` gives `%subst(MASTER_REC:5:10) = NAME; update MASTER MASTER_REC; clear NAME;`. Not tested; `FREEDSK.rpg36` keeps `UPDREC` R because its MASTER has no I specification.
+
+## RPG IV: program described printer files, EXCEPT and exception records (FREE-42, RV-56)
+
+Source: SC09-2508 (7.3), Output Specifications (program described files). `IAfreeOut` reads an RPG IV O line through `Norm4`, which turns it into the RPG II/III column layout the rest of the module already knows; the long names stay beside it. `samples/FREE4OUT.rpgle` has one line for each row. Expected result, written from the design and not from a run:
+
+| RPG IV | Free-form | Status |
+|--------|-----------|--------|
+| `FREPORT O F 132 PRINTER OFLIND(*INOA)` (program described printer file) | `dcl-f REPORT printer oflind(*INOA);` the file is declared externally described and registered for the O specifications | A |
+| `OREPORT E HEAD` with space after 1 and a constant `'CUSTOMER LIST'` ending in position 30 | a record format of the printer file DDS (`R HEAD`, `SPACEA(1)`, the constant at position 1 to 30) | A |
+| fields `NAME` (20) and `AMT` with edit code 1 | DDS fields with the length and type of the D specification (`Fx4FieldInfo`: character, packed and zoned fields), `EDTCDE(1)` | A |
+| `OREPORT E 01 TOTAL`, skip before 4 | the record format conditioned by `*in01` (`INDTXT`/`N01` of the DDS), `SKIPB(4)` | A |
+| `EXCEPT HEAD` | `write HEAD;` for every record of the name (with its condition, `if *in01; write TOTAL; endif`) | C |
+
+The columns of RPG IV and RPG II/III differ (file name 7-16 and 7-14, type 17 and 15, indicators 21-29 and 23-31, EXCEPT name 30-39 and 32-37, spacing 40-51 and 17-22, field name 30-43 and 32-37, edit code 44 and 38, blank after 45 and 39, end position 47-51 and 40-43, constant 53-80 and 45-70). Names up to 10 (file, EXCEPT name) and 14 (field) characters are kept; the file name must be at most 8 characters.
+
+Reported R: heading, detail and total records (the RPG cycle is not converted for RPG IV), output of a DISK file (`EXCEPT` for a DISK record), externally described files (`ORcdname`), an end position of more than 4 characters, a constant or edit word of more than 26 characters, space before or after other than 0 to 3, skip above 99, ADD, DEL or fetch overflow together with spacing, entries in column 46 and data format.

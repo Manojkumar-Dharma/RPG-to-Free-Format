@@ -75,12 +75,13 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-39 | IACNVFREE | RPG II/III output records of program described DISK files (RV-62, first part): exception records of an output file, `ADD` and `DEL` of a file with file addition or an update file; `write FILE FILE_OUT` with the fields placed by `%SUBST` | Written | Not tested | Second printer file (one DDS member for each printer file with `DDSTGT`) and the update of the record read (blank 16-18 on an update file) stay open in RV-62; update of the record read needs the `FILE_REC` layout. Needs a compile and a test of `samples/FREEDSK.rpg36`. |
 | FREE-40 | IACNVFREE | Several printer files in one source (RV-62, second part): a DDS for each printer file, written to one member each with `DDSTGT(... *PRTF)`; with a member name given and more than one printer file the run ends with IAC0106 | Written | Not tested | `samples/FREEPR2.rpg36`; run `IACNVMSG` again for IAC0106, compile `IAfreeOut`, `IAfreeCvt`. |
 | FREE-41 | IACNVFREE | Update of the record read by an output record of an update file (RV-62, last part): `%subst` on `FILE_REC`, `update FILE FILE_REC` | Written | Not tested | `samples/FREEUPD.rpg36`; RV-62 has no open part left. Needs a compile of `IAfreeOut` and a test. |
+| FREE-42 | IACNVFREE | RPG IV: program described PRINTER file and its exception output records (O specifications through `Norm4` of `IAfreeOut`, DDS and `DDSTGT` as for RPG II/III), `EXCEPT` as `write` (RV-56 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4OUT.rpgle`; needs a compile and test; no cycle in RPG IV: heading, detail and total records, DISK output and externally described O specifications stay R |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-34 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-42 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.

@@ -193,9 +193,7 @@ dcl-proc FreeConvert export;
     Fx4Flush();
   endif;
   CalcFinish();
-  if g_dialect <> '4';
-    AddDdsComments(i_ddsGiven);
-  endif;
+  AddDdsComments(i_ddsGiven);
   if g_overflow;
     o_msgId = 'IAC0101';
     o_msgData = 'The converted source has more than ' + %char(C_MAXOUT) + ' lines';
@@ -331,6 +329,9 @@ dcl-proc ConvertSource;
         AddOut('//' + %trimr(%subst(l_line:8:73)):l_lineNo);
       // SQLRPG, SQLRPGLE: C/EXEC SQL, C+ lines and C/END-EXEC become EXEC SQL.
       when SqlHere(l_form:l_line:l_lineNo);
+      // RPG IV: the output specifications are read by IAfreeOut (FREE-42, RV-56).
+      when g_dialect = '4' and l_form = 'O';
+        l_extra = OutLine(l_index:l_lineNo:l_line);
       // RPG IV fixed form: H, F, D, P, C specifications, directives, /FREE blocks.
       when g_dialect = '4';
         Fx4Line(l_index:l_lineNo:l_line:l_extra);
@@ -1478,6 +1479,29 @@ end-proc;
 
 // ------------------------------------------------------------------
 // Source access for IAfreeFx4.
+dcl-proc SrcDialect export;
+  dcl-pi *n char(1);
+  end-pi;
+
+  return g_dialect;
+end-proc;
+
+// ------------------------------------------------------------------
+// RPG IV (IAfreeFx4) tells the file table of this module about a converted file.
+dcl-proc CvtRegisterFile export;
+  dcl-pi *n;
+    i_name varchar(8) const;
+    i_recLen int(10) const;
+    i_device char(1) const;
+    i_type char(1) const;
+    i_lineNo int(10) const;
+    i_keyed ind const;
+  end-pi;
+
+  RegisterFile(i_name:i_recLen:i_device:i_type:i_lineNo:i_keyed);
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc SrcCount export;
   dcl-pi *n int(10);
   end-pi;

@@ -27,16 +27,16 @@ end-pr;
 // name): their number, the format name and the condition (output indicators)
 // of the nth one, '' when it has none.
 dcl-pr OutExceptCount int(10);
-  i_name varchar(6) const;
+  i_name varchar(10) const;
 end-pr;
 
 dcl-pr OutExceptFormat varchar(10);
-  i_name varchar(6) const;
+  i_name varchar(10) const;
   i_number int(10) const;
 end-pr;
 
 dcl-pr OutExceptCond varchar(200);
-  i_name varchar(6) const;
+  i_name varchar(10) const;
   i_number int(10) const;
 end-pr;
 
@@ -45,17 +45,17 @@ end-pr;
 // statements (the data structure FILE_OUT, %SUBST at the end positions, write or
 // delete), 0 with the reason when it cannot be converted.
 dcl-pr OutExceptDisk ind;
-  i_name varchar(6) const;
+  i_name varchar(10) const;
   i_number int(10) const;
 end-pr;
 
 dcl-pr OutExceptFile varchar(8);
-  i_name varchar(6) const;
+  i_name varchar(10) const;
   i_number int(10) const;
 end-pr;
 
 dcl-pr OutDiskStatements int(10);
-  i_name varchar(6) const;
+  i_name varchar(10) const;
   i_number int(10) const;
   o_stmts varchar(250) dim(40);
   o_reason varchar(190);
@@ -81,7 +81,7 @@ end-pr;
 // The statements that clear the fields with blank after (column 39) of the nth
 // record, 'clear A; clear B', '' when there is none.
 dcl-pr OutExceptAfter varchar(120);
-  i_name varchar(6) const;
+  i_name varchar(10) const;
   i_number int(10) const;
 end-pr;
 
