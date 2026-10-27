@@ -883,3 +883,17 @@ Source: SC09-1818 (the RPG program cycle, steps 1 to 11, and the control level r
 The control level stays on during the detail calculations of the record that caused the break and is turned off at the start of the next cycle (step 2). The loop closes before the first `BEGSR` or at the end of the source; when no calculation line exists the loop is still written. A `GOTO` to the last `TAG` of the detail calculations (RV-14) becomes `iter`, the next cycle. Step 1 (heading and detail output of the previous record) and the total output are not part of it: the O specifications still need FREE-06; a comment marks the place.
 
 Reported R, as before: secondary, record address and table files, more than one primary file, an update primary file, an externally described primary file, more than one record type, record identifying indicators and codes, matching fields (`M1` to `M9`, `MR`), look-ahead fields, `1P`, field indicators and field record relations, a level on an `AN` or `OR` group other than that of its first line, a jump that crosses from the detail to the total calculations. Total calculations after the first subroutine are not placed in `IA_TOTALS`.
+
+## Printer DDS in a second member (FREE-06, RV-63)
+
+New parameters `DDSTGT` (file, library and member), `DDSTYPE` (default `PRTF`) and `DDSIFS` of `IACNVFREE`; usage in `docs/BUILD.md`. Without `DDSTGT` nothing changes: the DDS is kept as `//` comments at the end of the converted source. With it (`FreeConvert` of `IAfreeCvt`):
+
+| Part | Result |
+|------|--------|
+| the end of the converted source | two comment lines: the DDS is written to the DDS target, create the printer file with `CRTPRTF`; the DDS lines are not repeated |
+| DDS target | the lines of `OutDdsLine` are written unchanged (`     A` records, 80 characters, `C_WRAP_NONE`) to the member named by `DDSTGT` (`*PRTF` is the name of the printer file) |
+| validation | after the conversion and before the target is opened, with the rules of `TGT` (`ValidateIO` with converter 4, type `PRTF`); a failure writes nothing |
+| same target | the DDS target equal to `TGT` is refused (IAC0105) |
+| no printer output | `DDSTGT` is not used |
+
+Written from the design, not from a run.

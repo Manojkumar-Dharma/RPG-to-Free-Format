@@ -32,7 +32,7 @@ cannot check. The R list is in `REVIEW-ITEMS.md`. Audit of 2026-10-27.
 | `/COPY`, `/INCLUDE`: member must be converted too; other directives dropped | FREE-29 | keep |
 | Compile-time data kept as is (`**CTDATA`) | `IAfreeCvt` | keep: check the name |
 | `EXTFMT` length includes the sign | E specification | keep |
-| Printer file DDS comments (FREE-06) | `IAfreeCvt` | keep until tested |
+| Printer file DDS comments, or the DDS member with `DDSTGT` (FREE-06) | `IAfreeCvt` | keep until tested |
 
 ## Proposed changes
 

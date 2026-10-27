@@ -139,6 +139,19 @@ IACNVFREE SRC(MYLIB/QS36SRC FREE3) SRCTYPE(RPG38) TGT(QRPGLESRC)
 
 Expected result: the control and file description specifications become `ctl-opt` and `dcl-f` statements, the input specifications become data structures (`samples/FREEIN.rpg36`), the calculation specifications become statements as described in `docs/RPG-MAPPING.md`, and everything else (E, L and O specifications, compile-time data) is kept as `// RPG II:` comments and reported R. The expected output for each line of the samples is in `docs/RPG-MAPPING.md`. The target is not meant to compile yet: fields from the E specifications are not declared.
 
+### The printer DDS in its own member (DDSTGT, FREE-06)
+
+A source with output to a PRINTER file (`samples/FREEO.rpg36`) gets printer file DDS made from its O specifications. By default the DDS stays as `//` comments at the end of the converted source. `DDSTGT` writes it to a member of its own, as DDS source ready for `CRTPRTF`. `*PRTF` as the member means the name of the printer file; `*TGTFILE` and `*TGTLIB` mean the file and library of `TGT`:
+
+```
+IACNVFREE SRC(MYLIB/QS36SRC FREEO) SRCTYPE(RPG36) TGT(QRPGLESRC) DDSTGT(QDDSSRC)
+IACNVFREE SRC(MYLIB/QS36SRC FREEO) SRCTYPE(RPG36) TGT(QRPGLESRC) DDSTGT(MYLIB/QDDSSRC REPORT1)
+IACNVFREE SRC(MYLIB/QS36SRC FREEO) SRCTYPE(RPG36) TGT(QRPGLESRC) DDSTGT(*TGTFILE)
+CRTPRTF FILE(MYLIB/REPORT1) SRCFILE(MYLIB/QDDSSRC) SRCMBR(REPORT1)
+```
+
+The IFS works the same way with `DDSIFS` (member `name.PRTF`, `DDSIFS(*TGT)` is the target directory). The DDS target is checked after the conversion and before anything is written: a DDS target that exists needs `REPLACE(*YES)`, and the same member or file as `TGT` is refused (IAC0105). When the source has no output to a PRINTER file `DDSTGT` is not used. Run `IACNVMSG` again for the new message and compile `IAcnvTyp`, `IAfreeCvt` and `IAcnvFree` again.
+
 ## Grouped file and member parameters
 
 `SRC(lib/file member)` and `TGT(lib/file member)` replace the separate library, file and member keywords:

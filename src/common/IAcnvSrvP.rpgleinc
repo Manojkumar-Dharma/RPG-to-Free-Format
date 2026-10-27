@@ -20,6 +20,7 @@ dcl-c C_MODE_IFS 'I';            // location mode: IFS stream file
 dcl-c C_CNV_OCL 1;               // IAoclToCle
 dcl-c C_CNV_DSPF 2;              // IAcnvDspf
 dcl-c C_CNV_FREE 3;              // IAcnvFree
+dcl-c C_CNV_FREEDDS 4;           // IAcnvFree, second target: the printer DDS (FREE-06)
 
 dcl-c C_WRAP_NONE 0;             // WriteText: never wrap
 dcl-c C_WRAP_CL 1;               // wrap with '+' continuation (CLLE)

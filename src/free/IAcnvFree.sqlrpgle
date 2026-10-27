@@ -13,6 +13,8 @@ ctl-opt main(Main) option(*srcstmt:*nodebugio);
 dcl-pr FreeConvert int(10);
   i_src likeds(IAcnvDesc_t) const;
   i_tgt likeds(IAcnvDesc_t) const;
+  i_ddsParm likeds(IAcnvParm_t) const;
+  i_ddsGiven ind const;
   o_msgId char(7);
   o_msgData char(256);
 end-pr;
@@ -28,6 +30,9 @@ dcl-proc Main;
     i_srcCcsid int(10) const;
     i_tgtCcsid int(10) const;
     i_replace char(4) const;
+    i_ddsFileMember likeds(IAcnvFileMbr_t) const;
+    i_ddsType char(10) const;
+    i_ddsIfs varchar(1024) const;
   end-pi;
 
   dcl-ds l_parm likeds(IAcnvParm_t);
@@ -40,6 +45,8 @@ dcl-proc Main;
   dcl-s l_review int(10);
   dcl-s l_returnCode int(10);
   dcl-s l_counts char(256);
+  dcl-ds l_ddsParm likeds(IAcnvParm_t);
+  dcl-s l_ddsGiven ind inz(*off);
 
   // An IFS source or target has no file: the library is not used then.
   l_parm.srcFile = i_sourceFileMember.file;
@@ -67,6 +74,36 @@ dcl-proc Main;
   l_parm.tgtCcsid = i_tgtCcsid;
   l_parm.replace = i_replace;
 
+  // The printer DDS target (DDSTGT): given when a file or an IFS directory is named.
+  // The resolved copy of the target parameters is used for it (FREE-06, RV-63).
+  l_ddsParm = l_parm;
+  l_ddsGiven = (i_ddsFileMember.file <> *blanks and i_ddsFileMember.file <> '*NONE')
+               or %len(%trim(i_ddsIfs)) > 0;
+  if l_ddsGiven;
+    l_ddsParm.tgtFile = i_ddsFileMember.file;
+    if i_ddsFileMember.file = '*TGTFILE';
+      l_ddsParm.tgtFile = l_parm.tgtFile;
+      if l_parm.tgtFile = *blanks and %len(%trim(l_parm.tgtIfs)) > 0;
+        l_ddsParm.tgtFile = *blanks;
+      endif;
+    elseif i_ddsFileMember.file = '*NONE';
+      l_ddsParm.tgtFile = *blanks;
+    endif;
+    l_ddsParm.tgtLib = i_ddsFileMember.lib;
+    if i_ddsFileMember.lib = '*TGTLIB';
+      l_ddsParm.tgtLib = l_parm.tgtLib;
+    endif;
+    if l_ddsParm.tgtFile = *blanks;
+      l_ddsParm.tgtLib = *blanks;
+    endif;
+    l_ddsParm.tgtMbr = i_ddsFileMember.mbr;
+    l_ddsParm.tgtIfs = i_ddsIfs;
+    if %trim(i_ddsIfs) = '*TGT';
+      l_ddsParm.tgtIfs = l_parm.tgtIfs;
+    endif;
+    l_ddsParm.tgtType = i_ddsType;
+  endif;
+
   if ValidateIO(C_CNV_FREE:l_parm:l_sourceDesc:l_targetDesc:l_msgId:l_msgData) <> 0;
     SendEscape(l_msgId:l_msgData);
     return;
@@ -77,7 +114,8 @@ dcl-proc Main;
     return;
   endif;
 
-  l_returnCode = FreeConvert(l_sourceDesc:l_targetDesc:l_msgId:l_msgData);
+  l_returnCode = FreeConvert(l_sourceDesc:l_targetDesc:l_ddsParm:l_ddsGiven
+                             :l_msgId:l_msgData);
   RptClose(l_conv:l_assump:l_review);
 
   if l_returnCode <> 0;

@@ -43,6 +43,8 @@ dcl-s g_outputCount int(10);
 dcl-s g_overflow ind;
 dcl-s g_headerSeen ind;
 dcl-s g_dialect char(1) inz('2');
+// The number of printer DDS lines built by AddDdsComments (FREE-06).
+dcl-s g_ddsLines int(10) inz(0);
 // Files declared by converted file descriptions, for the input specifications.
 dcl-s g_fileNames varchar(8) dim(C_MAXFILES);
 dcl-s g_fileLens int(10) dim(C_MAXFILES);
@@ -94,6 +96,8 @@ dcl-proc FreeConvert export;
   dcl-pi *n int(10);
     i_source likeds(IAcnvDesc_t) const;
     i_target likeds(IAcnvDesc_t) const;
+    i_ddsParm likeds(IAcnvParm_t) const;
+    i_ddsGiven ind const;
     o_msgId char(7);
     o_msgData char(256);
   end-pi;
@@ -103,8 +107,13 @@ dcl-proc FreeConvert export;
   dcl-s l_index int(10);
   dcl-s l_lines int(10);
   dcl-s l_status char(1);
+  dcl-ds l_ddsParm likeds(IAcnvParm_t);
+  dcl-ds l_ddsSrc likeds(IAcnvDesc_t);
+  dcl-ds l_ddsDesc likeds(IAcnvDesc_t);
+  dcl-s l_useDds ind inz(*off);
 
   g_sourceCount = 0;
+  g_ddsLines = 0;
   g_outputCount = 0;
   g_overflow = *off;
   g_headerSeen = *off;
@@ -181,12 +190,32 @@ dcl-proc FreeConvert export;
   endif;
   CalcFinish();
   if g_dialect <> '4';
-    AddDdsComments();
+    AddDdsComments(i_ddsGiven);
   endif;
   if g_overflow;
     o_msgId = 'IAC0101';
     o_msgData = 'The converted source has more than ' + %char(C_MAXOUT) + ' lines';
     return 1;
+  endif;
+
+  // The printer DDS goes to its own member (DDSTGT): checked before anything is written.
+  l_useDds = i_ddsGiven and g_ddsLines > 0;
+  if l_useDds;
+    l_ddsParm = i_ddsParm;
+    if %xlate(C_LOWER:C_UPPER:%trim(l_ddsParm.tgtMbr)) = '*PRTF';
+      l_ddsParm.tgtMbr = OutDdsFile();
+    endif;
+    if %xlate(C_LOWER:C_UPPER:%trim(l_ddsParm.tgtType)) = '*DFT';
+      l_ddsParm.tgtType = 'PRTF';
+    endif;
+    if ValidateIO(C_CNV_FREEDDS:l_ddsParm:l_ddsSrc:l_ddsDesc:o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+    if SameTarget(i_target:l_ddsDesc);
+      o_msgId = 'IAC0105';
+      o_msgData = %trim(l_ddsDesc.mbr) + ' ' + %trim(l_ddsDesc.path);
+      return 1;
+    endif;
   endif;
 
   if OpenTarget(i_target:o_msgId:o_msgData) <> 0;
@@ -204,7 +233,37 @@ dcl-proc FreeConvert export;
     endif;
   endfor;
   CloseTarget();
+  if l_useDds;
+    if OpenTarget(l_ddsDesc:o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+    for l_index = 1 to g_ddsLines;
+      if WriteText(OutDdsLine(l_index):C_WRAP_NONE:l_lines:l_status:o_msgId:o_msgData)
+         <> 0;
+        CloseTarget();
+        return 1;
+      endif;
+    endfor;
+    CloseTarget();
+  endif;
   return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// *ON when both targets are the same member or the same IFS file.
+dcl-proc SameTarget;
+  dcl-pi *n ind;
+    i_a likeds(IAcnvDesc_t) const;
+    i_b likeds(IAcnvDesc_t) const;
+  end-pi;
+
+  if i_a.mode <> i_b.mode;
+    return *off;
+  endif;
+  if i_a.mode = C_MODE_IFS;
+    return i_a.path = i_b.path;
+  endif;
+  return i_a.lib = i_b.lib and i_a.file = i_b.file and i_a.mbr = i_b.mbr;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1352,16 +1411,25 @@ end-proc;
 // member and create the printer file from it.
 dcl-proc AddDdsComments;
   dcl-pi *n;
+    i_toMember ind const;
   end-pi;
 
   dcl-s l_count int(10);
   dcl-s l_k int(10);
 
   l_count = OutFinish();
+  g_ddsLines = l_count;
   if l_count = 0;
     return;
   endif;
   AddOut('':0);
+  if i_toMember;
+    AddOut('// Printer file ' + OutDdsFile() + ': the DDS source made from the O '
+           + 'specifications is written to the DDS target (DDSTGT):':0);
+    AddOut('// run CRTPRTF FILE(' + OutDdsFile() + ') SRCFILE(...) before compiling '
+           + 'this program.':0);
+    return;
+  endif;
   AddOut('// Printer file ' + OutDdsFile() + ': DDS source made from the O '
          + 'specifications.':0);
   AddOut('// Copy these lines (without the // and the first blank) into a DDS '

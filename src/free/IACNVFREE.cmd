@@ -6,6 +6,11 @@
 /* library. For an IFS source or target give *NONE as the file and    */
 /* use SRCIFS or TGTIFS (a directory; TGTIFS(*SRC) = the source's);   */
 /* the IFS name is member.type.                                        */
+/* DDSTGT writes the printer file DDS made from the O specifications   */
+/* to its own member (default *NONE: the DDS stays as comments at the  */
+/* end of the converted source). *TGTFILE and *TGTLIB mean the target  */
+/* file and library, *PRTF the name of the printer file; DDSIFS(*TGT)  */
+/* is the target IFS directory.                                        */
 CMD        PROMPT('RPG to free-format converter')
 
 PARM       KWD(SRC) TYPE(SRC_T) MIN(1) PROMPT('Source file and member')
@@ -40,3 +45,17 @@ PARM       KWD(TGTCCSID) TYPE(*INT4) DFT(*DFT) +
              SPCVAL((*DFT -1)) PROMPT('Target CCSID')
 PARM       KWD(REPLACE) TYPE(*CHAR) LEN(4) RSTD(*YES) DFT(*NO) +
              VALUES(*NO *YES) PROMPT('Replace existing target')
+
+PARM       KWD(DDSTGT) TYPE(DDSTGT_T) PROMPT('Printer DDS file and member')
+DDSTGT_T:  ELEM       TYPE(DDSFILE_Q) PROMPT('DDS source file')
+           ELEM       TYPE(*NAME) LEN(10) DFT(*PRTF) +
+                        SPCVAL((*PRTF)) PROMPT('DDS member')
+DDSFILE_Q: QUAL       TYPE(*NAME) LEN(10) DFT(*NONE) +
+                        SPCVAL((*NONE ' ') (*TGTFILE))
+           QUAL       TYPE(*NAME) LEN(10) DFT(*TGTLIB) +
+                        SPCVAL((*TGTLIB)) PROMPT('Library')
+PARM       KWD(DDSTYPE) TYPE(*CHAR) LEN(10) DFT(PRTF) +
+             PROMPT('DDS member type')
+PARM       KWD(DDSIFS) TYPE(*CHAR) LEN(1024) VARY(*YES) +
+             DFT(*NONE) SPCVAL((*NONE ' ') (*TGT)) +
+             PROMPT('DDS IFS directory')
