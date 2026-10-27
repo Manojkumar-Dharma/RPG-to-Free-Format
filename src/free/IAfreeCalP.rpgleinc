@@ -46,6 +46,11 @@ dcl-pr CalcDefineArray;
   i_alt varchar(10) const;
 end-pr;
 
+// *ON when the cycle skeleton (FREE-36) is written for this source: heading, detail
+// and total records of the O specifications are written by it (RV-60).
+dcl-pr CalcCycleActive ind;
+end-pr;
+
 // One C specification line (columns as in the RPG II coding form).
 dcl-pr CalcLine;
   i_line char(100) const;

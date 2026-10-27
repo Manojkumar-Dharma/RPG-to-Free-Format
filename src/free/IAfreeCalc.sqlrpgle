@@ -2963,7 +2963,7 @@ dcl-proc ConvertExcept;
   dcl-s l_name varchar(10);
   dcl-s l_count int(10);
   dcl-s l_k int(10);
-  dcl-s l_cond varchar(80);
+  dcl-s l_cond varchar(200);
   dcl-s l_statements varchar(250) dim(C_MAXSTMT);
 
   l_name = Up(i_c.factor2);
@@ -5617,6 +5617,51 @@ dcl-proc CycInit;
     endif;
   endfor;
   g_cycState = 'P';
+  // Total records of the O specifications are written at the end of IA_TOTALS
+  // (RV-60), so the subroutine exists for them.
+  if OutCycleCount('T') > 0;
+    g_cycHasTotals = *on;
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// *ON when the cycle skeleton is written (see IAfreeOut: heading, detail and total
+// records need it).
+dcl-proc CalcCycleActive export;
+  dcl-pi *n ind;
+  end-pi;
+
+  if not g_cycChecked;
+    CycInit();
+  endif;
+  return g_cycState <> ' ';
+end-proc;
+
+// ------------------------------------------------------------------
+// The records of the O specifications the skeleton writes: part S at the start of
+// the cycle (step 1, heading and detail), part T at the end of IA_TOTALS.
+dcl-proc CycOutput;
+  dcl-pi *n;
+    i_part char(1) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_count int(10);
+  dcl-s l_cond varchar(200);
+  dcl-s l_format varchar(10);
+
+  l_count = OutCycleCount(i_part);
+  for l_k = 1 to l_count;
+    l_cond = OutCycleCond(i_part:l_k);
+    l_format = OutCycleFormat(i_part:l_k);
+    if l_cond = '';
+      Emit('write ' + l_format + ';':g_lastLineNo);
+    else;
+      Emit('if ' + l_cond + ';':g_lastLineNo);
+      Emit('write ' + l_format + ';':g_lastLineNo:1);
+      Emit('endif;':g_lastLineNo);
+    endif;
+  endfor;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -5749,8 +5794,14 @@ dcl-proc CycOpen;
        + ' (check)':g_lastLineNo);
   Emit('dow *on;':g_lastLineNo);
   g_depth += 1;
-  Emit('// step 1: heading and detail output of the previous record belongs here '
-       + '(O specifications)':g_lastLineNo);
+  if OutCycleCount('S') = 0;
+    Emit('// step 1: heading and detail output of the previous record belongs here '
+         + '(O specifications)':g_lastLineNo);
+  else;
+    Emit('// step 1: heading and detail output of the previous record (1P: first '
+         + 'cycle)':g_lastLineNo);
+    CycOutput('S');
+  endif;
   Emit('if *inlr;':g_lastLineNo);
   Emit('leave;':g_lastLineNo:1);
   Emit('endif;':g_lastLineNo);
@@ -5771,8 +5822,9 @@ dcl-proc CycOpen;
   g_cycState = 'D';
   RptItem(C_STS_ASSUMPTION:g_lastLineNo:'RPG cycle'
           :'Cycle skeleton written for primary file ' + g_cycFile + ': read, control '
-           + 'break, total calculations and detail calculations; the heading, detail '
-           + 'and total output (O specifications) are not part of it yet');
+           + 'break, total calculations and detail calculations; heading, detail '
+           + 'and total records of a converted printer file are written in it '
+           + '(RV-60)');
 end-proc;
 
 // ------------------------------------------------------------------
@@ -5815,6 +5867,11 @@ dcl-proc CycEndTotals;
   dcl-pi *n;
   end-pi;
 
+  if OutCycleCount('T') > 0;
+    Emit('// total output (step 7): the total records of the O specifications'
+         :g_lastLineNo);
+    CycOutput('T');
+  endif;
   g_depth -= 1;
   if g_depth < 0;
     g_depth = 0;

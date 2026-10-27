@@ -669,8 +669,9 @@ Decision (user, 2026-10-25): the output of a PRINTER file is made as an external
 | Character or unedited numeric field (name 32-37, end position 40-43) | field with length and type of the definition (`A`, or `S` with decimals), usage `O`, position = end - length + 1 | C |
 | `EXCPT NAME` in the calculations | one `write FORMAT;` for each record format with the name, in source order | A |
 | `EXCPT` without a name | the formats of the exception records without a name | A |
-| Heading, detail and total records (types H, D, T) | whole record as comments | R: written by the RPG cycle |
-| Level, `1P`, `MR`, `LR`, `RT` output indicators; OR lines; ADD, DEL, fetch overflow, release (16-18) | comments | R |
+| Heading, detail and total records (types H, D, T) with the cycle skeleton (FREE-36) | a record format `HEAD01`, `DETAIL01`, `TOTAL01` (next free number); H and D are written at step 1 of the cycle, T at the end of `IA_TOTALS` (see below) | A |
+| Heading, detail and total records without the cycle skeleton | whole record as comments | R |
+| `MR`, `RT` output indicators; ADD, DEL, fetch overflow, release (16-18) | comments | R |
 | Edit codes (38) on a numeric field, edit words, blank after (39), data format P, B, L, R (44), relative end positions, `PAGE`, `UDATE` and the like, `*PLACE`, array elements | comments | R |
 | A field without a known length (not defined by I, E or a result field) | the record format is not generated | R (the `write` has to be fixed by hand) |
 | A second printer file, a file that is not a converted PRINTER file | comments | R |
@@ -897,3 +898,19 @@ New parameters `DDSTGT` (file, library and member), `DDSTYPE` (default `PRTF`) a
 | no printer output | `DDSTGT` is not used |
 
 Written from the design, not from a run.
+
+## Heading, detail and total records in the cycle skeleton (FREE-37, RV-60)
+
+Source: SC09-1817 (output indicators, the 1P indicator, the program cycle). The record formats are made like the exception records (printer DDS, see above); the cycle skeleton of FREE-36 writes them. Without the skeleton the records stay R.
+
+| Source | Free-form |
+|---|---|
+| H or D record | `write HEAD01;` at the start of each cycle (step 1: the output of the previous record, before the LR check); the fields are those of the previous record |
+| T record | `write TOTAL01;` at the end of the subroutine `IA_TOTALS`, after the total calculations (step 7), also for the last cycle |
+| output indicators on the record line | as for exception records: `*in01`, `not *in02` |
+| `1P` (H and D only) | `IA_FIRST` (on in step 1 of the first cycle, before the first record is read) |
+| `L1` to `L9`, `LR` | `*inl1` to `*inl9`, `*inlr`; the levels stay on during step 1 of the next cycle, as in RPG |
+| AND lines | `and`; OR lines: `(a) or (b)`, for every record type including E |
+| `MR`, `RT`, `1P` on T, a field line with a level indicator | R |
+
+A heading or detail record without any indicator is also written on the first cycle (fields still blank), as RPG does. The numbers of the record formats follow the source order for each type.

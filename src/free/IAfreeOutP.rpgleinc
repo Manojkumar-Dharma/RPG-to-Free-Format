@@ -35,8 +35,25 @@ dcl-pr OutExceptFormat varchar(10);
   i_number int(10) const;
 end-pr;
 
-dcl-pr OutExceptCond varchar(80);
+dcl-pr OutExceptCond varchar(200);
   i_name varchar(6) const;
+  i_number int(10) const;
+end-pr;
+
+// The heading, detail (part S) and total (part T) records the cycle skeleton writes
+// (RV-60): their number, the format name and the condition of the nth one in source
+// order. 1P is IA_FIRST, L1 to L9 and LR are *INL1 to *INL9 and *INLR.
+dcl-pr OutCycleCount int(10);
+  i_part char(1) const;
+end-pr;
+
+dcl-pr OutCycleFormat varchar(10);
+  i_part char(1) const;
+  i_number int(10) const;
+end-pr;
+
+dcl-pr OutCycleCond varchar(200);
+  i_part char(1) const;
   i_number int(10) const;
 end-pr;
 

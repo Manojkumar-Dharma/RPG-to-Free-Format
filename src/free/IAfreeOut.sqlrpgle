@@ -37,7 +37,9 @@ dcl-s g_gStart int(10) dim(C_MAXGRP);
 dcl-s g_gEnd int(10) dim(C_MAXGRP);
 dcl-s g_gOk ind dim(C_MAXGRP);
 dcl-s g_gReason varchar(150) dim(C_MAXGRP);
-dcl-s g_gCond varchar(80) dim(C_MAXGRP);
+dcl-s g_gCond varchar(200) dim(C_MAXGRP);
+dcl-s g_gOr varchar(200) dim(C_MAXGRP);      // finished OR terms: (a) or (b)
+dcl-s g_gType char(1) dim(C_MAXGRP);         // E exception, H heading, D detail, T total
 dcl-s g_gKeys varchar(60) dim(C_MAXGRP);     // SPACEB, SPACEA, SKIPB, SKIPA
 dcl-s g_gFirst int(10) dim(C_MAXGRP);
 dcl-s g_gFields int(10) dim(C_MAXGRP);
@@ -134,17 +136,44 @@ end-proc;
 // ------------------------------------------------------------------
 // The output indicators of columns 23-31 (three of N + two characters) as a
 // free-form condition. o_reason is set for an indicator that cannot be used.
+// The indicators of the RPG cycle on the record line of a heading, detail or total
+// record (RV-60): L1-L9 and LR as *INLn, 1P (heading and detail only) as IA_FIRST,
+// the first record of the cycle skeleton. '' for anything else.
+dcl-proc CycleTerm;
+  dcl-pi *n varchar(10);
+    i_ind varchar(2) const;
+    i_type char(1) const;
+  end-pi;
+
+  if i_type <> 'H' and i_type <> 'D' and i_type <> 'T';
+    return '';
+  endif;
+  if i_ind = 'LR';
+    return '*inlr';
+  endif;
+  if %subst(i_ind:1:1) = 'L' and %check('123456789':%subst(i_ind:2:1)) = 0;
+    return '*inl' + %subst(i_ind:2:1);
+  endif;
+  if i_ind = '1P' and i_type <> 'T';
+    return 'IA_FIRST';
+  endif;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc IndicatorCond;
-  dcl-pi *n varchar(80);
+  dcl-pi *n varchar(200);
     i_line char(100) const;
     o_reason varchar(150);
+    i_type char(1) const;
   end-pi;
 
   dcl-s l_slot int(10);
   dcl-s l_col int(10);
   dcl-s l_not varchar(1);
   dcl-s l_ind varchar(2);
-  dcl-s l_text varchar(80) inz('');
+  dcl-s l_text varchar(200) inz('');
+  dcl-s l_term varchar(10);
 
   o_reason = '';
   for l_slot = 0 to 2;
@@ -159,10 +188,14 @@ dcl-proc IndicatorCond;
                  + %char(l_col + 2) + ' is not valid';
       return '';
     endif;
-    if not IsOutIndicator(l_ind);
+    l_term = CycleTerm(l_ind:i_type);
+    if l_term = '' and not IsOutIndicator(l_ind);
       o_reason = 'Output indicator ' + l_ind + ' belongs to the RPG cycle and is '
                  + 'not converted';
       return '';
+    endif;
+    if l_term = '';
+      l_term = '*in' + l_ind;
     endif;
     if %len(l_text) > 0;
       l_text += ' and ';
@@ -170,7 +203,7 @@ dcl-proc IndicatorCond;
     if l_not = 'N';
       l_text += 'not ';
     endif;
-    l_text += '*in' + l_ind;
+    l_text += l_term;
   endfor;
   return l_text;
 end-proc;
@@ -251,7 +284,8 @@ dcl-proc OutBuild;
   dcl-s l_type char(1);
   dcl-s l_ao varchar(3);
   dcl-s l_reason varchar(150);
-  dcl-s l_cond varchar(80);
+  dcl-s l_cond varchar(200);
+  dcl-s l_cycle ind;
   dcl-s l_device char(1);
   dcl-s l_ftype char(1);
   dcl-s l_recDs varchar(12);
@@ -268,7 +302,14 @@ dcl-proc OutBuild;
   dcl-s l_end varchar(5);
   dcl-s l_fmt char(1);
   dcl-s l_const varchar(30);
+  dcl-s l_used ind;
 
+  if g_built;
+    return;
+  endif;
+  // The cycle skeleton decides whether heading, detail and total records can be
+  // written; it may build this table itself (total records), so ask before g_built.
+  l_cycle = CalcCycleActive();
   if g_built;
     return;
   endif;
@@ -293,7 +334,7 @@ dcl-proc OutBuild;
       g_fEnd(g_fCount) = 0;
       l_end = Cols(l_line:40:43);
       l_fmt = %subst(Up(%subst(l_line:44:1) + ' '):1:1);
-      l_cond = IndicatorCond(l_line:l_reason);
+      l_cond = IndicatorCond(l_line:l_reason:' ');
       g_fCond(g_fCount) = l_cond;
       select;
         when l_reason <> '';
@@ -326,21 +367,26 @@ dcl-proc OutBuild;
     l_ao = Up(Cols(l_line:14:16));
     if l_ao = 'AND' or l_ao = 'OR';
       if l_g > 0;
-        if l_ao = 'OR';
-          if g_gReason(l_g) = '';
-            g_gReason(l_g) = 'The OR relationship of output indicators is not '
-                             + 'converted';
-          endif;
-        else;
-          l_cond = IndicatorCond(l_line:l_reason);
-          if l_reason <> '' and g_gReason(l_g) = '';
-            g_gReason(l_g) = l_reason;
-          elseif l_cond <> '';
-            if g_gCond(l_g) <> '';
-              g_gCond(l_g) += ' and ';
+        l_cond = IndicatorCond(l_line:l_reason:g_gType(l_g));
+        if l_reason <> '' and g_gReason(l_g) = '';
+          g_gReason(l_g) = l_reason;
+        elseif l_ao = 'OR';
+          // The terms before are closed: (a) or (b); AND lines go to the last term.
+          if (l_cond = '' or g_gCond(l_g) = '') and g_gReason(l_g) = '';
+            g_gReason(l_g) = 'An OR line needs indicators, and so does the line '
+                             + 'before it';
+          elseif g_gReason(l_g) = '';
+            if g_gOr(l_g) <> '';
+              g_gOr(l_g) += ' or ';
             endif;
-            g_gCond(l_g) += l_cond;
+            g_gOr(l_g) += '(' + g_gCond(l_g) + ')';
+            g_gCond(l_g) = l_cond;
           endif;
+        elseif l_cond <> '';
+          if g_gCond(l_g) <> '';
+            g_gCond(l_g) += ' and ';
+          endif;
+          g_gCond(l_g) += l_cond;
         endif;
         g_gEnd(l_g) = l_index;
       endif;
@@ -365,14 +411,19 @@ dcl-proc OutBuild;
     g_gReason(l_g) = '';
     g_gFirst(l_g) = g_fCount + 1;
     g_gFields(l_g) = 0;
-    g_gCond(l_g) = IndicatorCond(l_line:l_reason);
+    g_gType(l_g) = l_type;
+    g_gOr(l_g) = '';
+    g_gCond(l_g) = IndicatorCond(l_line:l_reason:l_type);
     g_gKeys(l_g) = '';
     select;
       when l_reason <> '';
         g_gReason(l_g) = l_reason;
-      when l_type <> 'E';
+      when l_type <> 'E' and l_type <> 'H' and l_type <> 'D' and l_type <> 'T';
+        g_gReason(l_g) = 'Record type ' + l_type + ' (column 15) is not valid';
+      when l_type <> 'E' and not l_cycle;
         g_gReason(l_g) = 'Heading, detail and total records are written by the '
-                         + 'RPG cycle: not converted (only exception records)';
+                         + 'RPG cycle skeleton (one program described primary '
+                         + 'file): not converted without it';
       when Cols(l_line:16:18) <> '';
         g_gReason(l_g) = 'Entry in columns 16-18 (ADD, DEL, fetch overflow, '
                          + 'release) is not converted';
@@ -418,13 +469,20 @@ dcl-proc OutBuild;
     endif;
   endfor;
 
+  // Terms of OR lines: (a) or (b) or (c).
+  for l_k = 1 to g_gCount;
+    if g_gOr(l_k) <> '';
+      g_gCond(l_k) = g_gOr(l_k) + ' or (' + g_gCond(l_k) + ')';
+    endif;
+  endfor;
+
   // Format names: the EXCPT name, with a two-digit number when the name is used
   // for more than one record.
   for l_k = 1 to g_gCount;
     g_gOk(l_k) = (g_gReason(l_k) = '');
   endfor;
   for l_k = 1 to g_gCount;
-    if not g_gOk(l_k);
+    if not g_gOk(l_k) or g_gType(l_k) <> 'E';
       iter;
     endif;
     l_name = g_gName(l_k);
@@ -434,7 +492,8 @@ dcl-proc OutBuild;
     l_total = 0;
     l_seq = 0;
     for l_index = 1 to g_gCount;
-      if g_gOk(l_index) and g_gName(l_index) = g_gName(l_k);
+      if g_gOk(l_index) and g_gType(l_index) = 'E'
+         and g_gName(l_index) = g_gName(l_k);
         l_total += 1;
         if l_index <= l_k;
           l_seq += 1;
@@ -447,6 +506,33 @@ dcl-proc OutBuild;
       g_gFmt(l_k) = l_name + %subst('0' + %char(l_seq):%len('0' + %char(l_seq))
                     - 1:2);
     endif;
+  endfor;
+  // Heading, detail and total records: HEAD01, DETAIL01, TOTAL01 and so on, a name
+  // that no other format has.
+  for l_k = 1 to g_gCount;
+    if not g_gOk(l_k) or g_gType(l_k) = 'E';
+      iter;
+    endif;
+    select;
+      when g_gType(l_k) = 'H';
+        l_name = 'HEAD';
+      when g_gType(l_k) = 'D';
+        l_name = 'DETAIL';
+      other;
+        l_name = 'TOTAL';
+    endsl;
+    l_seq = 0;
+    dou not l_used;
+      l_seq += 1;
+      g_gFmt(l_k) = l_name + %subst('0' + %char(l_seq):%len('0' + %char(l_seq))
+                    - 1:2);
+      l_used = *off;
+      for l_index = 1 to g_gCount;
+        if l_index <> l_k and g_gOk(l_index) and g_gFmt(l_index) = g_gFmt(l_k);
+          l_used = *on;
+        endif;
+      endfor;
+    enddo;
   endfor;
 end-proc;
 
@@ -461,7 +547,7 @@ dcl-proc OutExceptCount export;
 
   OutBuild();
   for l_k = 1 to g_gCount;
-    if g_gOk(l_k) and g_gName(l_k) = Up(i_name);
+    if g_gOk(l_k) and g_gType(l_k) = 'E' and g_gName(l_k) = Up(i_name);
       l_count += 1;
     endif;
   endfor;
@@ -479,7 +565,7 @@ dcl-proc OutGroupNumber;
   dcl-s l_count int(10) inz(0);
 
   for l_k = 1 to g_gCount;
-    if g_gOk(l_k) and g_gName(l_k) = Up(i_name);
+    if g_gOk(l_k) and g_gType(l_k) = 'E' and g_gName(l_k) = Up(i_name);
       l_count += 1;
       if l_count = i_number;
         return l_k;
@@ -507,7 +593,7 @@ end-proc;
 
 // ------------------------------------------------------------------
 dcl-proc OutExceptCond export;
-  dcl-pi *n varchar(80);
+  dcl-pi *n varchar(200);
     i_name varchar(6) const;
     i_number int(10) const;
   end-pi;
@@ -515,6 +601,75 @@ dcl-proc OutExceptCond export;
   dcl-s l_g int(10);
 
   l_g = OutGroupNumber(i_name:i_number);
+  if l_g = 0;
+    return '';
+  endif;
+  return g_gCond(l_g);
+end-proc;
+
+// ------------------------------------------------------------------
+// The records the cycle skeleton writes (RV-60): part S is step 1 (heading and
+// detail records, source order), part T the total time (total records).
+dcl-proc OutCycleGroup;
+  dcl-pi *n int(10);
+    i_part char(1) const;
+    i_number int(10) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_count int(10) inz(0);
+
+  OutBuild();
+  for l_k = 1 to g_gCount;
+    if g_gOk(l_k) and ((i_part = 'S' and (g_gType(l_k) = 'H' or g_gType(l_k) = 'D'))
+                       or (i_part = 'T' and g_gType(l_k) = 'T'));
+      l_count += 1;
+      if l_count = i_number;
+        return l_k;
+      endif;
+    endif;
+  endfor;
+  if i_number = 0;
+    return l_count;
+  endif;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc OutCycleCount export;
+  dcl-pi *n int(10);
+    i_part char(1) const;
+  end-pi;
+
+  return OutCycleGroup(i_part:0);
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc OutCycleFormat export;
+  dcl-pi *n varchar(10);
+    i_part char(1) const;
+    i_number int(10) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  l_g = OutCycleGroup(i_part:i_number);
+  if l_g = 0;
+    return '';
+  endif;
+  return g_gFmt(l_g);
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc OutCycleCond export;
+  dcl-pi *n varchar(200);
+    i_part char(1) const;
+    i_number int(10) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  l_g = OutCycleGroup(i_part:i_number);
   if l_g = 0;
     return '';
   endif;
@@ -681,6 +836,22 @@ dcl-proc DdsRow;
 end-proc;
 
 // ------------------------------------------------------------------
+dcl-proc CycleNote;
+  dcl-pi *n varchar(120);
+    i_type char(1) const;
+  end-pi;
+
+  select;
+    when i_type = 'H' or i_type = 'D';
+      return '; written at the start of each cycle of the cycle skeleton (step 1, '
+             + 'output of the previous record)';
+    when i_type = 'T';
+      return '; written at the end of the subroutine IA_TOTALS (total time)';
+  endsl;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
 // Builds the DDS of the converted groups. A group whose fields are not known
 // well enough is reported R (its EXCPT writes a format that is not generated).
 dcl-proc OutFinish export;
@@ -775,7 +946,8 @@ dcl-proc OutFinish export;
       RptItem(C_STS_REVIEW:SrcLineNo(g_gStart(l_g)):%trimr(%subst(
               SrcLine(g_gStart(l_g)):6:75))
               :'DDS record format ' + g_gFmt(l_g) + ' is not generated: '
-              + l_reason + '; EXCPT writes this format: fix by hand');
+              + l_reason + '; the write of this format is in the converted source: '
+              + 'fix by hand');
       iter;
     endif;
 
@@ -813,7 +985,8 @@ dcl-proc OutFinish export;
     RptItem(C_STS_ASSUMPTION:SrcLineNo(g_gStart(l_g)):%trimr(%subst(
             SrcLine(g_gStart(l_g)):6:75)):'Record format ' + g_gFmt(l_g)
             + ' of the printer file DDS (comments at the end of the converted '
-            + 'source); the DDS is not tested: check line and position entries');
+            + 'source); the DDS is not tested: check line and position entries'
+            + CycleNote(g_gType(l_g)));
     for l_j = g_gStart(l_g) + 1 to g_gEnd(l_g);
       RptItem(C_STS_CONVERTED:SrcLineNo(l_j):%trimr(%subst(SrcLine(l_j):6:75)):'');
     endfor;
