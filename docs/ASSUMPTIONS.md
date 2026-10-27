@@ -25,6 +25,7 @@ cannot check. The R list is in `REVIEW-ITEMS.md`. Audit of 2026-10-27.
 |---|---|---|
 | RPG cycle not emulated (first converted detail calculation, once per member) | `CYCLE_NOTE` | keep; turns every member without a cycle into A on one line |
 | Half adjust differs | `HALF_ADJUST_NOTE` | keep |
+| RPG cycle skeleton for one primary file (FREE-36): read, control break, `IA_TOTALS`, last cycle | `CycOpen` in `IAfreeCalc` | new: A once per member; the output of the cycle (O specifications, FREE-06) and secondary or matching files are not part of it |
 | `GOTO`, `CABxx`, `TAG` patterns (FREE-35) | `ConvertJump` | new: skip forward, end of subroutine or program, loop back, leave |
 | Renamed field is a copy (RV-30) | `IAfreeCvt` | text was out of date (said the copy is not written back); corrected: it is copied back before UPDAT and WRITE |
 | Record format DS for READ and CHAIN | `IAfreeCvt` | keep |
@@ -43,7 +44,8 @@ cannot check. The R list is in `REVIEW-ITEMS.md`. Audit of 2026-10-27.
 
 - Done or by design, no work: RV-15, RV-34, RV-35.
 - Written, waiting for a compile and test: RV-01 to RV-11, RV-13, RV-14 (RPG II/III), RV-30, RV-32, RV-36, RV-50 to RV-55, RV-57, RV-58, RV-59.
-- Needs a decision: RV-20/21/60 (cycle skeleton or keep R), RV-12/31 (WORKSTN design).
+- Decided 2026-10-27: RV-20/21 (cycle skeleton, FREE-36 first increment), FREE-06 second member for the printer DDS, RV-12/31 (WORKSTN through IACNVDSPF display files, after the cycle).
+- Needs a decision: none open.
 - Needs a sample member: RV-33, DSP-05/06.
 - Follow-ups: RV-14 for RPG IV, RV-37 (SQL `WHENEVER GOTO`), RV-56, RV-61 to RV-63 (output).
 - Stale entries corrected today: RV-55 and the "Order of work" list.
