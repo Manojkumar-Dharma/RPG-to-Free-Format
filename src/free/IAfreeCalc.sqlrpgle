@@ -2027,7 +2027,7 @@ dcl-proc ConvertJump;
     when g_jvAct(l_k) = 'R' or g_jvAct(l_k) = 'V';
       if g_jvAct(l_k) = 'V';
         l_word = 'leave';
-        l_note := 'Jump to TAG ' + g_jvLabel(l_k) + ' after the loop became LEAVE';
+        l_note = 'Jump to TAG ' + g_jvLabel(l_k) + ' after the loop became LEAVE';
       elseif g_inSub;
         l_word = 'leavesr';
         l_note = 'Jump to the last TAG of the subroutine became LEAVESR';
