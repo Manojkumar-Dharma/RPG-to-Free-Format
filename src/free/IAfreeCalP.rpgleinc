@@ -73,6 +73,18 @@ dcl-pr FileRenames varchar(250);
   i_name varchar(8) const;
 end-pr;
 
+// The renamed fields of a file as assignments back to the external fields
+// (EXT = NEW), for WRITE and UPDAT; '' when there is none (FREE-25).
+dcl-pr FileRenamesBack varchar(250);
+  i_name varchar(8) const;
+end-pr;
+
+// The externally described file of a record format name (record line of its I
+// specifications); '' when the name is not a known record format (FREE-25).
+dcl-pr FormatFile varchar(8);
+  i_name varchar(8) const;
+end-pr;
+
 // A file declared by a converted F specification (see IAfreeCvt FileInfo).
 dcl-pr FileInfo ind;
   i_name varchar(8) const;

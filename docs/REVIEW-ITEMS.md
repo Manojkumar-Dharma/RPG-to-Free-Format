@@ -46,7 +46,7 @@ Code status and test status follow `PLANNED.md`.
 
 | ID | Item | Why R today | Resolution | Code status | Test status |
 |----|------|-------------|------------|-------------|-------------|
-| RV-30 | I specifications of externally described files: renames, field indicators | no field rename on a file in free form | Decided: renamed field is a copy (`dcl-s NEW like(EXT)`), set after READ and CHAIN when a record was read (FREE-24); not written back, WRITE and UPDATE of external formats stay R; control levels, matching fields and field indicators stay R | Written | Not tested |
+| RV-30 | I specifications of externally described files: renames, field indicators | no field rename on a file in free form | Decided: renamed field is a copy (`dcl-s NEW like(EXT)`), set after READ and CHAIN when a record was read (FREE-24) and copied back to the external fields before WRITE and UPDATE of a record format named by an I specification (FREE-25); control levels, matching fields and field indicators stay R | Written | Not tested |
 | RV-31 | WORKSTN, SPECIAL and other devices (F) | display files | with RV-12 | Planned | Not started |
 | RV-32 | Continuation records (`RECNO`, `SUBR` exit, `NUM`, `FMTS`, `INFSR`) | | Convert: `dcl-f` keywords where they exist; done in FREE-18 for DISK and PRINTER files (`COMIT`, `INFDS`, `INFSR`, `RECNO`, `RENAME`, `IGNORE`); WORKSTN, SPECIAL and `PRTCTL` options stay R | Written | Not tested |
 | RV-33 | Alternate collating sequence, file translation, transparent literals | tables | Sample: needs the tables | Planned | Not started |

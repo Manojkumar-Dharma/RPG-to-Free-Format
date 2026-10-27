@@ -1,6 +1,6 @@
       * RPG III renamed fields of an externally described file (RV-30)
      H
-     FCUSTMAS IF  E           K        DISK
+     FCUSTMAS UF  E           K        DISK
       * Renames; a field without an external name needs no statement
      ICUSTREC
      I              CUSTNAME                        CNAME
@@ -15,3 +15,7 @@
      C           KEY       CHAINCUSTMAS              50
      C                     READ CUSTMAS                  91
      C                     MOVE CNAME     SAVNAM 10
+      * The renamed fields are copied back before UPDAT and WRITE of the format
+     C                     MOVEL'Z'       CNAME
+     C                     UPDATCUSTREC
+     C                     WRITECUSTREC

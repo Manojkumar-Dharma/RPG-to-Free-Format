@@ -55,6 +55,11 @@ dcl-s g_renFile varchar(8) dim(C_MAXREN);
 dcl-s g_renExt varchar(10) dim(C_MAXREN);
 dcl-s g_renNew varchar(6) dim(C_MAXREN);
 dcl-s g_renCount int(10);
+// The record format names of the record lines of externally described files
+// (WRITE and UPDAT name a record format, FREE-25).
+dcl-s g_fmtName varchar(8) dim(C_MAXREN);
+dcl-s g_fmtFile varchar(8) dim(C_MAXREN);
+dcl-s g_fmtCount int(10);
 dcl-s g_fileKeyed ind dim(C_MAXFILES);
 dcl-s g_fileCount int(10);
 // Names defined so far (files, data structures, fields) and the line of each.
@@ -98,6 +103,7 @@ dcl-proc FreeConvert export;
   g_headerSeen = *off;
   g_fileCount = 0;
   g_renCount = 0;
+  g_fmtCount = 0;
   g_nameCount = 0;
   g_blockCount = 0;
   g_ctCount = 0;
@@ -2177,6 +2183,47 @@ dcl-proc FileRenames export;
 end-proc;
 
 // ------------------------------------------------------------------
+// The renamed fields of a file as assignments back to the external fields
+// (EXT = NEW; ...), for WRITE and UPDAT of ConvertFileOp (FREE-25). '' when the
+// file has none.
+dcl-proc FileRenamesBack export;
+  dcl-pi *n varchar(250);
+    i_name varchar(8) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_text varchar(250) inz('');
+
+  for l_i = 1 to g_renCount;
+    if g_renFile(l_i) = i_name;
+      if l_text <> '';
+        l_text += '; ';
+      endif;
+      l_text += g_renExt(l_i) + ' = ' + g_renNew(l_i);
+    endif;
+  endfor;
+  return l_text;
+end-proc;
+
+// ------------------------------------------------------------------
+// The externally described file a record format name belongs to (the record
+// line of its I specifications), '' when the name is not a known record format.
+dcl-proc FormatFile export;
+  dcl-pi *n varchar(8);
+    i_name varchar(8) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+
+  for l_i = 1 to g_fmtCount;
+    if g_fmtName(l_i) = i_name;
+      return g_fmtFile(l_i);
+    endif;
+  endfor;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
 // One field line of an externally described record (RV-30). A rename (external
 // name in columns 21-30, program name in 53-58) is a copy: dcl-s NEW like(EXT),
 // set after each input operation of the file (ConvertFileOp). Control levels,
@@ -2249,6 +2296,7 @@ dcl-proc ConvertInputExternal;
   dcl-s l_multi ind inz(*off);
   dcl-s l_reason varchar(190) inz('');
   dcl-s l_text varchar(80);
+  dcl-s l_format varchar(8);
 
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
   l_last = i_index;
@@ -2285,6 +2333,15 @@ dcl-proc ConvertInputExternal;
   if l_reason <> '';
     ReviewBlock(i_index:l_last:l_reason);
     return l_last - i_index;
+  endif;
+
+  // The record line names a record format (not a file): WRITE and UPDAT of the
+  // format are converted with the file's renamed fields copied back (FREE-25).
+  l_format = %trim(%subst(l_up:7:8));
+  if FindFile(l_format) = 0 and g_fmtCount < C_MAXREN and FormatFile(l_format) = '';
+    g_fmtCount += 1;
+    g_fmtName(g_fmtCount) = l_format;
+    g_fmtFile(g_fmtCount) = g_fileNames(i_file);
   endif;
 
   RptItem(C_STS_CONVERTED:i_lineNo:%trimr(%subst(i_line:6:69)):'');

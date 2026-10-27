@@ -570,7 +570,7 @@ Reported R: an array with a file in columns 11-18 (FROMFILE) or 19-26 (TOFILE), 
 
 ## Renamed fields of an externally described file (FREE-24, review item RV-30)
 
-Source: SC09-1817 chapter 8 (I specifications of an externally described file: record line with the record format name, field lines with the external name in columns 21-30 and the program name in 53-58); the ILE RPG reference (`dcl-f` has no per-field rename: `PREFIX` renames all fields of a file, `EXTFLD` only renames subfields of a data structure). Code: `ExternalFileOf`, `ConvertInputExternal`, `ConvertExternalField` and `FileRenames` in `IAfreeCvt`; `ConvertFileOp` in `IAfreeCalc`.
+Source: SC09-1817 chapter 8 (I specifications of an externally described file: record line with the record format name, field lines with the external name in columns 21-30 and the program name in 53-58); the ILE RPG reference (`dcl-f` has no per-field rename: `PREFIX` renames all fields of a file, `EXTFLD` only renames subfields of a data structure). Code: `ExternalFileOf`, `ConvertInputExternal`, `ConvertExternalField`, `FileRenames`, `FileRenamesBack` and `FormatFile` in `IAfreeCvt`; `ConvertFileOp` in `IAfreeCalc`. FREE-25 adds the write back.
 
 Design (chosen with you): the renamed field is a **copy** of the external field.
 
@@ -578,14 +578,15 @@ Design (chosen with you): the renamed field is a **copy** of the external field.
 |---|---|---|
 | Field line `CUSTNAME` in 21-30, `CNAME` in 53-58 | `dcl-s CNAME like(CUSTNAME);` where the line is | A |
 | `CHAIN` or `READ`, `READE`, `READP`, `REDPE` of the file | the operation, then `if %found(FILE)` (CHAIN) or `if not %eof(FILE)` (the others), `CNAME = CUSTNAME; ...`, `endif;` | A |
+| `WRITE` or `UPDAT` of a record format named by an I specification record line (FREE-25) | `CUSTNAME = CNAME; CUSTBAL = CBAL;` (external field = renamed field), then `write CUSTREC;` or `update CUSTREC;` | A |
 | Field line with no external name (name only) | nothing; reported C | C |
 | Record line (record format name) | nothing; reported C | C |
 
 The record line names a record format, so it belongs to the file named in columns 7-14 or, when no file has that name, to the only externally described file of the program. With several externally described files and a format name that is no file name, the block stays R (the format cannot be tied to a file without its DDS). The copy is made only when a record was read, so a failed `CHAIN` or the end of file does not overwrite the renamed field.
 
-Limits: a change of the renamed field is not written back. `WRITE` and `UPDATE` of an externally described file name a record format, which ConvertFileOp does not convert yet, so those lines are R and nothing is lost silently. Reported R: control levels, matching fields and field indicators (columns 59-70), record identifying indicators (19-20), AND/OR lines, a name that is already used, an external name that is not a name (10 characters at most), too many renamed fields for one file.
+Write back (FREE-25): `WRITE` and `UPDAT` of an externally described file name a record format. The record line of the I specifications gives the format name and ties it to its file, so `ConvertFileOp` converts the operation and sets the external fields from the renamed fields in the statement before it. The copy is unconditional: a field the program did not change holds the value copied after the read. A record format that no I specification names (the DDS is not read) stays R. A file with several record formats copies all its renamed fields, because the renames are kept per file. Reported R: control levels, matching fields and field indicators (columns 59-70), record identifying indicators (19-20), AND/OR lines, a name that is already used, an external name that is not a name (10 characters at most), too many renamed fields for one file.
 
-`samples/FREEREN.rpg38`: two renames and a name-only line, then three R lines, then `CHAIN` and `READ`. Expected result, written from the design and not from a run: `dcl-s CNAME like(CUSTNAME);`, `dcl-s CBAL like(CUSTBAL);`, then `chain KEY CUSTMAS;` followed by `*IN50 = not %found(CUSTMAS);`, `if %found(CUSTMAS);`, `CNAME = CUSTNAME; CBAL = CUSTBAL;`, `endif;`.
+`samples/FREEREN.rpg38`: two renames and a name-only line, then three R lines, then `CHAIN` and `READ`. Expected result, written from the design and not from a run: `dcl-s CNAME like(CUSTNAME);`, `dcl-s CBAL like(CUSTBAL);`, then `chain KEY CUSTMAS;` followed by `*IN50 = not %found(CUSTMAS);`, `if %found(CUSTMAS);`, `CNAME = CUSTNAME; CBAL = CUSTBAL;`, `endif;`. The last lines (FREE-25): `CUSTNAME = CNAME; CUSTBAL = CBAL;`, then `update CUSTREC;`, and again before `write CUSTREC;`; the file is `UF` so that `UPDAT` is valid.
 
 ## LOKUP and MOVEA (FREE-08, arrays and tables of FREE-07)
 

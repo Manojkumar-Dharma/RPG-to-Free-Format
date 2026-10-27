@@ -4060,6 +4060,8 @@ dcl-proc ConvertFileOp;
   dcl-s l_stmt varchar(250);
   dcl-s l_ind varchar(250);
   dcl-s l_copy varchar(250) inz('');
+  dcl-s l_back varchar(250) inz('');
+  dcl-s l_formatFile varchar(8) inz('');
   dcl-s l_reason varchar(190) inz('');
   dcl-s l_note varchar(190) inz('');
   dcl-s l_slot int(10);
@@ -4113,9 +4115,18 @@ dcl-proc ConvertFileOp;
   l_isArea = (l_op = 'UNLCK' and IsDataAreaName(Up(i_c.factor2)));
   if l_reason = '' and l_op <> 'COMIT' and l_op <> 'ROLBK' and not l_isArea;
     l_name = %trim(%xlate(C_LOWER:C_UPPER:i_c.factor2));
+    // WRITE and UPDAT of an externally described file name a record format
+    // (record line of the I specifications): the file of the format is used.
+    if l_op = 'WRITE' or l_op = 'UPDAT';
+      l_formatFile = FormatFile(l_name);
+      if l_formatFile <> '';
+        l_name = l_formatFile;
+      endif;
+    endif;
     if not FileInfo(l_name:l_device:l_type:l_recDs:l_keyed);
       l_reason = 'File ' + i_c.factor2 + ' is not declared by a converted file '
-                 + 'description (a record format name is not converted)';
+                 + 'description (a record format name is converted only when an I '
+                 + 'specification names it)';
     elseif l_device <> 'D' and l_device <> 'X';
       l_reason = 'File ' + l_name + ' is not a DISK file';
     endif;
@@ -4167,8 +4178,21 @@ dcl-proc ConvertFileOp;
     if l_ds <> '';
       l_stmt += ' ' + l_ds;
     endif;
-    l_count = 1;
-    l_statements(1) = l_stmt;
+    // The renamed fields of an externally described file (I specifications,
+    // RV-30) are copies: copied back to the external fields before the record
+    // is written or updated, as the first statement (FREE-25).
+    if l_device = 'X' and (l_op = 'WRITE' or l_op = 'UPDAT');
+      l_back = FileRenamesBack(l_name);
+    endif;
+    l_count = 0;
+    if l_back <> '';
+      l_count += 1;
+      l_statements(l_count) = l_back;
+      AddReason(l_note:'The renamed fields of file ' + l_name + ' (I specification) '
+                + 'are copied to the external fields before the operation');
+    endif;
+    l_count += 1;
+    l_statements(l_count) = l_stmt;
     for l_slot = 1 to 3;
       l_reason = ResultStatement(i_c:i_rule:l_slot:l_ind);
       if l_reason <> '';
