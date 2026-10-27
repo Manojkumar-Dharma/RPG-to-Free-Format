@@ -79,6 +79,18 @@ dcl-s g_inSub ind;
 dcl-s g_cycleNoted ind;
 dcl-s g_lastLineNo int(10);
 
+// The RPG cycle skeleton (FREE-36). State: blank none, P pending (nothing written
+// yet), D the cycle loop is open (detail calculations), T the subroutine of the total
+// calculations is open, E the cycle is closed. g_cycHasTotals and g_cycPreMax come
+// from CalcPrescan (total calculation lines; highest control level used).
+dcl-s g_cycState char(1) inz(' ');
+dcl-s g_cycChecked ind inz(*off);
+dcl-s g_cycFile varchar(8) inz('');
+dcl-s g_cycRec varchar(12) inz('');
+dcl-s g_cycMax int(10) inz(0);
+dcl-s g_cycHasTotals ind inz(*off);
+dcl-s g_cycPreMax int(10) inz(0);
+
 // GOTO, CABxx and TAG (RV-14): the calculation lines in order, with what the
 // planner decided for each of them (BuildJumpPlan). Kinds: O group (IF, SELEC),
 // L loop (DO, DOW, DOU), M middle (ELSE, WHxx, OTHER), C end of a group, S BEGSR,
@@ -256,6 +268,13 @@ dcl-proc CalcStart export;
   g_jvUnsafe = *off;
   g_jvPlanned = *off;
   g_jvPending = *off;
+  g_cycState = ' ';
+  g_cycChecked = *off;
+  g_cycFile = '';
+  g_cycRec = '';
+  g_cycMax = 0;
+  g_cycHasTotals = *off;
+  g_cycPreMax = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -520,7 +539,8 @@ dcl-proc LineTerms;
     if l_name <> '  ';
       if not RulIndicator(l_name:l_rule);
         o_reason = 'Indicator ' + %trim(l_name) + ' is not known';
-      elseif l_rule.cycle = 'Y';
+      elseif l_rule.cycle = 'Y'
+             and not (g_cycState <> ' ' and l_rule.class = 'CONTROLLEVEL');
         o_reason = %trim(l_rule.reason);
       else;
         l_term = %trim(l_rule.freeForm);
@@ -927,6 +947,7 @@ dcl-proc CalcLine export;
   dcl-s l_isStructure ind;
   dcl-s l_isSubrOperand ind;
   dcl-s l_prevOp varchar(5);
+  dcl-s l_levelTerm varchar(10) inz('');
 
   g_lastLineNo = i_lineNo;
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
@@ -947,6 +968,10 @@ dcl-proc CalcLine export;
     AddOut('':i_lineNo);
     g_declAt = OutCount();
   endif;
+
+  // The RPG cycle skeleton: the loop opens before the first detail calculation, the
+  // total calculations go to a subroutine, both close before a BEGSR (FREE-36).
+  CycBefore(l_up:i_lineNo);
 
   clear l_c;
   l_c.line = i_line;
@@ -1035,6 +1060,11 @@ dcl-proc CalcLine export;
   select;
     when l_c.level = '  ' or l_c.level = 'SR';
     when l_c.level = 'AN' or l_c.level = 'OR';
+    when CycTotalLevel(l_c.level);
+      // Total calculation of the cycle skeleton: the level indicator is a condition.
+      if l_c.level <> 'L0';
+        l_levelTerm = '*in' + Low(l_c.level);
+      endif;
     other;
       ReviewHere(i_line:i_lineNo:'Total calculation (' + l_c.level
                  + ') belongs to the RPG cycle, which is not supported'
@@ -1071,6 +1101,13 @@ dcl-proc CalcLine export;
       l_list += ' and ';
     endif;
     l_list += l_own;
+  endif;
+  if l_levelTerm <> '';
+    if l_list <> '';
+      l_list = l_levelTerm + ' and ' + l_list;
+    else;
+      l_list = l_levelTerm;
+    endif;
   endif;
   l_c.cond = l_list;
   if g_condLineCount > 0;
@@ -2031,6 +2068,10 @@ dcl-proc ConvertJump;
       elseif g_inSub;
         l_word = 'leavesr';
         l_note = 'Jump to the last TAG of the subroutine became LEAVESR';
+      elseif g_cycState = 'D';
+        l_word = 'iter';
+        l_note = 'Jump to the last TAG of the detail calculations became ITER '
+                 + '(the next cycle of the RPG cycle skeleton)';
       else;
         l_word = 'return';
         l_note = 'Jump to the last TAG of the program became RETURN';
@@ -4722,6 +4763,7 @@ dcl-proc CalcPrescan export;
   if %subst(l_up:7:1) = '*' or %subst(l_up:7:1) = '/' or %subst(l_up:7:1) = '+';
     return;
   endif;
+  CycScan(l_up);
   l_op = %trim(Fld(l_up:'OPERATION'));
   if l_op <> '' and l_op <> 'CALL' and l_op <> 'PLIST' and l_op <> 'PARM';
     g_parmTarget = 0;
@@ -5488,6 +5530,322 @@ dcl-proc SqlEnd;
 end-proc;
 
 // ------------------------------------------------------------------
+// FREE-36, RPG cycle skeleton (SC09-1818 chapter 1, the program cycle). For a
+// program with one program-described primary file the loop is written as
+//   dow *on;  [output of the previous record: not part of it yet]
+//     if *inlr; leave; endif;  control levels off;  read FILE IA_NEXT;
+//     if %eof(FILE); *inlr = *on; leave; endif;
+//     control break (IA_NEXT against the record), total calculations unless it is
+//     the first record, FILE_REC = IA_NEXT, the detail calculations;
+//   enddo;  *inlr = *on; all control levels on; total calculations.
+// The total calculations (control level in columns 7-8) are the subroutine
+// IA_TOTALS, called for a break and after the loop. The new record is read into
+// IA_NEXT so the total calculations still see the fields of the previous record.
+dcl-proc CycScan;
+  dcl-pi *n;
+    i_up char(100) const;
+  end-pi;
+
+  dcl-s l_level char(2);
+  dcl-s l_slot int(10);
+  dcl-s l_n int(10);
+
+  l_level = Fld(i_up:'LEVEL');
+  if l_level = 'LR' or (%subst(l_level:1:1) = 'L'
+     and %check('0123456789':%subst(l_level:2:1)) = 0);
+    g_cycHasTotals = *on;
+  endif;
+  l_n = LevelOf(l_level);
+  if l_n > g_cycPreMax;
+    g_cycPreMax = l_n;
+  endif;
+  for l_slot = 1 to 3;
+    l_n = LevelOf(Fld(i_up:'IND' + %char(l_slot)));
+    if l_n > g_cycPreMax;
+      g_cycPreMax = l_n;
+    endif;
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+// The control level 1 to 9 of an indicator name such as L2, else 0 (L0, LR, 01).
+dcl-proc LevelOf;
+  dcl-pi *n int(10);
+    i_name char(2) const;
+  end-pi;
+
+  if %subst(i_name:1:1) <> 'L';
+    return 0;
+  endif;
+  if %check('123456789':%subst(i_name:2:1)) > 0;
+    return 0;
+  endif;
+  return %int(%subst(i_name:2:1));
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc CycTotalLevel;
+  dcl-pi *n ind;
+    i_level char(2) const;
+  end-pi;
+
+  return g_cycState <> ' '
+         and (i_level = 'LR' or (%subst(i_level:1:1) = 'L'
+              and %check('0123456789':%subst(i_level:2:1)) = 0));
+end-proc;
+
+// ------------------------------------------------------------------
+// Decides once whether the skeleton is written: there must be a primary file with a
+// record layout.
+dcl-proc CycInit;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_count int(10);
+  dcl-s l_k int(10);
+  dcl-s l_name varchar(6);
+  dcl-s l_level int(10);
+
+  g_cycChecked = *on;
+  if not CycleInfo(g_cycFile:g_cycRec:l_count);
+    return;
+  endif;
+  g_cycMax = g_cycPreMax;
+  for l_k = 1 to l_count;
+    if CycleControl(l_k:l_name:l_level) and l_level > g_cycMax;
+      g_cycMax = l_level;
+    endif;
+  endfor;
+  g_cycState = 'P';
+end-proc;
+
+// ------------------------------------------------------------------
+// Called before every calculation line: opens and closes the parts of the skeleton.
+dcl-proc CycBefore;
+  dcl-pi *n;
+    i_up char(100) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  dcl-s l_level char(2);
+  dcl-s l_op varchar(5);
+
+  if not g_cycChecked;
+    CycInit();
+  endif;
+  if g_cycState = ' ' or g_cycState = 'E';
+    return;
+  endif;
+  l_level = Fld(i_up:'LEVEL');
+  l_op = %trim(Fld(i_up:'OPERATION'));
+  select;
+    when l_op = 'BEGSR';
+      CycClose();
+    when CycTotalLevel(l_level);
+      if g_cycState = 'P';
+        CycOpen();
+      endif;
+      if g_cycState = 'D';
+        CycCloseLoop();
+        CycBeginTotals();
+      endif;
+    when l_level = 'AN' or l_level = 'OR';
+    other;
+      if g_cycState = 'P';
+        CycOpen();
+      elseif g_cycState = 'T';
+        CycEndTotals();
+      endif;
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc CycBreakTest;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_lvl int(10);
+  dcl-s l_k int(10);
+  dcl-s l_count int(10);
+  dcl-s l_name varchar(6);
+  dcl-s l_level int(10);
+  dcl-s l_cond varchar(300);
+  dcl-s l_found ind;
+  dcl-s l_file varchar(8);
+  dcl-s l_rec varchar(12);
+
+  if not CycleInfo(l_file:l_rec:l_count) or l_count = 0;
+    return;
+  endif;
+  Emit('if IA_FIRST;':g_lastLineNo);
+  g_depth += 1;
+  Emit('// the first record: a control break of every control level':g_lastLineNo);
+  CycLevels(*on:g_cycMax);
+  g_depth -= 1;
+  Emit('else;':g_lastLineNo);
+  g_depth += 1;
+  Emit('select;':g_lastLineNo);
+  g_depth += 1;
+  for l_lvl = g_cycMax downto 1;
+    l_cond = '';
+    l_found = *off;
+    for l_k = 1 to l_count;
+      if CycleControl(l_k:l_name:l_level) and l_level = l_lvl;
+        l_found = *on;
+        if l_cond <> '';
+          l_cond += ' or ';
+        endif;
+        l_cond += 'IA_NEXT.' + l_name + ' <> ' + l_name;
+      endif;
+    endfor;
+    if l_found;
+      Emit('when ' + l_cond + ';':g_lastLineNo);
+      g_depth += 1;
+      CycLevels(*on:l_lvl);
+      g_depth -= 1;
+    endif;
+  endfor;
+  g_depth -= 1;
+  Emit('endsl;':g_lastLineNo);
+  g_depth -= 1;
+  Emit('endif;':g_lastLineNo);
+end-proc;
+
+// ------------------------------------------------------------------
+// *INL1 to *INLn on or off, one statement each.
+dcl-proc CycLevels;
+  dcl-pi *n;
+    i_on ind const;
+    i_upTo int(10) const;
+  end-pi;
+
+  dcl-s l_lvl int(10);
+
+  for l_lvl = 1 to i_upTo;
+    if i_on;
+      Emit('*inl' + %char(l_lvl) + ' = *on;':g_lastLineNo);
+    else;
+      Emit('*inl' + %char(l_lvl) + ' = *off;':g_lastLineNo);
+    endif;
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc CycOpen;
+  dcl-pi *n;
+  end-pi;
+
+  if g_declAt = 0;
+    AddOut('':g_lastLineNo);
+    g_declAt = OutCount();
+  endif;
+  DeclareHidden('IA_FIRST':'ind inz(*on)');
+  if g_protoLineCount < C_MAXPLINE;
+    g_protoLineCount += 1;
+    g_protoLine(g_protoLineCount) = 'dcl-ds IA_NEXT likeds(' + g_cycRec + ');';
+  endif;
+  g_cycleNoted = *on;
+  Emit('// RPG cycle skeleton (IACNVFREE): the program cycle of file ' + g_cycFile
+       + ' (check)':g_lastLineNo);
+  Emit('dow *on;':g_lastLineNo);
+  g_depth += 1;
+  Emit('// step 1: heading and detail output of the previous record belongs here '
+       + '(O specifications)':g_lastLineNo);
+  Emit('if *inlr;':g_lastLineNo);
+  Emit('leave;':g_lastLineNo:1);
+  Emit('endif;':g_lastLineNo);
+  CycLevels(*off:g_cycMax);
+  Emit('read ' + g_cycFile + ' IA_NEXT;':g_lastLineNo);
+  Emit('if %eof(' + g_cycFile + ');':g_lastLineNo);
+  Emit('*inlr = *on;':g_lastLineNo:1);
+  Emit('leave;':g_lastLineNo:1);
+  Emit('endif;':g_lastLineNo);
+  CycBreakTest();
+  if g_cycHasTotals;
+    Emit('if not IA_FIRST;':g_lastLineNo);
+    Emit('exsr IA_TOTALS;':g_lastLineNo:1);
+    Emit('endif;':g_lastLineNo);
+  endif;
+  Emit(g_cycRec + ' = IA_NEXT;':g_lastLineNo);
+  Emit('IA_FIRST = *off;':g_lastLineNo);
+  g_cycState = 'D';
+  RptItem(C_STS_ASSUMPTION:g_lastLineNo:'RPG cycle'
+          :'Cycle skeleton written for primary file ' + g_cycFile + ': read, control '
+           + 'break, total calculations and detail calculations; the heading, detail '
+           + 'and total output (O specifications) are not part of it yet');
+end-proc;
+
+// ------------------------------------------------------------------
+// The end of the loop and the last cycle (LR): all control levels on, the totals.
+dcl-proc CycCloseLoop;
+  dcl-pi *n;
+  end-pi;
+
+  g_depth -= 1;
+  if g_depth < 0;
+    g_depth = 0;
+  endif;
+  Emit('enddo;':g_lastLineNo);
+  Emit('// last cycle: LR turns on all control levels, then the total calculations'
+       :g_lastLineNo);
+  Emit('*inlr = *on;':g_lastLineNo);
+  CycLevels(*on:g_cycMax);
+  if g_cycHasTotals;
+    Emit('exsr IA_TOTALS;':g_lastLineNo);
+  endif;
+  g_cycState = 'E';
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc CycBeginTotals;
+  dcl-pi *n;
+  end-pi;
+
+  Emit('':g_lastLineNo);
+  Emit('// total calculations (control levels and LR): for a break and at the end'
+       :g_lastLineNo);
+  Emit('begsr IA_TOTALS;':g_lastLineNo);
+  g_depth += 1;
+  g_inSub = *on;
+  g_cycState = 'T';
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc CycEndTotals;
+  dcl-pi *n;
+  end-pi;
+
+  g_depth -= 1;
+  if g_depth < 0;
+    g_depth = 0;
+  endif;
+  Emit('endsr;':g_lastLineNo);
+  g_inSub = *off;
+  g_cycState = 'E';
+end-proc;
+
+// ------------------------------------------------------------------
+// Closes whatever is open (before the first BEGSR and at the end of the source).
+dcl-proc CycClose;
+  dcl-pi *n;
+  end-pi;
+
+  if g_cycState = 'P';
+    CycOpen();
+  endif;
+  if g_cycState = 'D';
+    CycCloseLoop();
+    if g_cycHasTotals;
+      // Total calculations after the first subroutine are not part of the skeleton.
+      CycBeginTotals();
+      CycEndTotals();
+    endif;
+  elseif g_cycState = 'T';
+    CycEndTotals();
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
 // The end of the source: groups still open are reported, and the placeholder
 // written before the first calculation becomes the declarations of the fields
 // that result fields define.
@@ -5499,6 +5857,13 @@ dcl-proc CalcFinish export;
   dcl-s l_total int(10);
   dcl-s l_text varchar(200);
 
+  // The cycle skeleton is written even when there is no calculation line.
+  if not g_cycChecked;
+    CycInit();
+  endif;
+  if g_cycState = 'P' or g_cycState = 'D' or g_cycState = 'T';
+    CycClose();
+  endif;
   if g_sqlOpen;
     SqlReject('EXEC SQL is not closed by END-EXEC at the end of the source');
   endif;

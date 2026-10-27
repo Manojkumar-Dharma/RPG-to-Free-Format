@@ -62,6 +62,13 @@ dcl-s g_fmtFile varchar(8) dim(C_MAXREN);
 dcl-s g_fmtCount int(10);
 dcl-s g_fileKeyed ind dim(C_MAXFILES);
 dcl-s g_fileCount int(10);
+// The primary file of the RPG cycle skeleton (FREE-36) and the control fields of its
+// input specifications (field name and control level 1 to 9).
+dcl-s g_cycFile varchar(8) inz('');
+dcl-s g_cycCtlName varchar(6) dim(50);
+dcl-s g_cycCtlLevel int(10) dim(50);
+dcl-s g_cycCtlCount int(10) inz(0);
+dcl-s g_inPrimary ind inz(*off);
 // Names defined so far (files, data structures, fields) and the line of each.
 dcl-s g_nameList varchar(12) dim(C_MAXNAMES);
 dcl-s g_nameLines int(10) dim(C_MAXNAMES);
@@ -102,6 +109,9 @@ dcl-proc FreeConvert export;
   g_overflow = *off;
   g_headerSeen = *off;
   g_fileCount = 0;
+  g_cycFile = '';
+  g_cycCtlCount = 0;
+  g_inPrimary = *off;
   g_renCount = 0;
   g_fmtCount = 0;
   g_nameCount = 0;
@@ -998,6 +1008,7 @@ dcl-proc ConvertFileLine;
   dcl-s l_usage varchar(40);
   dcl-s l_stmt varchar(200);
   dcl-s l_note varchar(190) inz('');
+  dcl-s l_cycWhy varchar(150);
 
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
   o_ok = *off;
@@ -1079,15 +1090,20 @@ dcl-proc ConvertFileLine;
     when l_ovf <> '';
       ReviewSpec(i_lineNo:i_line:'Overflow indicator is only for PRINTER files');
       return;
-    when l_desig = 'P' or l_desig = 'S';
-      ReviewSpec(i_lineNo:i_line:'Primary and secondary files (the RPG cycle) are '
-                 + 'not supported in free-form');
+    when l_desig = 'S';
+      ReviewSpec(i_lineNo:i_line:'Secondary files (the RPG cycle) are not converted: '
+                 + 'the cycle skeleton handles one primary file');
+      return;
+    when l_desig = 'P' and not CycleFileOk(l_type:l_fmt:l_cycWhy);
+      ReviewSpec(i_lineNo:i_line:'Primary file (the RPG cycle) is not converted: '
+                 + l_cycWhy);
       return;
     when l_desig = 'R' or l_desig = 'T';
       ReviewSpec(i_lineNo:i_line
                  :'Record address and table files are not supported in free-form');
       return;
-    when l_desig <> ' ' and l_desig <> 'F' and l_desig <> 'C' and l_desig <> 'D';
+    when l_desig <> ' ' and l_desig <> 'F' and l_desig <> 'C' and l_desig <> 'D'
+         and l_desig <> 'P';
       ReviewSpec(i_lineNo:i_line
                  :'File designation (column 16) ' + l_desig + ' is not valid');
       return;
@@ -1208,6 +1224,11 @@ dcl-proc ConvertFileLine;
   if l_desig = 'D';
     AppendText(l_note:'demand file declared as a full-procedural file: use it only '
                + 'with READ');
+  endif;
+  if l_desig = 'P';
+    g_cycFile = l_name;
+    AppendText(l_note:'primary file: the RPG cycle skeleton is written for it when its '
+               + 'I specification has a record layout (FREE-36)');
   endif;
   if l_eof <> ' ';
     AppendText(l_note:'end of file entry (column 17) ignored');
@@ -1774,6 +1795,7 @@ dcl-proc ConvertInput;
     l_head = %subst(l_head:1:%len(l_head) - 1) + ' inz;';
   endif;
   BlockAdd(l_head:i_lineNo);
+  g_inPrimary = (l_kind = 'F' and g_cycFile <> '' and l_name = g_cycFile);
 
   for l_k = i_index + 1 to l_last;
     l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
@@ -1796,6 +1818,8 @@ dcl-proc ConvertInput;
               :%trimr(%subst(g_sourceLines(l_k):6:69)):l_fieldReason);
     endif;
   endfor;
+
+  g_inPrimary = *off;
 
   // No subfield could be converted: the whole block stays as comments. The
   // field lines were reported with their own reasons.
@@ -1909,7 +1933,7 @@ dcl-proc ConvertInputField;
     when FindName(l_name) > 0;
       o_reason = 'Field ' + l_name + ' is already defined at line '
                  + %char(FindName(l_name));
-    when %trim(%subst(l_up:59:12)) <> '';
+    when %trim(%subst(l_up:59:12)) <> '' and not ControlLevelOnly(l_up);
       o_reason = 'Control level, matching fields, field record relation or field '
                  + 'indicators are not supported in free-form';
     when i_recLen > 0 and l_to > i_recLen;
@@ -1965,6 +1989,11 @@ dcl-proc ConvertInputField;
 
   o_stmt = '  dcl-subf ' + l_name + ' ' + l_type + ' pos('
            + %trim(%char(l_from)) + ');';
+  if ControlLevelOnly(l_up) and g_cycCtlCount < 50;
+    g_cycCtlCount += 1;
+    g_cycCtlName(g_cycCtlCount) = l_name;
+    g_cycCtlLevel(g_cycCtlCount) = %int(%subst(l_up:60:1));
+  endif;
   // The length and type are needed by MOVE and MOVEL.
   select;
     when l_packBin = ' ' and l_dec = ' ';
@@ -2086,6 +2115,108 @@ dcl-proc RegisterFile;
   g_fileHasLayout(g_fileCount) = *off;
   g_fileKeyed(g_fileCount) = i_keyed;
   DefineName(i_name:i_lineNo);
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-36: the RPG cycle skeleton. A primary file (column 16 P) is converted when it
+// is the only file with P, S, R or T in column 16, is an input file and is
+// program described; the skeleton also needs its record layout (I specification).
+dcl-proc CycleFileOk;
+  dcl-pi *n ind;
+    i_type char(1) const;
+    i_fmt char(1) const;
+    o_why varchar(150);
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_up char(100);
+  dcl-s l_primary int(10) inz(0);
+  dcl-s l_other int(10) inz(0);
+
+  o_why = '';
+  for l_k = 1 to g_sourceCount;
+    l_up = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
+    if %subst(l_up:6:1) = 'F' and %subst(l_up:7:1) <> '*';
+      select;
+        when %subst(l_up:16:1) = 'P';
+          l_primary += 1;
+        when %subst(l_up:16:1) = 'S' or %subst(l_up:16:1) = 'R'
+             or %subst(l_up:16:1) = 'T';
+          l_other += 1;
+      endsl;
+    endif;
+  endfor;
+  select;
+    when l_primary > 1;
+      o_why = 'more than one primary file';
+    when l_other > 0;
+      o_why = 'secondary, record address or table files are not converted';
+    when i_type <> 'I';
+      o_why = 'only an input primary file is converted (not update)';
+    when i_fmt = 'E';
+      o_why = 'an externally described primary file is not converted yet';
+    when g_cycFile <> '';
+      o_why = 'a primary file is already declared';
+  endsl;
+  return o_why = '';
+end-proc;
+
+// ------------------------------------------------------------------
+// A field line of the primary file with a control level (columns 59-60: L1 to L9)
+// and nothing else in columns 61-70.
+dcl-proc ControlLevelOnly;
+  dcl-pi *n ind;
+    i_up char(100) const;
+  end-pi;
+
+  return g_inPrimary and %subst(i_up:59:1) = 'L'
+         and %check('123456789':%subst(i_up:60:1)) = 0
+         and %trim(%subst(i_up:61:10)) = '';
+end-proc;
+
+// ------------------------------------------------------------------
+// For IAfreeCalc: the primary file of the cycle, its record layout data structure
+// and the number of control fields. *off when there is no primary file or it has
+// no record layout.
+dcl-proc CycleInfo export;
+  dcl-pi *n ind;
+    o_file varchar(8);
+    o_recDs varchar(12);
+    o_ctlCount int(10);
+  end-pi;
+
+  dcl-s l_file int(10);
+
+  o_file = '';
+  o_recDs = '';
+  o_ctlCount = 0;
+  if g_cycFile = '';
+    return *off;
+  endif;
+  l_file = FindFile(g_cycFile);
+  if l_file = 0 or not g_fileHasLayout(l_file);
+    return *off;
+  endif;
+  o_file = g_cycFile;
+  o_recDs = g_cycFile + '_REC';
+  o_ctlCount = g_cycCtlCount;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc CycleControl export;
+  dcl-pi *n ind;
+    i_index int(10) const;
+    o_name varchar(6);
+    o_level int(10);
+  end-pi;
+
+  if i_index < 1 or i_index > g_cycCtlCount;
+    return *off;
+  endif;
+  o_name = g_cycCtlName(i_index);
+  o_level = g_cycCtlLevel(i_index);
+  return *on;
 end-proc;
 
 // ------------------------------------------------------------------

@@ -1,0 +1,15 @@
+      * RPG II cycle skeleton (FREE-36): primary file, levels L1 and L2
+     H
+     FSALES   IP         80            DISK
+     ISALES   AA
+     I                                        1   30REGIONL2
+     I                                        4   60CUST  L1
+     I                                        7  122AMT
+      * detail calculations: every record
+     C                     ADD  AMT       CTOT    92
+     C                     ADD  AMT       RTOT    92
+      * total calculations: a break of the level, LR at the end
+     CL1         CTOT      ADD  GRAND     GRAND   92
+     CL1                   Z-ADD0         CTOT
+     CL2                   Z-ADD0         RTOT
+     CLR                   MOVE 'DONE'    MSG     4

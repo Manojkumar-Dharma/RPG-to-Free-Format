@@ -107,6 +107,22 @@ dcl-pr FileInfo ind;
   o_keyed ind;
 end-pr;
 
+// The primary file of the RPG cycle skeleton (IAfreeCvt CycleInfo): the file, its
+// record layout data structure and the number of control fields; *off when the
+// cycle skeleton cannot be written (FREE-36). CycleControl gives the field name and
+// the control level (1 to 9) of one control field.
+dcl-pr CycleInfo ind;
+  o_file varchar(8);
+  o_recDs varchar(12);
+  o_ctlCount int(10);
+end-pr;
+
+dcl-pr CycleControl ind;
+  i_index int(10) const;
+  o_name varchar(6);
+  o_level int(10);
+end-pr;
+
 // Adds the DTAARA keyword to a data structure of the I specifications.
 dcl-pr CvtDtaaraDs ind;
   i_name varchar(10) const;

@@ -859,3 +859,27 @@ Free-form has no GOTO, so three patterns are rewritten; the plan is made before 
 | a jump inside such a loop to the `TAG` right after it | `leave;` |
 
 Everything else stays R: two jumps back to one `TAG`, jumps into or out of groups, over `ELSE`, `BEGSR` or `ENDSR`, crossing patterns, duplicate labels, level indicators, CAB result indicators, `CASxx` in the source, and jumps in RPG IV.
+
+## RPG II and III: the program cycle as a skeleton (FREE-36, RV-20, RV-21, RV-52, decided 2026-10-27)
+
+Source: SC09-1818 (the RPG program cycle, steps 1 to 11, and the control level rules), SC09-1816. Decision: the cycle is written as a `dow` loop that the programmer completes; every part is marked A. First increment, `samples/FREECYC.rpg36`:
+
+- **Accepted:** one primary file (column 16 `P`), input, program described, no other file with `P`, `S`, `R` or `T`, whose I specification has one record type and a record layout (FREE-04). Control levels `L1` to `L9` in columns 59-60 of its field lines. Calculation lines with a control level (columns 7-8: `L0` to `L9`, `LR`) are total calculations; the level indicators `L1` to `L9` as conditioning indicators (columns 9-17) are `*INL1` to `*INL9`.
+- **Written for the primary file `SALES` with the levels `L1` (`CUST`) and `L2` (`REGION`)** (expected text, written from the design and not from a run):
+
+| Part | Free-form |
+|------|-----------|
+| declarations (before the first calculation) | `dcl-s IA_FIRST ind inz(*on);` and `dcl-ds IA_NEXT likeds(SALES_REC);` |
+| loop | `dow *on;` ... `enddo;` |
+| step 2, LR check | `if *inlr; leave; endif;` then `*inl1 = *off;` and `*inl2 = *off;` |
+| step 3 | `read SALES IA_NEXT;` the new record is read into `IA_NEXT`, so the total calculations still see the fields of the previous record; `if %eof(SALES); *inlr = *on; leave; endif;` |
+| steps 4 and 5 | first record: every control level on (the control fields are compared with zeros in RPG); else `select; when IA_NEXT.REGION <> REGION; *inl1 = *on; *inl2 = *on; when IA_NEXT.CUST <> CUST; *inl1 = *on; endsl;` (the highest level first, all lower levels on) |
+| steps 6 and 7 | `if not IA_FIRST; exsr IA_TOTALS; endif;` (total time is bypassed on the first record) |
+| step 10 | `SALES_REC = IA_NEXT;` and `IA_FIRST = *off;` |
+| step 11 | the detail calculations (lines without a control level), as FREE-05 converts them |
+| last cycle | after `enddo;`: `*inlr = *on;`, every control level on, `exsr IA_TOTALS;` |
+| total calculations | `begsr IA_TOTALS;` ... `endsr;`: the lines with a control level, each conditioned by its level (`if *inl1; ... endif;`, `L0` always, `LR` is `*inlr`) |
+
+The control level stays on during the detail calculations of the record that caused the break and is turned off at the start of the next cycle (step 2). The loop closes before the first `BEGSR` or at the end of the source; when no calculation line exists the loop is still written. A `GOTO` to the last `TAG` of the detail calculations (RV-14) becomes `iter`, the next cycle. Step 1 (heading and detail output of the previous record) and the total output are not part of it: the O specifications still need FREE-06; a comment marks the place.
+
+Reported R, as before: secondary, record address and table files, more than one primary file, an update primary file, an externally described primary file, more than one record type, record identifying indicators and codes, matching fields (`M1` to `M9`, `MR`), look-ahead fields, `1P`, field indicators and field record relations, a level on an `AN` or `OR` group other than that of its first line, a jump that crosses from the detail to the total calculations. Total calculations after the first subroutine are not placed in `IA_TOTALS`.
