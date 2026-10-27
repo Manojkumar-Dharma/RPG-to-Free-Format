@@ -7,6 +7,11 @@
      DName             S             10A
      DAmt              S              7P2
      DCnt              S              5I
+     DDvd              S              9P2
+     DDvr              S              5P2
+     DQuo              S              9P2
+     DRemd             S              9P2
+     DQuo0             S              9P0
       * MOVEA: same DIM and element type; *BLANKS and *ZEROS
      C                   MOVEA     Names         Copy
      C                   MOVEA     *BLANKS       Names
@@ -26,3 +31,11 @@
      C     *LIKE         DEFINE    Cnt           CntX            + 2
      C     *LIKE         DEFINE    Name          Gone            -10
      C                   EVAL      Longer = Name
+      * MVR after a DIV with decimals: dividend less quotient times divisor
+     C     Dvd           DIV       Dvr           Quo
+     C                   MVR                     Remd
+      * Not converted: the DIV overwrote its dividend; half adjust
+     C     Dvd           DIV       Dvr           Dvd
+     C                   MVR                     Remd
+     C     Dvd           DIV(H)    Dvr           Quo0
+     C                   MVR                     Remd

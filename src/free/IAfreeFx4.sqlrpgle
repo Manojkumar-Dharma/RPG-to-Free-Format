@@ -2776,8 +2776,9 @@ end-proc;
 
 
 // ------------------------------------------------------------------
-// MVR directly after a DIV with integer operands and no half adjust: the
-// remainder is %REM of the operands of the DIV. Returns '' or the reason.
+// MVR directly after a DIV without half adjust: the
+// remainder is %REM of the operands of the DIV (whole numbers) or the dividend
+// less quotient times divisor (decimals). Returns '' or the reason.
 dcl-proc MvrCheck;
   dcl-pi *n varchar(150);
     i_index int(10) const;
@@ -2804,11 +2805,56 @@ dcl-proc MvrCheck;
   if g_divHalf;
     return 'MVR after DIV with half adjust is not converted';
   endif;
-  if not IsIntegerOperand(g_divF1) or not IsIntegerOperand(g_divF2)
-     or not IsIntegerOperand(g_divRes);
-    return '%REM needs integer operands: the DIV above has decimals';
+  // The DIV result overwrote an operand: the dividend or divisor is lost.
+  if Up(g_divF1) = Up(g_divRes) or Up(g_divF2) = Up(g_divRes);
+    return 'The DIV above overwrote its dividend or divisor: MVR is not converted';
+  endif;
+  if not IsNumericOperand(g_divF1) or not IsNumericOperand(g_divF2)
+     or not IsNumericOperand(g_divRes);
+    return 'MVR needs numeric operands that are declared in this source';
   endif;
   return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// MVR statement: %REM when all operands of the DIV are whole numbers, else the
+// remainder as the dividend less quotient times divisor (the quotient of the DIV
+// is truncated to its decimal positions, so this is the remainder of RPG).
+dcl-proc MvrStmt;
+  dcl-pi *n varchar(300);
+    i_res varchar(14) const;
+    o_note varchar(190);
+  end-pi;
+
+  if IsIntegerOperand(g_divF1) and IsIntegerOperand(g_divF2)
+     and IsIntegerOperand(g_divRes);
+    o_note = 'MVR converted with %rem on the operands of the DIV above';
+    return i_res + ' = %rem(' + g_divF1 + ' : ' + g_divF2 + ')';
+  endif;
+  o_note = 'MVR with decimals: dividend less quotient times divisor, check '
+           + 'the decimal positions of ' + i_res;
+  return i_res + ' = ' + g_divF1 + ' - ' + g_divRes + ' * ' + g_divF2;
+end-proc;
+
+// ------------------------------------------------------------------
+// A numeric literal (digits, one decimal point) or a declared numeric field.
+dcl-proc IsNumericOperand;
+  dcl-pi *n ind;
+    i_text varchar(14) const;
+  end-pi;
+
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+
+  if %len(i_text) > 0 and %check(C_DIGITS + '.':i_text) = 0;
+    return *on;
+  endif;
+  if SymType(i_text) = '';
+    return *off;
+  endif;
+  ParseType(SymType(i_text):l_kind:l_len:l_dec);
+  return l_kind = 'N';
 end-proc;
 
 // ------------------------------------------------------------------
@@ -3610,8 +3656,7 @@ dcl-proc ConvertC;
           l_reason = 'MVR needs a declared result field';
         endif;
         if l_reason = '';
-          l_stmt = l_res + ' = %rem(' + g_divF1 + ' : ' + g_divF2 + ')';
-          l_note = 'MVR converted with %rem on the operands of the DIV above';
+          l_stmt = MvrStmt(l_res:l_note);
         endif;
       when l_op = 'DEFN';
         if Up(l_f1) = '*LIKE' and l_res <> '' and SymType(l_res) <> '';
