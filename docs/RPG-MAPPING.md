@@ -817,3 +817,18 @@ Reported R: an externally described file (field renames and field indicators: RV
 Reported R: `MOVEA` with an index, from or to a field, between arrays of another `DIM`, another element type or length, `MOVEA *BLANKS` to a numeric array, a length change on a type other than `char`, `packed` or `zoned` (integer, float, date), a length that falls below 1 or the decimal positions, a result field that is already declared, and `*DTAARA DEFINE` (the reason names the `DTAARA` keyword: the definition is already written when the C specification is read). Open: `MOVE`/`MOVEL` of other type pairs, `IN`/`OUT` of a data area for RPG IV.
 
 `MVR` with decimals (FREE-32): after a `DIV` without half adjust whose operands are declared numeric fields or numeric literals, `MVR` is written as `REM = DIVIDEND - QUOTIENT * DIVISOR;` (status A: check the decimal positions of the result); whole-number operands still give `%rem`. R: the `DIV` result field is its own dividend or divisor (the operand was overwritten; this also applies to the `%rem` form), half adjust, an undeclared operand. `samples/FREE4MV.rpgle` (last lines).
+
+## RPG IV: data areas, *DTAARA DEFINE, IN, OUT (FREE-33, RV-11, RV-50)
+
+Source: SC09-2508 (7.3), `DEFINE`, `IN`, `OUT`, and the `DTAARA` keyword. In RPG IV the data area of a field is the `DTAARA` keyword of its definition, and `*DTAARA DEFINE` of the C specifications is only the older way of saying it. `ConvertD` of `IAfreeFx4` reads the C specifications (`DefineDtaara`) and adds the keyword when it writes the definition; the `DEFINE` line then produces no statement. The external name is written as a literal in capitals, as in FREE-17. `samples/FREE4DA.rpgle` has one line for each row. Expected result, written from the design and not from a run:
+
+| RPG IV | Free-form | Status |
+|--------|-----------|--------|
+| `*DTAARA DEFINE TOTDA Total`, `Total` a stand-alone field | `dcl-s Total packed(9 : 2) dtaara('TOTDA');` | C |
+| `*DTAARA DEFINE *LDA MyDs`, `MyDs` a data structure | `dcl-ds MyDs dtaara('*LDA');` | C |
+| `*DTAARA DEFINE` with factor 2 blank | the name of the field is the data area: `dtaara('OWN')` | C |
+| `*LOCK IN Total`, `IN Total`, `OUT Total`, `*LOCK OUT Total` | `in *lock Total;`, `in Total;`, `out Total;`, `out *lock Total;` | C |
+| `IN(E) MyDs` | `in(e) MyDs;` | C |
+| `IN *DTAARA`, `OUT *DTAARA` | `in *dtaara;`, `out *dtaara;` | C |
+
+Reported R: a `DEFINE *DTAARA` with a length, decimals or a conditioning indicator (the field is defined by the result field), whose result field is a subfield or is not declared in the D specifications, `IN` or `OUT` with another factor 1 than `*LOCK`, without factor 2 or with a result field, resulting indicators (the error indicator is not converted; use the `(E)` extender). The data area of a field is not checked by the converter: `IN Plain` for a field without the keyword is left to the compiler. `UNLOCK` of a data area is written by the file operation path, which gives the same `unlock NAME;`.

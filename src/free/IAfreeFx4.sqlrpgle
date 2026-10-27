@@ -48,6 +48,8 @@ dcl-c C_MAXARR 200;
 dcl-s g_arrName varchar(150) dim(C_MAXARR);
 dcl-s g_arrSeq char(1) dim(C_MAXARR);        // A ascending, D descending, blank
 dcl-s g_arrDim varchar(30) dim(C_MAXARR);    // the DIM text, for MOVEA
+dcl-s g_dtName varchar(150) dim(50);         // fields that got a DTAARA keyword
+dcl-s g_dtCount int(10) inz(0);
 dcl-s g_arrCount int(10) inz(0);
 // CALL, PARM and PLIST: the parameters read last and the prototypes written.
 dcl-c C_MAXPARM 20;
@@ -155,6 +157,7 @@ dcl-proc Fx4Start export;
   g_klDone = *off;
   g_symCount = 0;
   g_arrCount = 0;
+  g_dtCount = 0;
   g_cStarted = *off;
   g_protoCount = 0;
   g_divIdx = 0;
@@ -1463,6 +1466,7 @@ dcl-proc ConvertD;
   dcl-s l_fromNum int(10);
   dcl-s l_toNum int(10);
   dcl-s l_value varchar(300);
+  dcl-s l_dtExt varchar(150);
 
   if not CollectKeywords('D':i_index:i_line:l_kwText:l_extra);
     ReviewWithContinuations(i_index:i_lineNo:i_line:l_extra
@@ -1726,6 +1730,16 @@ dcl-proc ConvertD;
   endif;
   if l_isSub and l_pos <> '' and KwFind('OVERLAY') = 0 and KwFind('POS') = 0;
     l_stmt += ' pos(' + l_pos + ')';
+  endif;
+  // *DTAARA DEFINE of the C specifications: the DTAARA keyword (RV-11).
+  if l_name <> '' and (l_head = 'dcl-s' or l_head = 'dcl-ds') and not l_isSub
+     and KwFind('DTAARA') = 0 and l_dsType = '';
+    l_dtExt = DefineDtaara(l_name);
+    if l_dtExt <> '' and g_dtCount < 50;
+      l_stmt += ' dtaara(' + C_QUOTE + l_dtExt + C_QUOTE + ')';
+      g_dtCount += 1;
+      g_dtName(g_dtCount) = Up(l_name);
+    endif;
   endif;
   for l_index = 1 to g_kwCount;
     if %len(g_kw(l_index)) > 0;
@@ -2080,6 +2094,52 @@ dcl-proc AdjustType;
     return 'char(' + %char(l_new) + ')';
   endif;
   return l_word + '(' + %char(l_new) + ' : ' + %char(l_dec) + ')';
+end-proc;
+
+// ------------------------------------------------------------------
+// The external name of the data area that a *DTAARA DEFINE of the C
+// specifications gives to the field i_name (factor 2; blank: the name of the
+// field); '' when there is none or the DEFINE has a length, decimals or a
+// conditioning indicator.
+dcl-proc DefineDtaara;
+  dcl-pi *n varchar(150);
+    i_name varchar(150) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_line char(100);
+
+  for l_k = 1 to SrcCount();
+    l_line = SrcLine(l_k);
+    if IsCOp(l_line) and OpOf(l_line) = 'DEFN'
+       and Up(Txt('C':'FACTOR1':l_line)) = '*DTAARA'
+       and Up(Txt('C':'RESULT':l_line)) = Up(i_name)
+       and Txt('C':'LENGTH':l_line) = '' and Txt('C':'DECIMALS':l_line) = ''
+       and Txt('C':'IND1':l_line) = '';
+      if Txt('C':'FACTOR2':l_line) = '';
+        return Up(i_name);
+      endif;
+      return Up(Txt('C':'FACTOR2':l_line));
+    endif;
+  endfor;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// True when ConvertD wrote a DTAARA keyword for the field.
+dcl-proc DtaaraApplied;
+  dcl-pi *n ind;
+    i_name varchar(150) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+
+  for l_k = 1 to g_dtCount;
+    if g_dtName(l_k) = Up(i_name);
+      return *on;
+    endif;
+  endfor;
+  return *off;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -3565,6 +3625,7 @@ dcl-proc ConvertC;
   if l_reason = '' and l_op <> 'BEGSR' and l_op <> 'ENDSR' and l_f1 <> ''
      and l_op <> 'KLIST' and l_op <> 'COMP' and not IsStringOp(l_op)
      and l_op <> 'DEFN' and l_op <> 'CALL' and l_op <> 'PLIST' and l_op <> 'PARM'
+     and l_op <> 'IN' and l_op <> 'OUT'
      and l_op <> 'LOOKUP'
      and l_op <> 'DO' and l_op <> 'DSPLY' and l_op <> 'COMIT' and l_op <> 'COMMIT'
      and not IsArith(l_op) and not (l_op = 'CHAIN' or l_op = 'SETLL'
@@ -3662,10 +3723,15 @@ dcl-proc ConvertC;
         if Up(l_f1) = '*LIKE' and l_res <> '' and SymType(l_res) <> '';
           l_stmt = '';
           l_kind = 'k';
+        elseif Up(l_f1) = '*DTAARA' and DtaaraApplied(l_res);
+          l_stmt = '';
+          l_kind = 'k';
+          l_note = '*DTAARA DEFINE written as the DTAARA keyword of ' + l_res;
         else;
           if Up(l_f1) = '*DTAARA';
-            l_reason = '*DTAARA DEFINE has no free-form form: add the DTAARA '
-                       + 'keyword to the definition of ' + l_res;
+            l_reason = '*DTAARA DEFINE needs a stand-alone field or data structure '
+                       + 'of the D specifications without length, decimals or '
+                       + 'indicators: add the DTAARA keyword to ' + l_res;
           else;
             l_reason = 'DEFINE is converted for *LIKE only, with a declared '
                        + 'factor 2, a new result field and a valid length change';
@@ -3932,6 +3998,22 @@ dcl-proc ConvertC;
           if l_reason = '' and not (l_ext = '(p)' and l_op <> 'SCAN');
             l_note = l_op + ' converted: the unused part of the result is not '
                      + 'padded the same way, check';
+          endif;
+        endif;
+      when l_op = 'IN' or l_op = 'OUT';
+        if (l_f1 <> '' and Up(l_f1) <> '*LOCK') or l_f2 = '' or l_res <> ''
+           or Txt('C':'LENGTH':i_line) <> '' or Txt('C':'DECIMALS':i_line) <> '';
+          l_reason = l_op + ' needs a data area in factor 2, *LOCK or nothing in '
+                     + 'factor 1 and no result field';
+        else;
+          l_stmt = Low(l_op) + l_ext;
+          if l_f1 <> '';
+            l_stmt += ' *lock';
+          endif;
+          if Up(l_f2) = '*DTAARA';
+            l_stmt += ' *dtaara';
+          else;
+            l_stmt += ' ' + l_f2;
           endif;
         endif;
       when l_op = 'MOVEA';

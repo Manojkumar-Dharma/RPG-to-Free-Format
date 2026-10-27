@@ -66,12 +66,13 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-30 | IACNVFREE | RPG IV: names continued with `...` (D and P specifications and inside keywords) and keyword literals continued with `+` or `-` (RV-57 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4NM.rpgle`; needs a compile and test; names up to 150 characters (tables widened); a comment line between continued name lines, a numeric constant continued on the next line, `FROMFILE`, `TOFILE`, `CLASS`, `PACKEVEN` and object types stay R |
 | FREE-31 | IACNVFREE | RPG IV: `MOVEA` of whole arrays (same `DIM` and element type, `*BLANKS`, `*ZEROS`) and `*LIKE DEFINE` with a length change (`+n`, `-n`); `DEFINE` is read as the RPG IV name of `DEFN` (RV-50 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4MV.rpgle`; needs a compile and test; `samples/FREE4C.rpgle` used `DEFN`, now `DEFINE`; `MOVE`/`MOVEL` of other type pairs, `MVR` with decimals, `*DTAARA DEFINE` and `IN`/`OUT` stay R |
 | FREE-32 | IACNVFREE | RPG IV: `MVR` after a `DIV` with decimals (dividend less quotient times divisor); `MVR` is R when the `DIV` result field is its own dividend or divisor (RV-50 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4MV.rpgle`; needs a compile and test; check the decimal positions of the remainder field |
+| FREE-33 | IACNVFREE | RPG IV: `*DTAARA DEFINE` to the `DTAARA` keyword of the definition (`ConvertD` reads the C specifications), `IN`, `OUT` (`*LOCK`, `(E)`, `*DTAARA`) (RV-11, RV-50 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREE4DA.rpgle`; needs a compile and test; a `DEFINE` with a length, a subfield, an undeclared field and resulting indicators stay R |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-32 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-33 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.
