@@ -28,7 +28,7 @@ dcl-s g_kw varchar(300) dim(C_MAXKW);
 dcl-s g_kwCount int(10) inz(0);
 
 dcl-s g_block char(2) inz('');          // DS, PR or PI that is still open
-dcl-s g_blockName varchar(21) inz('');
+dcl-s g_blockName varchar(150) inz('');
 dcl-s g_inFree ind inz(*off);           // inside /FREE ... /END-FREE
 dcl-s g_lastLineNo int(10) inz(0);
 dcl-s g_stack char(1) dim(60);          // open C groups: I, L, S, W, M, E, R
@@ -40,12 +40,12 @@ dcl-s g_klKeys varchar(200) dim(50);
 dcl-s g_klCount int(10) inz(0);
 dcl-s g_klDone ind inz(*off);
 dcl-c C_MAXSYM 1500;
-dcl-s g_symName varchar(45) dim(C_MAXSYM);   // declared fields and their types
+dcl-s g_symName varchar(150) dim(C_MAXSYM);   // declared fields and their types
 dcl-s g_symType varchar(60) dim(C_MAXSYM);
 dcl-s g_symCount int(10) inz(0);
 // The arrays of the D specifications (DIM) and their sequence, for LOOKUP (RV-53).
 dcl-c C_MAXARR 200;
-dcl-s g_arrName varchar(45) dim(C_MAXARR);
+dcl-s g_arrName varchar(150) dim(C_MAXARR);
 dcl-s g_arrSeq char(1) dim(C_MAXARR);        // A ascending, D descending, blank
 dcl-s g_arrCount int(10) inz(0);
 // CALL, PARM and PLIST: the parameters read last and the prototypes written.
@@ -65,7 +65,7 @@ dcl-s g_divF2 varchar(14);
 dcl-s g_divRes varchar(14);
 dcl-s g_divHalf ind inz(*off);
 dcl-s g_quoted ind inz(*off);           // a name was written as a literal
-dcl-s g_constName varchar(21) dim(C_MAXCONST);
+dcl-s g_constName varchar(150) dim(C_MAXCONST);
 dcl-s g_constCount int(10) inz(0);
 // The files of the F specifications (I specifications and file operations).
 dcl-c C_MAXFL 100;
@@ -441,9 +441,31 @@ dcl-proc IsContinuation;
 end-proc;
 
 // ------------------------------------------------------------------
+// *ON when the text ends inside a character literal (an odd number of quotes;
+// a doubled quote inside a literal keeps the count even).
+dcl-proc InLiteral;
+  dcl-pi *n ind;
+    i_text varchar(1200) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_quotes int(10) inz(0);
+
+  for l_index = 1 to %len(i_text);
+    if %subst(i_text:l_index:1) = C_QUOTE;
+      l_quotes += 1;
+    endif;
+  endfor;
+  return %rem(l_quotes:2) = 1;
+end-proc;
+
+// ------------------------------------------------------------------
 // Takes the keyword field of a specification and of its continuation lines:
-// o_extra is the number of continuation lines. *OFF when a keyword literal is
-// continued with + or - (not converted, the caller reports it).
+// o_extra is the number of continuation lines. A literal continued with + (the
+// first non-blank character of the next line follows) or - (the next line follows
+// from the first position of the keyword field) and a name continued with ... are
+// joined (SC09-2508, Continuation Rules). *OFF when a + or - ends a line outside a
+// literal (not converted, the caller reports it).
 dcl-proc CollectKeywords;
   dcl-pi *n ind;
     i_spec char(1) const;
@@ -454,7 +476,7 @@ dcl-proc CollectKeywords;
   end-pi;
 
   dcl-s l_next int(10);
-  dcl-s l_more varchar(100);
+  dcl-s l_len int(10);
   dcl-s l_last char(1);
   dcl-s l_ok ind inz(*on);
 
@@ -462,24 +484,62 @@ dcl-proc CollectKeywords;
   o_extra = 0;
   l_next = i_index + 1;
   dow l_next <= SrcCount() and IsContinuation(i_spec:SrcLine(l_next));
-    if %len(o_text) > 0;
-      l_last = %subst(o_text:%len(o_text):1);
-      if l_last = '+' or l_last = '-';
-        l_ok = *off;
-      endif;
+    l_len = %len(o_text);
+    l_last = ' ';
+    if l_len > 0;
+      l_last = %subst(o_text:l_len:1);
     endif;
-    l_more = Txt(i_spec:'KEYWORDS':SrcLine(l_next));
-    o_text += ' ' + l_more;
+    select;
+      when InLiteral(o_text) and l_last = '+';
+        o_text = %subst(o_text:1:l_len - 1)
+                 + Txt(i_spec:'KEYWORDS':SrcLine(l_next));
+      when InLiteral(o_text) and l_last = '-';
+        o_text = %subst(o_text:1:l_len - 1)
+                 + %trimr(RulText(i_spec:'KEYWORDS':SrcLine(l_next)));
+      when not InLiteral(o_text) and l_len > 3
+           and %subst(o_text:l_len - 2:3) = '...';
+        o_text = %subst(o_text:1:l_len - 3)
+                 + Txt(i_spec:'KEYWORDS':SrcLine(l_next));
+      when l_last = '+' or l_last = '-';
+        l_ok = *off;
+        o_text += ' ' + Txt(i_spec:'KEYWORDS':SrcLine(l_next));
+      other;
+        o_text += ' ' + Txt(i_spec:'KEYWORDS':SrcLine(l_next));
+    endsl;
     o_extra += 1;
     l_next += 1;
   enddo;
-  if %len(o_text) > 0;
+  if %len(o_text) > 0 and o_extra > 0;
     l_last = %subst(o_text:%len(o_text):1);
-    if o_extra > 0 and (l_last = '+' or l_last = '-');
+    if l_last = '+' or l_last = '-';
       l_ok = *off;
     endif;
   endif;
   return l_ok;
+end-proc;
+
+// ------------------------------------------------------------------
+// *ON when the line of a D or P specification is a continued part of a name: the
+// name begins in columns 7 to 21 and the last non-blank characters are ..., with no
+// blanks in between (SC09-2508, Definition and Procedure Specification Name Field).
+dcl-proc IsNameCont;
+  dcl-pi *n ind;
+    i_spec char(1) const;
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_text varchar(80);
+
+  if %subst(%xlate(C_LOWER:C_UPPER:i_line):6:1) <> i_spec;
+    return *off;
+  endif;
+  if %subst(i_line:7:1) = '*' or %subst(i_line:7:1) = '/'
+     or %trim(%subst(i_line:7:15)) = '';
+    return *off;
+  endif;
+  l_text = %trim(%subst(i_line:7:74));
+  return %len(l_text) > 3 and %subst(l_text:%len(l_text) - 2:3) = '...'
+         and %scan(' ':l_text) = 0;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -531,7 +591,7 @@ end-proc;
 // ------------------------------------------------------------------
 dcl-proc AddConstName;
   dcl-pi *n;
-    i_name varchar(21) const;
+    i_name varchar(150) const;
   end-pi;
 
   if g_constCount < C_MAXCONST;
@@ -1112,11 +1172,12 @@ dcl-proc ConvertP;
     i_index int(10) const;
     i_lineNo int(10) const;
     i_line char(100) const;
+    i_longName varchar(150) const options(*nopass);
   end-pi;
 
   dcl-s l_kwText varchar(1200);
   dcl-s l_extra int(10);
-  dcl-s l_name varchar(21);
+  dcl-s l_name varchar(150);
   dcl-s l_be varchar(1);
   dcl-s l_stmt varchar(1200);
   dcl-s l_index int(10);
@@ -1129,6 +1190,9 @@ dcl-proc ConvertP;
   endif;
   SplitKeywords(l_kwText);
   l_name = Txt('P':'NAME':i_line);
+  if %parms >= 4;
+    l_name = i_longName;
+  endif;
   l_be = Up(Txt('P':'BEGEND':i_line));
 
   select;
@@ -1361,11 +1425,12 @@ dcl-proc ConvertD;
     i_index int(10) const;
     i_lineNo int(10) const;
     i_line char(100) const;
+    i_longName varchar(150) const options(*nopass);
   end-pi;
 
   dcl-s l_kwText varchar(1200);
   dcl-s l_extra int(10);
-  dcl-s l_name varchar(21);
+  dcl-s l_name varchar(150);
   dcl-s l_ext varchar(1);
   dcl-s l_dsType varchar(1);
   dcl-s l_defType varchar(2);
@@ -1375,7 +1440,7 @@ dcl-proc ConvertD;
   dcl-s l_dec varchar(2);
   dcl-s l_comment varchar(20);
   dcl-s l_head varchar(10);
-  dcl-s l_nameOut varchar(25);
+  dcl-s l_nameOut varchar(155);
   dcl-s l_typeText varchar(60) inz('');
   dcl-s l_first varchar(300) inz('');
   dcl-s l_stmt varchar(1200);
@@ -1407,6 +1472,9 @@ dcl-proc ConvertD;
   g_quoted = *off;
 
   l_name = Txt('D':'NAME':i_line);
+  if %parms >= 4;
+    l_name = i_longName;
+  endif;
   l_ext = Up(Txt('D':'EXT':i_line));
   l_dsType = Up(Txt('D':'DSTYPE':i_line));
   l_defType = Up(Txt('D':'DEFTYPE':i_line));
@@ -1854,7 +1922,7 @@ end-proc;
 // ------------------------------------------------------------------
 dcl-proc AddSym;
   dcl-pi *n;
-    i_name varchar(45) const;
+    i_name varchar(150) const;
     i_type varchar(60) const;
   end-pi;
 
@@ -2873,7 +2941,7 @@ end-proc;
 // name is not an array.
 dcl-proc ArrayFind;
   dcl-pi *n int(10);
-    i_name varchar(45) const;
+    i_name varchar(150) const;
   end-pi;
 
   dcl-s l_k int(10);
@@ -3847,6 +3915,67 @@ dcl-proc ConvertC;
 end-proc;
 
 // ------------------------------------------------------------------
+// A D or P specification whose name is continued over several lines: the parts
+// (without the ...) and the name of the main definition line are the name, and
+// the main line is converted with it. Returns the number of lines after the first
+// one that were used.
+dcl-proc ConvertLongName;
+  dcl-pi *n int(10);
+    i_spec char(1) const;
+    i_index int(10) const;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_name varchar(150);
+  dcl-s l_text varchar(80);
+  dcl-s l_count int(10) inz(1);
+  dcl-s l_next int(10);
+  dcl-s l_k int(10);
+  dcl-s l_extra int(10);
+  dcl-s l_main char(100);
+
+  l_text = %trim(%subst(i_line:7:74));
+  l_name = %subst(l_text:1:%len(l_text) - 3);
+  l_next = i_index + 1;
+  dow l_next <= SrcCount() and IsNameCont(i_spec:SrcLine(l_next));
+    l_text = %trim(%subst(SrcLine(l_next):7:74));
+    l_name += %subst(l_text:1:%len(l_text) - 3);
+    l_count += 1;
+    l_next += 1;
+  enddo;
+
+  // The main definition line has to follow directly.
+  if l_next > SrcCount();
+    l_main = '';
+  else;
+    l_main = SrcLine(l_next);
+  endif;
+  if l_main = '' or %subst(%xlate(C_LOWER:C_UPPER:l_main):6:1) <> i_spec
+     or %subst(l_main:7:1) = '*' or %subst(l_main:7:1) = '/';
+    ReviewSpec(i_lineNo:i_line:'A continued name without the definition line after it');
+    for l_k = 1 to l_count - 1;
+      ReviewSpec(SrcLineNo(i_index + l_k):SrcLine(i_index + l_k)
+                 :'Continuation of the name above');
+    endfor;
+    return l_count - 1;
+  endif;
+
+  l_name += Txt(i_spec:'NAME':l_main);
+  RptItem(C_STS_CONVERTED:i_lineNo:%trimr(%subst(i_line:6:75)):'');
+  for l_k = 1 to l_count - 1;
+    RptItem(C_STS_CONVERTED:SrcLineNo(i_index + l_k)
+            :%trimr(%subst(SrcLine(i_index + l_k):6:75)):'');
+  endfor;
+  if i_spec = 'D';
+    l_extra = ConvertD(l_next:SrcLineNo(l_next):l_main:l_name);
+  else;
+    l_extra = ConvertP(l_next:SrcLineNo(l_next):l_main:l_name);
+  endif;
+  return l_count + l_extra;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc Fx4Line export;
   dcl-pi *n ind;
     i_index int(10) const;
@@ -3886,6 +4015,8 @@ dcl-proc Fx4Line export;
     when l_form = 'F';
       Fx4Flush();
       o_extra = ConvertF(i_index:i_lineNo:i_line);
+    when (l_form = 'D' or l_form = 'P') and IsNameCont(l_form:i_line);
+      o_extra = ConvertLongName(l_form:i_index:i_lineNo:i_line);
     when l_form = 'D';
       o_extra = ConvertD(i_index:i_lineNo:i_line);
     when l_form = 'P';

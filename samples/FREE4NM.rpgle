@@ -1,0 +1,16 @@
+      * RPG IV: continued names, keyword names and keyword literals (RV-57)
+     D QuiteLongFieldNameThatCannotAlwaysFitInOneLine...
+     D                 S        10     A
+     DPtr              S               *   INZ(%ADDR(QuiteLongFieldName...
+     D                                     ThatCannotAlways...
+     D                                     FitInOneLine))
+     D NameThatIsSoLongItMustBe...
+     D  Continued      S        10     A
+      * Literal continued with +: the next line continues at its first non-blank
+     DMsg              S        60     A   INZ('Mary had a little lamb, its +
+     D                                     fleece was white as snow.')
+      * Literal continued with -: the next line continues at the keyword column
+     DMsg2             S        30     A   INZ('abc -
+     D                                         def')
+      * Not converted: a name continued but without a definition line
+     D LostName...
