@@ -972,3 +972,7 @@ Source: SC09-1818 chapter 24 (output specifications of disk files: `ADD` and `DE
 Packed or binary output (data format `P` or `B`) is not converted: the record would need the field as a packed subfield. Written from the manuals and not from a run: check that the numbers come out as zoned digits with the sign in the last zone, and that fields not named in the record are blank (`*blanks` on the data structure).
 
 Sample `samples/FREEDSK.rpg36`: `NEWREC` (file ORDHIST; `CUSTNO` 4 digits at 1-4, `NAME` at 5-14, the constant `'NEW'` at 18-20, `AMT` 7 digits with blank after at 21-27), `ADDREC` and `DELREC` of MASTER, and two records that stay R (`UPDREC`: update of the record read; `LATE`: `LATEF` is defined after the `EXCPT`).
+
+## Several printer files (FREE-40, RV-62)
+
+Each printer file with converted exception, heading, detail or total records gets its own DDS (up to 9 files). Format names stay unique over the whole source (`HEAD`, a number when a name is used twice), because the program writes formats by name. With `DDSTGT` and `*PRTF` as the member each DDS goes to a member named like its file (`REPORT1`, `REPORT2`) in the same DDS file and library, so the targets must differ from each other and from `TGT` (IAC0105). With a member name given and more than one printer file the run ends before writing with IAC0106. Without `DDSTGT` each DDS follows as comments at the end of the source, with its own header. Sample `samples/FREEPR2.rpg36`: `write HEAD1;` and `write HEAD2;`, DDS members `REPORT1` and `REPORT2`. Not tested.

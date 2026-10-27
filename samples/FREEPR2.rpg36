@@ -1,0 +1,13 @@
+      * Two printer files in one source (RV-62): one DDS member for each
+     H
+     FREPORT1 O         132             PRINTER
+     FREPORT2 O          80             PRINTER
+     C                     MOVE 'ACME'    NAME    10
+     C                     EXCPT HEAD1
+     C                     EXCPT HEAD2
+     OREPORT1 E                HEAD1
+     O                                   20 'Report one'
+     O                         NAME      40
+     OREPORT2 E                HEAD2
+     O                                   20 'Report two'
+     O                         NAME      40

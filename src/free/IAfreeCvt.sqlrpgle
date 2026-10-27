@@ -110,8 +110,11 @@ dcl-proc FreeConvert export;
   dcl-s l_status char(1);
   dcl-ds l_ddsParm likeds(IAcnvParm_t);
   dcl-ds l_ddsSrc likeds(IAcnvDesc_t);
-  dcl-ds l_ddsDesc likeds(IAcnvDesc_t);
+  dcl-ds l_ddsDesc likeds(IAcnvDesc_t) dim(9);
   dcl-s l_useDds ind inz(*off);
+  dcl-s l_ddsFiles int(10) inz(0);
+  dcl-s l_f int(10);
+  dcl-s l_g int(10);
 
   g_sourceCount = 0;
   g_ddsLines = 0;
@@ -202,21 +205,39 @@ dcl-proc FreeConvert export;
   // The printer DDS goes to its own member (DDSTGT): checked before anything is written.
   l_useDds = i_ddsGiven and g_ddsLines > 0;
   if l_useDds;
-    l_ddsParm = i_ddsParm;
-    if %xlate(C_LOWER:C_UPPER:%trim(l_ddsParm.tgtMbr)) = '*PRTF';
-      l_ddsParm.tgtMbr = OutDdsFile();
-    endif;
-    if %xlate(C_LOWER:C_UPPER:%trim(l_ddsParm.tgtType)) = '*DFT';
-      l_ddsParm.tgtType = 'PRTF';
-    endif;
-    if ValidateIO(C_CNV_FREEDDS:l_ddsParm:l_ddsSrc:l_ddsDesc:o_msgId:o_msgData) <> 0;
+    // One member for each printer file (RV-62): *PRTF gives each its own name; a
+    // member name given works for one printer file only.
+    l_ddsFiles = OutDdsFileCount();
+    if l_ddsFiles > 1 and %xlate(C_LOWER:C_UPPER:%trim(i_ddsParm.tgtMbr)) <> '*PRTF';
+      o_msgId = 'IAC0106';
+      o_msgData = %char(l_ddsFiles) + ' printer files: give *PRTF as the DDS member';
       return 1;
     endif;
-    if SameTarget(i_target:l_ddsDesc);
-      o_msgId = 'IAC0105';
-      o_msgData = %trim(l_ddsDesc.mbr) + ' ' + %trim(l_ddsDesc.path);
-      return 1;
-    endif;
+    for l_f = 1 to l_ddsFiles;
+      l_ddsParm = i_ddsParm;
+      if %xlate(C_LOWER:C_UPPER:%trim(l_ddsParm.tgtMbr)) = '*PRTF';
+        l_ddsParm.tgtMbr = OutDdsFileName(l_f);
+      endif;
+      if %xlate(C_LOWER:C_UPPER:%trim(l_ddsParm.tgtType)) = '*DFT';
+        l_ddsParm.tgtType = 'PRTF';
+      endif;
+      if ValidateIO(C_CNV_FREEDDS:l_ddsParm:l_ddsSrc:l_ddsDesc(l_f):o_msgId
+                    :o_msgData) <> 0;
+        return 1;
+      endif;
+      if SameTarget(i_target:l_ddsDesc(l_f));
+        o_msgId = 'IAC0105';
+        o_msgData = %trim(l_ddsDesc(l_f).mbr) + ' ' + %trim(l_ddsDesc(l_f).path);
+        return 1;
+      endif;
+      for l_g = 1 to l_f - 1;
+        if SameTarget(l_ddsDesc(l_g):l_ddsDesc(l_f));
+          o_msgId = 'IAC0105';
+          o_msgData = %trim(l_ddsDesc(l_f).mbr) + ' ' + %trim(l_ddsDesc(l_f).path);
+          return 1;
+        endif;
+      endfor;
+    endfor;
   endif;
 
   if OpenTarget(i_target:o_msgId:o_msgData) <> 0;
@@ -235,17 +256,22 @@ dcl-proc FreeConvert export;
   endfor;
   CloseTarget();
   if l_useDds;
-    if OpenTarget(l_ddsDesc:o_msgId:o_msgData) <> 0;
-      return 1;
-    endif;
-    for l_index = 1 to g_ddsLines;
-      if WriteText(OutDdsLine(l_index):C_WRAP_NONE:l_lines:l_status:o_msgId:o_msgData)
-         <> 0;
-        CloseTarget();
+    for l_f = 1 to l_ddsFiles;
+      if OpenTarget(l_ddsDesc(l_f):o_msgId:o_msgData) <> 0;
         return 1;
       endif;
+      for l_index = 1 to g_ddsLines;
+        if OutDdsLineFile(l_index) <> OutDdsFileName(l_f);
+          iter;
+        endif;
+        if WriteText(OutDdsLine(l_index):C_WRAP_NONE:l_lines:l_status:o_msgId
+                     :o_msgData) <> 0;
+          CloseTarget();
+          return 1;
+        endif;
+      endfor;
+      CloseTarget();
     endfor;
-    CloseTarget();
   endif;
   return 0;
 end-proc;
@@ -1418,28 +1444,35 @@ dcl-proc AddDdsComments;
 
   dcl-s l_count int(10);
   dcl-s l_k int(10);
+  dcl-s l_f int(10);
+  dcl-s l_file varchar(8);
 
   l_count = OutFinish();
   g_ddsLines = l_count;
   if l_count = 0;
     return;
   endif;
-  AddOut('':0);
-  if i_toMember;
-    AddOut('// Printer file ' + OutDdsFile() + ': the DDS source made from the O '
-           + 'specifications is written to the DDS target (DDSTGT):':0);
-    AddOut('// run CRTPRTF FILE(' + OutDdsFile() + ') SRCFILE(...) before compiling '
+  for l_f = 1 to OutDdsFileCount();
+    l_file = OutDdsFileName(l_f);
+    AddOut('':0);
+    if i_toMember;
+      AddOut('// Printer file ' + l_file + ': the DDS source made from the O '
+             + 'specifications is written to the DDS target (DDSTGT):':0);
+      AddOut('// run CRTPRTF FILE(' + l_file + ') SRCFILE(...) before compiling '
+             + 'this program.':0);
+      iter;
+    endif;
+    AddOut('// Printer file ' + l_file + ': DDS source made from the O '
+           + 'specifications.':0);
+    AddOut('// Copy these lines (without the // and the first blank) into a DDS '
+           + 'source member and run':0);
+    AddOut('// CRTPRTF FILE(' + l_file + ') SRCFILE(...) before compiling '
            + 'this program.':0);
-    return;
-  endif;
-  AddOut('// Printer file ' + OutDdsFile() + ': DDS source made from the O '
-         + 'specifications.':0);
-  AddOut('// Copy these lines (without the // and the first blank) into a DDS '
-         + 'source member and run':0);
-  AddOut('// CRTPRTF FILE(' + OutDdsFile() + ') SRCFILE(...) before compiling '
-         + 'this program.':0);
-  for l_k = 1 to l_count;
-    AddOut('//' + OutDdsLine(l_k):0);
+    for l_k = 1 to l_count;
+      if OutDdsLineFile(l_k) = l_file;
+        AddOut('//' + OutDdsLine(l_k):0);
+      endif;
+    endfor;
   endfor;
 end-proc;
 

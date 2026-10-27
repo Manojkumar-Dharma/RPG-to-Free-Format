@@ -102,3 +102,22 @@ end-pr;
 // The printer file the DDS belongs to ('' when there is no DDS).
 dcl-pr OutDdsFile varchar(8);
 end-pr;
+
+// RV-62: the printer files that have DDS lines (after OutFinish): their number, the
+// name of the nth one, the number of DDS lines of the file with this position among
+// all printer files of the source, and the printer file a DDS line (OutDdsLine) is
+// of.
+dcl-pr OutDdsFileCount int(10);
+end-pr;
+
+dcl-pr OutDdsFileName varchar(8);
+  i_number int(10) const;
+end-pr;
+
+dcl-pr OutDdsLineCount int(10);
+  i_number int(10) const;
+end-pr;
+
+dcl-pr OutDdsLineFile varchar(8);
+  i_index int(10) const;
+end-pr;

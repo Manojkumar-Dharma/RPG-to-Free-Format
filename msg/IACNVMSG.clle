@@ -115,6 +115,11 @@ CHGVAR     VAR(&TXT) VALUE('The printer DDS target (DDSTGT) is the same as ' *TC
                            'the target: &1.')
 CALLSUBR   SUBR(ADDMSG)
 
+CHGVAR     VAR(&ID) VALUE('IAC0106')
+CHGVAR     VAR(&TXT) VALUE('The source has more than one printer file with ' *TCAT +
+                           'DDS: &1.')
+CALLSUBR   SUBR(ADDMSG)
+
 /* IAC0100 has three 10-byte data fields */
 RMVMSGD    MSGID(IAC0100) MSGF(&LIB/IACNVMSG)
 MONMSG     MSGID(CPF0000)

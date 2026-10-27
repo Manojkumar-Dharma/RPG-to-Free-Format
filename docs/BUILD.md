@@ -150,7 +150,7 @@ IACNVFREE SRC(MYLIB/QS36SRC FREEO) SRCTYPE(RPG36) TGT(QRPGLESRC) DDSTGT(*TGTFILE
 CRTPRTF FILE(MYLIB/REPORT1) SRCFILE(MYLIB/QDDSSRC) SRCMBR(REPORT1)
 ```
 
-The IFS works the same way with `DDSIFS` (member `name.PRTF`, `DDSIFS(*TGT)` is the target directory). The DDS target is checked after the conversion and before anything is written: a DDS target that exists needs `REPLACE(*YES)`, and the same member or file as `TGT` is refused (IAC0105). When the source has no output to a PRINTER file `DDSTGT` is not used. Run `IACNVMSG` again for the new message and compile `IAcnvTyp`, `IAfreeCvt` and `IAcnvFree` again.
+The IFS works the same way with `DDSIFS` (member `name.PRTF`, `DDSIFS(*TGT)` is the target directory). The DDS target is checked after the conversion and before anything is written: a DDS target that exists needs `REPLACE(*YES)`, and the same member or file as `TGT` is refused (IAC0105). When the source has no output to a PRINTER file `DDSTGT` is not used. With several printer files give `*PRTF` as the member: each DDS goes to a member named like its file (a fixed member name ends with IAC0106). Run `IACNVMSG` again for IAC0106. Run `IACNVMSG` again for the new message and compile `IAcnvTyp`, `IAfreeCvt` and `IAcnvFree` again.
 
 ## Grouped file and member parameters
 
