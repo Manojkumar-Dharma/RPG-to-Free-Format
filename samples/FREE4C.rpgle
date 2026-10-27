@@ -43,6 +43,15 @@
      C     Count         ANDLT     9
      C     Total         OREQ      0
      C                   ENDIF
+      * ANDxx and ORxx after comment lines (FREE-28)
+     C     Count         IFGT      1
+      * second condition
+     C     Count         ANDLT     9
+      * or the total is zero
+      * (two comment lines)
+     C     Total         OREQ      0
+     C                   ADD       1             Count
+     C                   ENDIF
      C     Total         COMP      100                                808182
      C     Total         SUB       1             Total                707172
      C  N90              ADD       1             Count

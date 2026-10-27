@@ -423,7 +423,7 @@ C specifications (part 2, `ConvertC` in `IAfreeFx4`, sample `samples/FREE4C.rpgl
 | Conditioning indicator (columns 9-11) on a simple operation | `if *in90;` or `if not *in90;`, the statement indented, `endif;` |
 
 R: level indicators (columns 7-8), a conditioning indicator on a group operation (`IF`, `DOW`, `BEGSR`...) or on `RT`, resulting indicators of other operations,
-`ANDxx` and `ORxx` with indicators or after a comment line, traditional `DO`, `MOVE`,
+`ANDxx` and `ORxx` with indicators (RPG IV: comment lines between the header and the `ANDxx`/`ORxx` lines are converted, FREE-28), traditional `DO`, `MOVE`,
 `MOVEL`, `CALL`/`PARM`, string and other operations, a result field defined by
 length and decimals, a literal continued with `+` or `-`.
 

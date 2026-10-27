@@ -3159,6 +3159,31 @@ dcl-proc IsCOp;
 end-proc;
 
 // ------------------------------------------------------------------
+// The index of the next calculation line from i_from on, skipping comment
+// lines (* in column 7); 0 when the next line that is not a comment is not
+// a calculation operation line.
+dcl-proc NextCalcLine;
+  dcl-pi *n int(10);
+    i_from int(10) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+
+  l_i = i_from;
+  dow l_i <= SrcCount();
+    if %subst(SrcLine(l_i):7:1) = '*';
+      l_i += 1;
+    else;
+      if IsCOp(SrcLine(l_i));
+        return l_i;
+      endif;
+      return 0;
+    endif;
+  enddo;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc ConvertC;
   dcl-pi *n int(10);
     i_index int(10) const;
@@ -3176,6 +3201,8 @@ dcl-proc ConvertC;
   dcl-s l_ef2 varchar(400) inz('');
   dcl-s l_extra int(10) inz(0);
   dcl-s l_next int(10);
+  dcl-s l_scan int(10);
+  dcl-s l_hasCmt ind inz(*off);
   dcl-s l_stmt varchar(600) inz('');
   dcl-s l_reason varchar(190) inz('');
   dcl-s l_note varchar(190) inz('');
@@ -3495,10 +3522,9 @@ dcl-proc ConvertC;
           l_reason = 'Operation ' + l_op + ' is not converted';
         else;
           l_open = *off;
-          if i_index < SrcCount();
-            if IsCOp(SrcLine(i_index + 1));
-              l_open = IsAndOr(OpOf(SrcLine(i_index + 1)));
-            endif;
+          l_scan = NextCalcLine(i_index + 1);
+          if l_scan > 0;
+            l_open = IsAndOr(OpOf(SrcLine(l_scan)));
           endif;
           if l_open;
             l_stmt += ' (' + l_f1 + ' ' + l_sym + ' ' + l_f2 + ')';
@@ -3506,9 +3532,14 @@ dcl-proc ConvertC;
             l_stmt += ' ' + l_f1 + ' ' + l_sym + ' ' + l_f2;
           endif;
           l_next = i_index + 1;
-          dow l_next <= SrcCount() and IsCOp(SrcLine(l_next))
-              and IsAndOr(OpOf(SrcLine(l_next)));
-            l_andLine = SrcLine(l_next);
+          // Comment lines between the header and its ANDxx or ORxx lines are
+          // skipped; they are written after the header (see l_hasCmt).
+          dou *off;
+            l_scan = NextCalcLine(l_next);
+            if l_scan = 0 or not IsAndOr(OpOf(SrcLine(l_scan)));
+              leave;
+            endif;
+            l_andLine = SrcLine(l_scan);
             l_andOp = OpOf(l_andLine);
             l_andF1 = Txt('C':'FACTOR1':l_andLine);
             l_andF2 = Txt('C':'FACTOR2':l_andLine);
@@ -3530,8 +3561,11 @@ dcl-proc ConvertC;
               l_stmt += ' or (';
             endif;
             l_stmt += l_andF1 + ' ' + l_andSym + ' ' + l_andF2 + ')';
-            l_extra += 1;
-            l_next += 1;
+            if l_scan > l_next;
+              l_hasCmt = *on;
+            endif;
+            l_extra += l_scan - l_next + 1;
+            l_next = l_scan + 1;
           enddo;
         endif;
       when l_op = 'SETON' or l_op = 'SETOFF';
@@ -3766,6 +3800,14 @@ dcl-proc ConvertC;
   endif;
   if l_stmt <> '';
     EmitStatement(l_indent:l_stmt + ';':i_lineNo);
+  endif;
+  if l_hasCmt;
+    for l_k = 1 to l_extra;
+      if %subst(SrcLine(i_index + l_k):7:1) = '*';
+        AddOut(Pad(l_indent) + '//' + %trimr(%subst(SrcLine(i_index + l_k):8:73))
+               :SrcLineNo(i_index + l_k));
+      endif;
+    endfor;
   endif;
   l_k = %scan('; ':l_post);
   dow l_post <> '';
