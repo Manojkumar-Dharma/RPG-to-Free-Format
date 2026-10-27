@@ -2371,7 +2371,8 @@ dcl-proc ConvertInputExternal;
         else;
           RptItem(C_STS_ASSUMPTION:g_sourceLineNos(l_k):l_text
                   :'The renamed field is a copy (dcl-s like): it is set after each'
-                  + ' READ and CHAIN of the file; a change of it is not written back');
+                  + ' READ and CHAIN of the file and copied back before UPDAT and WRITE of'
+                  + ' its record format; check a WRITE of a format with another name');
         endif;
       else;
         AddOut('// ' + RulDialectLabel() + ': ' + l_text:g_sourceLineNos(l_k));

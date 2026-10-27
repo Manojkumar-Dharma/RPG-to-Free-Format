@@ -67,7 +67,7 @@ FREE-10 (module `IAfreeFx4`): the R items of the RPG IV source types `RPGLE` and
 | RV-52 | Level indicators (columns 7-8) and `RT` on a calculation; a conditioning indicator on a group operation (`IF`, `DOW`, `BEGSR` ...) | the cycle, or no statement to wrap | Decide with RV-20 (cycle); for the group operations convert with a nested `if` | Written for `IF`/`DOW`/`DOU`/`FOR`/`DO` (FREE-21); cycle part open | Not tested |
 | RV-53 | Resulting indicators of operations other than file operations, arithmetic and `COMP` (`LOOKUP`, `TESTN`, `CHECK` with `ER`, `SUBST` with `ER`, `CALL`) | no tests exist for them | Convert with the operation (RV-50): `TESTN` (FREE-14); `LOOKUP` on arrays and the error indicator of `CALL` (FREE-27). Stay R: `LOOKUP` of a table (`%tlookup`), the LR indicator of `CALL`, `SUBST` and `CHECK` with an error indicator (needs `MONITOR`) | Written | Not tested |
 | RV-54 | `ANDxx`/`ORxx` after a comment line or with indicators; traditional `DO` without an index field | needs a hidden index | Convert: declare an index like FREE-05; `ANDxx`/`ORxx` after comment lines in RPG IV (FREE-28); with indicators: No form, the manual does not allow conditioning indicators on `ANDxx`/`ORxx`, stays R | DO without index written (FREE-21); ANDxx after comment lines written (FREE-28) | Not tested |
-| RV-55 | I specifications (program described and external field renames) | cycle entries, rename | Convert program described files like FREE-04; renames with RV-30 | Written for program described files (FREE-23); renames open | Not tested |
+| RV-55 | I specifications (program described and external field renames) | cycle entries, rename | Convert program described files like FREE-04; renames with RV-30 | Written for program described files (FREE-23); renames with RV-30 (FREE-24, FREE-25) | Not tested |
 | RV-56 | O specifications of RPG IV | columns differ | With FREE-06 part 3 | Planned | Not started |
 | RV-57 | D specifications: names continued with `...`, keyword literals continued with `+` or `-`, `FROMFILE`, `TOFILE`, `CLASS`, `PACKEVEN`, object types; the F spec designations P, S, R, T, sequence, limits | not valid or no form | Convert the continuations (FREE-30: names continued with `...` on D and P specifications and inside keywords, literals continued with `+` or `-`); No form for the rest (`FROMFILE`, `TOFILE`, `CLASS`, `PACKEVEN`, object types, F designations P, S, R, T, sequence, limits stay R); a numeric constant continued on the next line stays open | Written | Not tested |
 | RV-58 | `/COPY` and `/INCLUDE` members | the member is fixed form | with RV-36; converting the copied member itself is still open | Written (directive kept as A) | Not tested |
@@ -96,7 +96,7 @@ FREE-06 (module `IAfreeOut`): the R items of the output specifications.
    (RV-50 to RV-59).
 2. The Convert items that need no decision: RV-02, RV-03, RV-07, RV-09 and RV-10
    are written (FREE-13); RV-04 and RV-05 are written (FREE-14), RV-06 (FREE-15), RV-08 (FREE-16), RV-11 (FREE-17, OCUR in FREE-20), RV-32 (FREE-18), RV-35 (FREE-19: L and R only, the file arrays have no free-form form). The planned items of this list are done; OCUR is written (FREE-20).
-3. The Decide items: RV-14, RV-20/21, RV-30, RV-36.
+3. The Decide items still open: RV-20/21 (RV-14, RV-30 and RV-36 are decided).
 4. The Sample items when the members arrive: RV-33, RV-41, RV-42.
 5. RV-12 and RV-31 together with the display file converter.
 
