@@ -63,6 +63,7 @@ dcl-s g_fmtName varchar(8) dim(C_MAXREN);
 dcl-s g_fmtFile varchar(8) dim(C_MAXREN);
 dcl-s g_fmtCount int(10);
 dcl-s g_fileKeyed ind dim(C_MAXFILES);
+dcl-s g_fileOut ind dim(C_MAXFILES);        // usage has *output (RV-62)
 dcl-s g_fileCount int(10);
 // The primary file of the RPG cycle skeleton (FREE-36) and the control fields of its
 // input specifications (field name and control level 1 to 9).
@@ -1298,6 +1299,7 @@ dcl-proc ConvertFileLine;
     RegisterFile(l_name:0:'X':l_type:i_lineNo:(l_addr = 'K'));
   else;
     RegisterFile(l_name:ToInt(l_recLen):'D':l_type:i_lineNo:(l_org = 'I'));
+    SetFileOutput(l_name:(l_type = 'O' or l_add = 'A'));
   endif;
   o_ok = *on;
   if l_note = '';
@@ -2182,6 +2184,7 @@ dcl-proc RegisterFile;
   g_fileTypes(g_fileCount) = i_type;
   g_fileHasLayout(g_fileCount) = *off;
   g_fileKeyed(g_fileCount) = i_keyed;
+  g_fileOut(g_fileCount) = *off;
   DefineName(i_name:i_lineNo);
 end-proc;
 
@@ -2314,6 +2317,46 @@ dcl-proc FileInfo export;
     o_recDs = i_name + '_REC';
   endif;
   o_keyed = g_fileKeyed(l_file);
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// RV-62: the file takes output records (type O, or file addition A).
+dcl-proc SetFileOutput;
+  dcl-pi *n;
+    i_name varchar(8) const;
+    i_output ind const;
+  end-pi;
+
+  dcl-s l_file int(10);
+
+  l_file = FindFile(i_name);
+  if l_file > 0;
+    g_fileOut(l_file) = i_output;
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// RV-62: record length and usage of a program described DISK file for the
+// output specifications (IAfreeOut): the length, whether usage has *output and
+// whether the file is an update file.
+dcl-proc FileOutInfo export;
+  dcl-pi *n ind;
+    i_name varchar(8) const;
+    o_recLen int(10);
+    o_output ind;
+    o_update ind;
+  end-pi;
+
+  dcl-s l_file int(10);
+
+  l_file = FindFile(i_name);
+  if l_file = 0 or g_fileDevices(l_file) <> 'D';
+    return *off;
+  endif;
+  o_recLen = g_fileLens(l_file);
+  o_output = g_fileOut(l_file);
+  o_update = (g_fileTypes(l_file) = 'U');
   return *on;
 end-proc;
 

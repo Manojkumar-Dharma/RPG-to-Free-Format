@@ -1,0 +1,31 @@
+      * Output of DISK files (RV-62): ADD, DEL and exception records
+     H
+     FORDHIST O          40             DISK
+     FMASTER  UF         40  4AI     1 DISK                      A
+     FREPORT1 O         132             PRINTER
+     C                     Z-ADD5         CUSTNO  40
+     C                     MOVE 'ACME'    NAME    10
+     C                     Z-ADD125       AMT     72
+      * Written: ORDHIST record, MASTER addition
+     C                     EXCPT NEWREC
+     C   01                EXCPT ADDREC
+      * Delete the record read
+     C           CUSTNO    CHAINMASTER               90
+     C  N90                EXCPT DELREC
+      * Not converted: update of the record read, a field defined later
+     C                     EXCPT UPDREC
+     C                     EXCPT LATE
+     C                     Z-ADD1         LATEF   30
+     OORDHIST E                NEWREC
+     O                         CUSTNO     4
+     O                         NAME      14
+     O                                   20 'NEW'
+     O                         AMT    B  27
+     OMASTER  EADD             ADDREC
+     O                         CUSTNO     4
+     O                         NAME      14
+     OMASTER  EDEL             DELREC
+     OMASTER  E                UPDREC
+     O                         NAME      14
+     OORDHIST E                LATE
+     O                         LATEF      3

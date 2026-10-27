@@ -40,6 +40,27 @@ dcl-pr OutExceptCond varchar(200);
   i_number int(10) const;
 end-pr;
 
+// RV-62: records of program described DISK files. OutExceptDisk is *on when the
+// nth record of the EXCPT name belongs to a DISK file; OutDiskStatements gives its
+// statements (the data structure FILE_OUT, %SUBST at the end positions, write or
+// delete), 0 with the reason when it cannot be converted.
+dcl-pr OutExceptDisk ind;
+  i_name varchar(6) const;
+  i_number int(10) const;
+end-pr;
+
+dcl-pr OutExceptFile varchar(8);
+  i_name varchar(6) const;
+  i_number int(10) const;
+end-pr;
+
+dcl-pr OutDiskStatements int(10);
+  i_name varchar(6) const;
+  i_number int(10) const;
+  o_stmts varchar(250) dim(40);
+  o_reason varchar(190);
+end-pr;
+
 // The heading, detail (part S) and total (part T) records the cycle skeleton writes
 // (RV-60): their number, the format name and the condition of the nth one in source
 // order. 1P is IA_FIRST, L1 to L9 and LR are *INL1 to *INL9 and *INLR.

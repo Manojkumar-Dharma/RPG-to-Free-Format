@@ -79,7 +79,7 @@ FREE-06 (module `IAfreeOut`): the R items of the output specifications.
 |----|------|-------------|------------|-------------|-------------|
 | RV-60 | Heading, detail and total output records (types H, D, T), `1P`, level indicators on output | written by the RPG cycle | Decided with RV-20: written by the cycle skeleton (FREE-37); OR lines of output indicators converted | Written | Not tested; open: `MR`, `RT`, a program without the skeleton |
 | RV-61 | Edited numeric fields (edit codes, edit words), blank after, data format P, B, L, R, relative end positions, `PAGE`, `UDATE` and the like, `*PLACE`, array elements | DDS needs the edited width and other keywords | Convert: width table of the edit codes, `EDTCDE`/`EDTWRD`, `PAGNBR`, `DATE`, `clear` | Written in FREE-38 except data formats, `PAGE1`-`PAGE7`, `UDAY`, `UMONTH`, `UYEAR`, `*PLACE`, array elements and user-defined codes 5-9 (stay R) | Not tested |
-| RV-62 | Output of DISK files (`EXCPT`, `ADD`, `DEL`) and a second printer file | one DDS per source today | Convert: `write` of the record with a data structure; one DDS member per file with `DDSTGT` | Planned | Not started |
+| RV-62 | Output of DISK files (`EXCPT`, `ADD`, `DEL`) and a second printer file | one DDS per source today | Convert: `write` of the record with a data structure; one DDS member per file with `DDSTGT` | Disk part written (FREE-39: exception records, `ADD`, `DEL`); a second printer file and the update of the record read still planned | Not tested |
 | RV-63 | The DDS is written as comments at the end of the member | no second target yet | Convert: `DDSTGT` parameter and a second member | Written (FREE-06, `DDSTGT`, `DDSTYPE`, `DDSIFS`, message IAC0105) | Not tested |
 
 ## IAOCLTOCLE and IACNVDSPF

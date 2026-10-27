@@ -33,7 +33,7 @@ dcl-c C_MAXSTACK 100;
 dcl-c C_MAXDECL 500;
 dcl-c C_MAXGROUP 8;
 dcl-c C_MAXCONDLINES 16;
-dcl-c C_MAXSTMT 8;
+dcl-c C_MAXSTMT 40;
 dcl-c C_MAXSQL 200;
 dcl-c C_MAXKL 100;
 dcl-c C_MAXPL 40;
@@ -2963,8 +2963,13 @@ dcl-proc ConvertExcept;
   dcl-s l_name varchar(10);
   dcl-s l_count int(10);
   dcl-s l_k int(10);
+  dcl-s l_j int(10);
   dcl-s l_cond varchar(200);
   dcl-s l_after varchar(120);
+  dcl-s l_total int(10) inz(0);
+  dcl-s l_n int(10);
+  dcl-s l_reason varchar(190);
+  dcl-s l_tmp varchar(250) dim(C_MAXSTMT);
   dcl-s l_statements varchar(250) dim(C_MAXSTMT);
 
   l_name = Up(i_c.factor2);
@@ -2979,19 +2984,74 @@ dcl-proc ConvertExcept;
     return;
   endif;
   for l_k = 1 to l_count;
+    if OutExceptDisk(l_name:l_k);
+      // A record of a DISK file (RV-62): the statements come from IAfreeOut.
+      l_n = OutDiskStatements(l_name:l_k:l_tmp:l_reason);
+      if l_n = 0;
+        ReviewHere(i_c.line:i_c.lineNo:'EXCPT ' + l_name + ': ' + l_reason);
+        return;
+      endif;
+      if l_total + l_n > C_MAXSTMT;
+        ReviewHere(i_c.line:i_c.lineNo:'EXCPT ' + l_name + ' writes too many '
+                   + 'statements for one calculation');
+        return;
+      endif;
+      for l_j = 1 to l_n;
+        l_total += 1;
+        l_statements(l_total) = l_tmp(l_j);
+      endfor;
+      CalcRecordDs(OutExceptFile(l_name:l_k));
+      iter;
+    endif;
     l_cond = OutExceptCond(l_name:l_k);
     l_after = OutExceptAfter(l_name:l_k);
     if l_after <> '';
       l_after = '; ' + l_after;
     endif;
+    l_total += 1;
+    if l_total > C_MAXSTMT;
+      ReviewHere(i_c.line:i_c.lineNo:'EXCPT ' + l_name + ' writes too many '
+                 + 'statements for one calculation');
+      return;
+    endif;
     if l_cond = '';
-      l_statements(l_k) = 'write ' + OutExceptFormat(l_name:l_k) + l_after;
+      l_statements(l_total) = 'write ' + OutExceptFormat(l_name:l_k) + l_after;
     else;
-      l_statements(l_k) = 'if ' + l_cond + '; write '
-                          + OutExceptFormat(l_name:l_k) + l_after + '; endif';
+      l_statements(l_total) = 'if ' + l_cond + '; write '
+                              + OutExceptFormat(l_name:l_k) + l_after + '; endif';
     endif;
   endfor;
-  EmitStatements(i_c:i_rule:l_statements:l_count:'');
+  EmitStatements(i_c:i_rule:l_statements:l_total:'');
+end-proc;
+
+// ------------------------------------------------------------------
+// RV-62: the record data structure FILE_OUT of an output DISK file, declared once
+// with the other declarations before the first calculation.
+dcl-proc CalcRecordDs;
+  dcl-pi *n;
+    i_file varchar(8) const;
+  end-pi;
+
+  dcl-s l_text varchar(100);
+  dcl-s l_index int(10);
+  dcl-s l_length int(10);
+  dcl-s l_out ind;
+  dcl-s l_upd ind;
+
+  if not FileOutInfo(i_file:l_length:l_out:l_upd) or l_length < 1;
+    return;
+  endif;
+  l_text = 'dcl-ds ' + i_file + '_OUT len(' + %char(l_length) + ') end-ds;';
+  for l_index = 1 to g_protoLineCount;
+    if g_protoLine(l_index) = l_text;
+      return;
+    endif;
+  endfor;
+  if g_protoLineCount >= C_MAXPLINE;
+    return;
+  endif;
+  g_protoLineCount += 1;
+  g_protoLine(g_protoLineCount) = l_text;
 end-proc;
 
 // ------------------------------------------------------------------

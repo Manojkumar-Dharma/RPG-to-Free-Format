@@ -43,6 +43,9 @@ dcl-s g_gType char(1) dim(C_MAXGRP);         // E exception, H heading, D detail
 dcl-s g_gKeys varchar(60) dim(C_MAXGRP);     // SPACEB, SPACEA, SKIPB, SKIPA
 dcl-s g_gFirst int(10) dim(C_MAXGRP);
 dcl-s g_gFields int(10) dim(C_MAXGRP);
+dcl-s g_gDisk ind dim(C_MAXGRP);             // record of a program described DISK file (RV-62)
+dcl-s g_gAct char(1) dim(C_MAXGRP);          // disk: W write (blank or ADD), D delete (DEL)
+dcl-s g_gRecLen int(10) dim(C_MAXGRP);       // disk: record length
 dcl-s g_gCount int(10) inz(0);
 // Output fields and constants.
 dcl-s g_fName varchar(10) dim(C_MAXFLD);
@@ -307,6 +310,13 @@ dcl-proc OutBuild;
   dcl-s l_used ind;
   dcl-s l_relative ind;
   dcl-s l_digits varchar(5);
+  dcl-s l_disk ind;
+  dcl-s l_diskWhy varchar(150);
+  dcl-s l_ad varchar(3);
+  dcl-s l_act char(1);
+  dcl-s l_recLen int(10);
+  dcl-s l_out ind;
+  dcl-s l_upd ind;
 
   if g_built;
     return;
@@ -459,20 +469,72 @@ dcl-proc OutBuild;
     g_gOr(l_g) = '';
     g_gCond(l_g) = IndicatorCond(l_line:l_reason:l_type);
     g_gKeys(l_g) = '';
+    g_gDisk(l_g) = *off;
+    g_gAct(l_g) = ' ';
+    g_gRecLen(l_g) = 0;
+
+    // A program described DISK file (RV-62): exception records only; blank or ADD
+    // writes the record, DEL deletes the record read.
+    l_disk = *off;
+    l_diskWhy = '';
+    l_act = ' ';
+    l_recLen = 0;
+    l_device = ' ';
+    l_ftype = ' ';
+    if l_file <> '' and %len(l_file) <= 8;
+      if FileInfo(l_file:l_device:l_ftype:l_recDs:l_keyed) and l_device = 'D';
+        l_disk = *on;
+      endif;
+    endif;
+    if l_disk;
+      l_ad = Up(Cols(l_line:16:18));
+      if not FileOutInfo(l_file:l_recLen:l_out:l_upd);
+        l_diskWhy = 'File ' + l_file + ' has no record length';
+      else;
+        select;
+          when l_type <> 'E';
+            l_diskWhy = 'Heading, detail and total records of a DISK file are not '
+                        + 'converted: only exception records (E)';
+          when l_ad = '' and l_ftype = 'O';
+            l_act = 'W';
+          when l_ad = '' and l_ftype = 'U';
+            l_diskWhy = 'Update of the record read (update file, no ADD or DEL) is '
+                        + 'not converted';
+          when l_ad = '';
+            l_diskWhy = 'An input file with file addition needs ADD (columns 16-18)';
+          when l_ad = 'ADD' and l_out;
+            l_act = 'W';
+          when l_ad = 'ADD';
+            l_diskWhy = 'ADD needs a file with file addition (column 66 A)';
+          when l_ad = 'DEL' and l_ftype = 'U';
+            l_act = 'D';
+          when l_ad = 'DEL';
+            l_diskWhy = 'DEL needs an update file';
+          other;
+            l_diskWhy = 'Entry ' + l_ad + ' in columns 16-18 is not converted';
+        endsl;
+      endif;
+    endif;
     select;
       when l_reason <> '';
         g_gReason(l_g) = l_reason;
       when l_type <> 'E' and l_type <> 'H' and l_type <> 'D' and l_type <> 'T';
         g_gReason(l_g) = 'Record type ' + l_type + ' (column 15) is not valid';
-      when l_type <> 'E' and not l_cycle;
+      when l_disk and l_diskWhy <> '';
+        g_gReason(l_g) = l_diskWhy;
+      when l_type <> 'E' and not l_cycle and not l_disk;
         g_gReason(l_g) = 'Heading, detail and total records are written by the '
                          + 'RPG cycle skeleton (one program described primary '
                          + 'file): not converted without it';
-      when Cols(l_line:16:18) <> '';
+      when Cols(l_line:16:18) <> '' and not l_disk;
         g_gReason(l_g) = 'Entry in columns 16-18 (ADD, DEL, fetch overflow, '
                          + 'release) is not converted';
       when l_file = '' or %len(l_file) > 8;
         g_gReason(l_g) = 'The file name of the output record is missing or too long';
+      when l_disk;
+        g_gDisk(l_g) = *on;
+        g_gAct(l_g) = l_act;
+        g_gRecLen(l_g) = l_recLen;
       when not FileInfo(l_file:l_device:l_ftype:l_recDs:l_keyed)
            or l_device <> 'P';
         g_gReason(l_g) = 'File ' + l_file + ' is not a PRINTER file declared by a '
@@ -487,6 +549,11 @@ dcl-proc OutBuild;
     l_sa = Cols(l_line:18:18);
     l_kb = SkipNumber(Cols(l_line:19:20));
     l_ka = SkipNumber(Cols(l_line:21:22));
+    if l_disk;
+      // Columns 16-18 hold ADD or DEL: no spacing or skipping on a DISK file.
+      l_sb = '';
+      l_sa = '';
+    endif;
     if g_gReason(l_g) = '' and (l_sb <> '' and (%check('0123':l_sb) > 0)
        or l_sa <> '' and (%check('0123':l_sa) > 0) or l_kb = '?' or l_ka = '?');
       g_gReason(l_g) = 'Space or skip entry (columns 17-22) is not valid';
@@ -508,7 +575,7 @@ dcl-proc OutBuild;
     endif;
     l_keys += 'SPACEA(' + l_sa + ')';
     g_gKeys(l_g) = l_keys;
-    if g_gReason(l_g) = '';
+    if g_gReason(l_g) = '' and not l_disk;
       g_ddsFile = l_file;
     endif;
   endfor;
@@ -1129,6 +1196,10 @@ dcl-proc OutFinish export;
     if not g_gOk(l_g);
       iter;
     endif;
+    if g_gDisk(l_g);
+      DiskFinish(l_g);
+      iter;
+    endif;
     l_reason = '';
     l_rowCount = 0;
     l_prevStart = 0;
@@ -1260,6 +1331,214 @@ dcl-proc OutFinish export;
     endfor;
   endfor;
   return g_ddsCount;
+end-proc;
+
+// ------------------------------------------------------------------
+// RV-62: the kind of the nth record of an EXCPT name: *on for a record of a
+// program described DISK file (statements, no DDS).
+dcl-proc OutExceptDisk export;
+  dcl-pi *n ind;
+    i_name varchar(6) const;
+    i_number int(10) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  l_g = OutGroupNumber(i_name:i_number);
+  if l_g = 0;
+    return *off;
+  endif;
+  return g_gDisk(l_g);
+end-proc;
+
+// ------------------------------------------------------------------
+// RV-62: the file of the nth record of an EXCPT name.
+dcl-proc OutExceptFile export;
+  dcl-pi *n varchar(8);
+    i_name varchar(6) const;
+    i_number int(10) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  l_g = OutGroupNumber(i_name:i_number);
+  if l_g = 0;
+    return '';
+  endif;
+  return g_gFile(l_g);
+end-proc;
+
+// ------------------------------------------------------------------
+// RV-62: the statements of the nth record of an EXCPT name for a DISK file:
+// 'FILE_OUT = *blanks', one %subst assignment for each field or constant,
+// 'write FILE FILE_OUT' or 'delete FILE', the clear of the blank after fields,
+// inside an if when the record has output indicators. Returns the number of
+// statements, 0 with the reason when the record cannot be converted.
+dcl-proc OutDiskStatements export;
+  dcl-pi *n int(10);
+    i_name varchar(6) const;
+    i_number int(10) const;
+    o_stmts varchar(250) dim(40);
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  o_reason = '';
+  l_g = OutGroupNumber(i_name:i_number);
+  if l_g = 0 or not g_gDisk(l_g);
+    o_reason = 'No output record of a DISK file with this name';
+    return 0;
+  endif;
+  return DiskBuild(l_g:o_stmts:o_reason);
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc DiskBuild;
+  dcl-pi *n int(10);
+    i_g int(10) const;
+    o_stmts varchar(250) dim(40);
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_f int(10);
+  dcl-s l_count int(10) inz(0);
+  dcl-s l_acc varchar(250) inz('');
+  dcl-s l_one varchar(120);
+  dcl-s l_ds varchar(12);
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+  dcl-s l_start int(10);
+  dcl-s l_after varchar(120);
+  dcl-s l_known ind;
+  dcl-s l_cond varchar(200);
+
+  o_reason = '';
+  l_ds = g_gFile(i_g) + '_OUT';
+  l_cond = g_gCond(i_g);
+
+  if l_cond <> '';
+    l_count += 1;
+    o_stmts(l_count) = 'if ' + l_cond;
+  endif;
+
+  if g_gAct(i_g) = 'D';
+    if g_gFields(i_g) > 0;
+      o_reason = 'A DEL record has fields: not converted';
+      return 0;
+    endif;
+    l_count += 1;
+    o_stmts(l_count) = 'delete ' + g_gFile(i_g);
+  else;
+    l_acc = l_ds + ' = *blanks';
+    for l_f = g_gFirst(i_g) to g_gFirst(i_g) + g_gFields(i_g) - 1;
+      if g_fReason(l_f) <> '';
+        o_reason = g_fReason(l_f);
+        return 0;
+      endif;
+      if g_fCond(l_f) <> '';
+        o_reason = 'Output indicators on a field of a DISK record are not '
+                   + 'converted';
+        return 0;
+      endif;
+      if g_fName(l_f) = '';
+        // A constant ending at the end position.
+        l_len = ConstLength(g_fConst(l_f));
+        l_start = g_fEnd(l_f) - l_len + 1;
+        l_one = '%subst(' + l_ds + ':' + %char(l_start) + ':' + %char(l_len)
+                + ') = ' + g_fConst(l_f);
+      else;
+        if g_fSpecial(l_f) <> ' ';
+          o_reason = 'PAGE, UDATE and *DATE in a DISK record are not converted';
+          return 0;
+        endif;
+        if g_fEdit(l_f) <> ' ' or g_fConst(l_f) <> '';
+          o_reason = 'Edit codes and edit words of the field ' + g_fName(l_f)
+                     + ' are not converted for a DISK file';
+          return 0;
+        endif;
+        l_known = CalcFieldInfo(g_fName(l_f):l_kind:l_len:l_dec);
+        if not l_known;
+          o_reason = 'Field ' + g_fName(l_f) + ' has no known length and type '
+                     + 'at this point (define it before the EXCPT)';
+          return 0;
+        endif;
+        l_start = g_fEnd(l_f) - l_len + 1;
+        if l_kind = 'N';
+          l_one = '%subst(' + l_ds + ':' + %char(l_start) + ':' + %char(l_len)
+                  + ') = %editc(' + g_fName(l_f) + ':''X'')';
+        else;
+          l_one = '%subst(' + l_ds + ':' + %char(l_start) + ':' + %char(l_len)
+                  + ') = ' + g_fName(l_f);
+        endif;
+      endif;
+      if l_start < 1 or l_start + l_len - 1 > g_gRecLen(i_g);
+        o_reason = 'A field of the record is outside the record length '
+                   + %char(g_gRecLen(i_g));
+        return 0;
+      endif;
+      if %len(l_acc) + %len(l_one) + 2 > 240;
+        l_count += 1;
+        o_stmts(l_count) = l_acc;
+        l_acc = l_one;
+      else;
+        l_acc += '; ' + l_one;
+      endif;
+      if l_count >= 34;
+        o_reason = 'The record has too many fields for one EXCPT';
+        return 0;
+      endif;
+    endfor;
+    l_count += 1;
+    o_stmts(l_count) = l_acc;
+    l_after = GroupAfter(i_g);
+    l_count += 1;
+    o_stmts(l_count) = 'write ' + g_gFile(i_g) + ' ' + l_ds;
+    if l_after <> '';
+      l_count += 1;
+      o_stmts(l_count) = l_after;
+    endif;
+  endif;
+
+  if l_cond <> '';
+    l_count += 1;
+    o_stmts(l_count) = 'endif';
+  endif;
+  return l_count;
+end-proc;
+
+// ------------------------------------------------------------------
+// The report of a DISK record at the end of the conversion (RV-62).
+dcl-proc DiskFinish;
+  dcl-pi *n;
+    i_g int(10) const;
+  end-pi;
+
+  dcl-s l_stmts varchar(250) dim(40);
+  dcl-s l_reason varchar(190);
+  dcl-s l_count int(10);
+  dcl-s l_j int(10);
+
+  l_count = DiskBuild(i_g:l_stmts:l_reason);
+  if l_count = 0;
+    g_gOk(i_g) = *off;
+    RptItem(C_STS_REVIEW:SrcLineNo(g_gStart(i_g)):%trimr(%subst(
+            SrcLine(g_gStart(i_g)):6:75))
+            :'Output record of the DISK file ' + g_gFile(i_g) + ' is not '
+            + 'converted: ' + l_reason + '; the EXCPT that writes it is reported '
+            + 'separately');
+    return;
+  endif;
+  RptItem(C_STS_ASSUMPTION:SrcLineNo(g_gStart(i_g)):%trimr(%subst(
+          SrcLine(g_gStart(i_g)):6:75))
+          :'Record of the DISK file ' + g_gFile(i_g) + ' written by the EXCPT '
+          + 'with the data structure ' + g_gFile(i_g) + '_OUT (fields placed by '
+          + '%SUBST at their end positions, numeric fields as zoned digits '
+          + 'with %EDITC code X); not tested');
+  for l_j = g_gStart(i_g) + 1 to g_gEnd(i_g);
+    RptItem(C_STS_CONVERTED:SrcLineNo(l_j):%trimr(%subst(SrcLine(l_j):6:75)):'');
+  endfor;
 end-proc;
 
 // ------------------------------------------------------------------

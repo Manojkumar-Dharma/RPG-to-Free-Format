@@ -112,6 +112,15 @@ dcl-pr FileInfo ind;
   o_keyed ind;
 end-pr;
 
+// Record length and usage of a program described DISK file (IAfreeCvt FileOutInfo,
+// RV-62): the length, whether the usage has *output, whether it is an update file.
+dcl-pr FileOutInfo ind;
+  i_name varchar(8) const;
+  o_recLen int(10);
+  o_output ind;
+  o_update ind;
+end-pr;
+
 // The primary file of the RPG cycle skeleton (IAfreeCvt CycleInfo): the file, its
 // record layout data structure and the number of control fields; *off when the
 // cycle skeleton cannot be written (FREE-36). CycleControl gives the field name and

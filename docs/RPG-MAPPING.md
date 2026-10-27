@@ -948,3 +948,27 @@ width = digits + 1 for a decimal point (decimals > 0) + commas + sign (+ 1 for a
 Fields must be in ascending order of their positions (the edited start is compared with the end of the field before). Written from the manual and not from a run: check the first `CRTPRTF`, in particular the usage of `PAGNBR` and `DATE` fields and the position of edited fields.
 
 Sample `samples/FREEEDT.rpg36`. Expected, with `AMT` 9 digits and 2 decimals (`1`: width 12, start 3; `J`: width 13, start 16; `Z`: width 9, start 32), `CNT` 5 digits with code `3` (width 5, start 46) and blank after (`write LINE; clear CNT;`), the edit word (11 positions, start 50), `PAGE` (start 67), `UDATE` with `Y` (width 8, start 73) and the last field relative (+ 15, end 95).
+
+## Output records of DISK files (FREE-39, RV-62)
+
+Source: SC09-1818 chapter 24 (output specifications of disk files: `ADD` and `DEL` in columns 16-18, end positions), SC09-2508 (`WRITE`, `DELETE`, `%SUBST`, `%EDITC`). A program described DISK file has no DDS: the converter builds the record in a data structure of the record length, `FILE_OUT`, and writes it. The record layout is not shared with the input data structure `FILE_REC` (FREE-04), because the output fields are the fields of the program, not subfields.
+
+| Source | Result | Status |
+|---|---|---|
+| Exception record (`E`) of an output file (F spec type `O`), blank in columns 16-18 | `FILE_OUT = *blanks;` the field assignments, `write FILE FILE_OUT;` | A |
+| `ADD` on a file with file addition (`A`, column 66) | same, `write` | A |
+| `DEL` on an update file | `delete FILE;` (deletes the record read last); a `DEL` line with fields is R | A |
+| Output indicators of the record line (`N02`, `01`) and `OR` lines | `if ...; ...; endif;` around the statements | C |
+| Field with a character type | `%subst(FILE_OUT:start:len) = FIELD;` start = end position - length + 1 | A |
+| Numeric field | `%subst(FILE_OUT:start:len) = %editc(FIELD:'X');` zoned digits, sign in the zone of the last digit (the length is the digits of the field) | A |
+| Constant | `%subst(FILE_OUT:start:len) = 'text';` | A |
+| Blank after (`B`, column 39) | `clear FIELD;` after the `write` | C |
+| `dcl-ds FILE_OUT len(n) end-ds;` | declared once before the first calculation | A |
+| Heading, detail and total records (`H`, `D`, `T`) | R: only exception records | R |
+| Update of the record read (update file, blank in columns 16-18) | R (needs the record layout `FILE_REC`) | R |
+| Edit codes, edit words, `PAGE`, `UDATE`, `*DATE`, data formats (column 44), output indicators on a field, a field outside the record length | R | R |
+| A field the converter does not know when the `EXCPT` is converted | the `EXCPT` is R: define the field before the `EXCPT` (printer records are checked at the end, disk records at the `EXCPT`) | R |
+
+Packed or binary output (data format `P` or `B`) is not converted: the record would need the field as a packed subfield. Written from the manuals and not from a run: check that the numbers come out as zoned digits with the sign in the last zone, and that fields not named in the record are blank (`*blanks` on the data structure).
+
+Sample `samples/FREEDSK.rpg36`: `NEWREC` (file ORDHIST; `CUSTNO` 4 digits at 1-4, `NAME` at 5-14, the constant `'NEW'` at 18-20, `AMT` 7 digits with blank after at 21-27), `ADDREC` and `DELREC` of MASTER, and two records that stay R (`UPDREC`: update of the record read; `LATE`: `LATEF` is defined after the `EXCPT`).
