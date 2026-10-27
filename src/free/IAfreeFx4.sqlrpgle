@@ -43,6 +43,11 @@ dcl-c C_MAXSYM 1500;
 dcl-s g_symName varchar(45) dim(C_MAXSYM);   // declared fields and their types
 dcl-s g_symType varchar(60) dim(C_MAXSYM);
 dcl-s g_symCount int(10) inz(0);
+// The arrays of the D specifications (DIM) and their sequence, for LOOKUP (RV-53).
+dcl-c C_MAXARR 200;
+dcl-s g_arrName varchar(45) dim(C_MAXARR);
+dcl-s g_arrSeq char(1) dim(C_MAXARR);        // A ascending, D descending, blank
+dcl-s g_arrCount int(10) inz(0);
 // CALL, PARM and PLIST: the parameters read last and the prototypes written.
 dcl-c C_MAXPARM 20;
 dcl-s g_pF1 varchar(14) dim(C_MAXPARM);
@@ -148,6 +153,7 @@ dcl-proc Fx4Start export;
   g_klCount = 0;
   g_klDone = *off;
   g_symCount = 0;
+  g_arrCount = 0;
   g_cStarted = *off;
   g_protoCount = 0;
   g_divIdx = 0;
@@ -1673,6 +1679,21 @@ dcl-proc ConvertD;
     endif;
   endif;
 
+  // Remember the arrays and their sequence for LOOKUP (RV-53).
+  if l_name <> '' and (l_head = 'dcl-s' or l_head = 'dcl-subf')
+     and KwFind('DIM') > 0 and g_arrCount < C_MAXARR;
+    g_arrCount += 1;
+    g_arrName(g_arrCount) = Up(l_name);
+    select;
+      when KwFind('DESCEND') > 0;
+        g_arrSeq(g_arrCount) = 'D';
+      when KwFind('ASCEND') > 0;
+        g_arrSeq(g_arrCount) = 'A';
+      other;
+        g_arrSeq(g_arrCount) = ' ';
+    endsl;
+  endif;
+
   // LIKEDS and LIKEREC data structures have no END-DS.
   if l_defType = 'DS' and (KwFind('LIKEDS') > 0 or KwFind('LIKEREC') > 0);
     l_opensBlock = *off;
@@ -2848,6 +2869,128 @@ dcl-proc IsAndOr;
 end-proc;
 
 // ------------------------------------------------------------------
+// The position of an array of the D specifications in g_arrName, 0 when the
+// name is not an array.
+dcl-proc ArrayFind;
+  dcl-pi *n int(10);
+    i_name varchar(45) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+
+  for l_k = g_arrCount downto 1;
+    if g_arrName(l_k) = Up(i_name);
+      return l_k;
+    endif;
+  endfor;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// LOOKUP on an array (SC09-2508, LOOKUP; %LOOKUPxx): '; ' separated statements,
+// '' with o_reason set when it is not converted. Resulting indicators: high (71-72),
+// low (73-74), equal (75-76); high and low are not used together and need ASCEND or
+// DESCEND. Equal and high or low give %lookupge / %lookuple for the index, and the
+// indicators are set from the equal search first. With an index (ARR(X)) the search
+// starts at X, and X is set to the position found or to 1. A table (result field)
+// is not converted (%tlookup).
+dcl-proc LookupStmts;
+  dcl-pi *n varchar(400);
+    i_f1 varchar(14) const;
+    i_f2 varchar(14) const;
+    i_res varchar(14) const;
+    i_line char(100) const;
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_hi varchar(2);
+  dcl-s l_lo varchar(2);
+  dcl-s l_eq varchar(2);
+  dcl-s l_arr varchar(14);
+  dcl-s l_idx varchar(14) inz('');
+  dcl-s l_paren int(10);
+  dcl-s l_k int(10);
+  dcl-s l_fn varchar(12);
+  dcl-s l_args varchar(60);
+  dcl-s l_out varchar(400) inz('');
+
+  o_reason = '';
+  l_hi = Txt('C':'HI':i_line);
+  l_lo = Txt('C':'LO':i_line);
+  l_eq = Txt('C':'EQ':i_line);
+  l_arr = Up(i_f2);
+  l_paren = %scan('(':l_arr);
+  if l_paren > 0;
+    if %subst(l_arr:%len(l_arr):1) <> ')' or l_paren = 1
+       or %len(l_arr) - l_paren < 2;
+      o_reason = 'The index of ' + i_f2 + ' is not valid';
+      return '';
+    endif;
+    l_idx = %subst(l_arr:l_paren + 1:%len(l_arr) - l_paren - 1);
+    l_arr = %subst(l_arr:1:l_paren - 1);
+  endif;
+  l_k = ArrayFind(l_arr);
+  select;
+    when i_res <> '';
+      o_reason = 'LOOKUP of a table (second table in the result field) is not '
+                 + 'converted: use %tlookup by hand';
+    when l_k = 0;
+      o_reason = l_arr + ' is not an array declared by a D specification (a '
+                 + 'table is not converted)';
+    when i_f1 = '';
+      o_reason = 'LOOKUP needs a search argument in factor 1';
+    when l_hi <> '' and l_lo <> '';
+      o_reason = 'High and low cannot be used together with LOOKUP';
+    when l_hi = '' and l_lo = '' and l_eq = '';
+      o_reason = 'LOOKUP needs a high, low or equal resulting indicator';
+    when (l_hi <> '' or l_lo <> '') and g_arrSeq(l_k) = ' ';
+      o_reason = 'A high or low search needs ASCEND or DESCEND on ' + l_arr;
+  endsl;
+  if o_reason <> '';
+    return '';
+  endif;
+
+  l_args = i_f1 + ' : ' + l_arr;
+  if l_idx <> '';
+    l_args += ' : ' + l_idx;
+  endif;
+  select;
+    when l_hi <> '' and l_eq <> '';
+      l_fn = '%lookupge';
+    when l_lo <> '' and l_eq <> '';
+      l_fn = '%lookuple';
+    when l_hi <> '';
+      l_fn = '%lookupgt';
+    when l_lo <> '';
+      l_fn = '%lookuplt';
+    other;
+      l_fn = '%lookup';
+  endsl;
+
+  // The indicators first: they use the index as it was before the search.
+  select;
+    when l_eq <> '' and l_hi <> '';
+      l_out = '*in' + l_eq + ' = (%lookup(' + l_args + ') > 0); *in' + l_hi
+              + ' = (not *in' + l_eq + ' and %lookupgt(' + l_args + ') > 0)';
+    when l_eq <> '' and l_lo <> '';
+      l_out = '*in' + l_eq + ' = (%lookup(' + l_args + ') > 0); *in' + l_lo
+              + ' = (not *in' + l_eq + ' and %lookuplt(' + l_args + ') > 0)';
+    when l_eq <> '';
+      l_out = '*in' + l_eq + ' = (%lookup(' + l_args + ') > 0)';
+    when l_hi <> '';
+      l_out = '*in' + l_hi + ' = (%lookupgt(' + l_args + ') > 0)';
+    other;
+      l_out = '*in' + l_lo + ' = (%lookuplt(' + l_args + ') > 0)';
+  endsl;
+
+  // The index is set to the position found, or to 1 (a constant does not change).
+  if l_idx <> '' and not IsDigits(l_idx) and not IsConstName(l_idx);
+    l_out += '; ' + l_idx + ' = %max(1 : ' + l_fn + '(' + l_args + '))';
+  endif;
+  return l_out;
+end-proc;
+
+// ------------------------------------------------------------------
 // The statements that give the resulting indicators of an operation their value
 // (Table 99 of SC09-2508): '; ' separated, '' when there are none. o_error is
 // *on when an error indicator needs the (E) extender. o_reason is set for an
@@ -2898,6 +3041,9 @@ dcl-proc ResultInds;
         l_test = '%eof(' + i_f2 + ')';
       when l_isFile and l_k = 3 and i_op = 'SETLL';
         l_test = '%equal(' + i_f2 + ')';
+      when i_op = 'CALL' and l_k = 2;
+        o_error = *on;
+        l_test = '%error';
       when (i_op = 'ADD' or i_op = 'SUB' or i_op = 'MULT' or i_op = 'DIV'
            or i_op = 'Z-ADD' or i_op = 'Z-SUB') and i_res <> '';
         select;
@@ -3049,6 +3195,7 @@ dcl-proc ConvertC;
   dcl-s l_fi int(10);
   dcl-s l_open ind inz(*off);
   dcl-s l_post varchar(400) inz('');
+  dcl-s l_back varchar(400) inz('');
   dcl-s l_err ind inz(*off);
   dcl-s l_andOp varchar(10);
   dcl-s l_andSym varchar(2);
@@ -3113,7 +3260,7 @@ dcl-proc ConvertC;
     when (Txt('C':'HI':i_line) <> '' or Txt('C':'LO':i_line) <> ''
          or Txt('C':'EQ':i_line) <> '') and l_op <> 'SETON' and l_op <> 'SETOFF'
          and not IsStringOp(l_op) and l_op <> 'TESTN' and l_op <> 'TESTB'
-         and l_op <> 'TESTZ';
+         and l_op <> 'TESTZ' and l_op <> 'LOOKUP';
       l_post = ResultInds(l_op:l_f1:l_f2:l_res:i_line:l_err:l_reason);
       l_hasInd = l_reason = '';
     when IsAndOr(l_op);
@@ -3122,6 +3269,7 @@ dcl-proc ConvertC;
   if l_reason = '' and l_op <> 'BEGSR' and l_op <> 'ENDSR' and l_f1 <> ''
      and l_op <> 'KLIST' and l_op <> 'COMP' and not IsStringOp(l_op)
      and l_op <> 'DEFN' and l_op <> 'CALL' and l_op <> 'PLIST' and l_op <> 'PARM'
+     and l_op <> 'LOOKUP'
      and l_op <> 'DO' and l_op <> 'DSPLY' and l_op <> 'COMIT' and l_op <> 'COMMIT'
      and not IsArith(l_op) and not (l_op = 'CHAIN' or l_op = 'SETLL'
      or l_op = 'SETGT' or l_op = 'READE' or l_op = 'READPE' or l_op = 'DELETE')
@@ -3235,12 +3383,30 @@ dcl-proc ConvertC;
         l_post = TestnStmts(i_line:l_res:l_reason);
         l_stmt = '';
         l_note = 'TESTN approximated with %check: check the blank rules';
+      when l_op = 'LOOKUP';
+        if l_ext <> '' or Txt('C':'LENGTH':i_line) <> ''
+           or Txt('C':'DECIMALS':i_line) <> '';
+          l_reason = 'LOOKUP with an extender, length or decimals is not converted';
+        else;
+          l_post = LookupStmts(l_f1:l_f2:l_res:i_line:l_reason);
+          l_note = 'LOOKUP converted with %lookup: the search argument must have '
+                   + 'the type and length of the array entries';
+        endif;
+        l_stmt = '';
       when l_op = 'CALL';
         if l_f1 <> '' or Txt('C':'LENGTH':i_line) <> ''
            or (l_ext <> '' and l_ext <> '(e)');
           l_reason = 'CALL with factor 1, length or an extender other than (E)';
         else;
+          // The error indicator (columns 73-74) is tested after the call.
+          l_back = l_post;
+          if l_err and l_ext = '';
+            l_ext = '(e)';
+          endif;
           l_post = CallStatements(i_index:l_f2:l_res:l_ext:l_k:l_reason);
+          if l_back <> '' and l_reason = '';
+            l_post += '; ' + l_back;
+          endif;
           l_extra += l_k;
           l_stmt = '';
           l_note = 'CALL converted to a CALLP of a prototype written before the '
