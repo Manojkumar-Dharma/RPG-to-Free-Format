@@ -1,0 +1,28 @@
+      * GOTO, CABxx and TAG (RV-14): skip, end of subroutine, loop back, leave
+     H
+     C                     Z-ADD0         CNT   50
+      * 1. Skip forward: GOTO with an indicator over a group of lines
+     C   01                GOTO SKIP1
+     C           1         ADD  CNT       CNT   50
+     C           2         ADD  CNT       CNT   50
+     C           SKIP1     TAG
+      * 2. CABxx forward
+     C           CNT       CABGT99        SKIP2
+     C           3         ADD  CNT       CNT   50
+     C           SKIP2     TAG
+      * 3. Loop back: CABLT to the TAG
+     C           AGAIN     TAG
+     C           1         ADD  CNT       CNT   50
+     C           CNT       CABLT10        AGAIN
+      * 4. Subroutine: jump to its last TAG
+     C                     EXSR CHECK
+     C                     SETON                         LR
+     C           CHECK     BEGSR
+     C   02                GOTO DONE
+     C           5         ADD  CNT       CNT   50
+     C           DONE      TAG
+     C                     ENDSR
+      * 5. Not converted: backward GOTO to a TAG that two jumps use
+     C           TWICE     TAG
+     C   03                GOTO TWICE
+     C   04                GOTO TWICE

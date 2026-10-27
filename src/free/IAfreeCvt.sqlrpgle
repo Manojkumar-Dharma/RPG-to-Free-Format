@@ -162,6 +162,7 @@ dcl-proc FreeConvert export;
   if g_dialect <> '4';
     for l_index = 1 to g_sourceCount;
       CalcPrescan(g_sourceLines(l_index));
+      CalcJumpScan(g_sourceLines(l_index):g_sourceLineNos(l_index));
     endfor;
   endif;
   ConvertSource();

@@ -79,6 +79,34 @@ dcl-s g_inSub ind;
 dcl-s g_cycleNoted ind;
 dcl-s g_lastLineNo int(10);
 
+// GOTO, CABxx and TAG (RV-14): the calculation lines in order, with what the
+// planner decided for each of them (BuildJumpPlan). Kinds: O group (IF, SELEC),
+// L loop (DO, DOW, DOU), M middle (ELSE, WHxx, OTHER), C end of a group, S BEGSR,
+// E ENDSR, G GOTO or CABxx, T TAG, Z LEAVE or ITER, X any other operation.
+// Actions of a G: K skip (IF), B back to a TAG (end of a loop), R RETURN or LEAVESR,
+// V LEAVE; blank when the jump is not converted.
+dcl-c C_MAXJV 1500;
+dcl-c C_MAXIV 400;
+dcl-s g_jvCount int(10);
+dcl-s g_jvUnsafe ind;
+dcl-s g_jvPlanned ind;
+dcl-s g_jvPending ind;
+dcl-s g_jvLineNo int(10) dim(C_MAXJV);
+dcl-s g_jvLine char(100) dim(C_MAXJV);
+dcl-s g_jvKind char(1) dim(C_MAXJV);
+dcl-s g_jvLabel varchar(8) dim(C_MAXJV);
+dcl-s g_jvCondF ind dim(C_MAXJV);       // G: conditioned (CABxx, indicators, group)
+dcl-s g_jvGroupF ind dim(C_MAXJV);      // G: lines of indicators before it
+dcl-s g_jvBad ind dim(C_MAXJV);         // not convertible (level, indicators, label)
+dcl-s g_jvDepth int(10) dim(C_MAXJV);   // open groups before the line
+dcl-s g_jvBody int(10) dim(C_MAXJV);    // 0 main, else the index of the BEGSR
+dcl-s g_jvAct char(1) dim(C_MAXJV);
+dcl-s g_jvPeer int(10) dim(C_MAXJV);    // G: the index of its TAG
+dcl-s g_jvCond varchar(300) dim(C_MAXJV);   // G of a loop: the condition
+dcl-s g_jvLoopAt ind dim(C_MAXJV);      // T: a loop starts here
+dcl-s g_jvFail ind dim(C_MAXJV);        // G: not written (the IF is not open)
+dcl-s g_jvUnconv int(10) dim(C_MAXJV);  // T: GOTO or CABxx to it that stay R
+
 // The last converted IFxx, DOWxx, DOUxx or WHxx header: ANDxx and ORxx lines
 // that follow extend its condition. g_hdrIndex is 0 when there is none.
 dcl-s g_hdrIndex int(10);
@@ -224,6 +252,10 @@ dcl-proc CalcStart export;
   g_divF2 = '';
   g_divRes = '';
   g_dtCount = 0;
+  g_jvCount = 0;
+  g_jvUnsafe = *off;
+  g_jvPlanned = *off;
+  g_jvPending = *off;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1070,6 +1102,11 @@ dcl-proc CalcLine export;
   l_isStructure = (l_rule.kind = 'IF' or l_rule.kind = 'DO' or l_rule.kind = 'DOW'
                    or l_rule.kind = 'DOU' or l_rule.kind = 'CASE'
                    or l_rule.kind = 'SELEC');
+  // GOTO, CABxx and TAG: some patterns become IF, DOU/DOW and LEAVE (RV-14).
+  if l_rule.kind = 'GOTO' or l_rule.kind = 'JUMP' or l_rule.kind = 'TAG';
+    ConvertJump(l_c:l_rule);
+    return;
+  endif;
   if l_rule.status = 'R';
     ReviewHere(i_line:i_lineNo:%trim(l_rule.reason):l_isStructure);
     return;
@@ -1245,6 +1282,767 @@ dcl-proc CalcLine export;
       ConvertDump(l_c:l_rule);
     other;
       ConvertTemplate(l_c:l_rule);
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+// GOTO, CABxx and TAG (review item RV-14). CalcJumpScan keeps the calculation
+// lines in order; BuildJumpPlan decides, before the first one is written, which
+// jumps are one of three patterns of structured code (everything else stays R):
+//   skip      a GOTO or CABxx with a condition to a later TAG of the same group:
+//             IF NOT (condition); ... ENDIF; at the TAG
+//   to the end a GOTO or CABxx to a TAG that is the last statement of the
+//             subroutine or of the program: LEAVESR or RETURN
+//   loop      a GOTO or CABxx back to an earlier TAG of the same group: DOU NOT
+//             (condition) (DOW *ON without a condition) at the TAG and ENDDO at
+//             the jump; a GOTO to the TAG right after the loop inside it is LEAVE
+// The statements between the two ends must keep their groups whole (no ELSE of
+// the group of the jump, no BEGSR or ENDSR, no TAG that another jump outside
+// needs), and the ends of two patterns must not cross.
+dcl-proc CalcJumpScan export;
+  dcl-pi *n;
+    i_line char(100) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  dcl-ds l_rule likeds(IAfreeOpc_t);
+  dcl-s l_xx char(2);
+  dcl-s l_up char(100);
+  dcl-s l_op varchar(5);
+  dcl-s l_level char(2);
+  dcl-s l_kind char(1);
+  dcl-s l_label varchar(8) inz('');
+  dcl-s l_cond ind inz(*off);
+  dcl-s l_bad ind inz(*off);
+  dcl-s l_group ind inz(*off);
+
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  if %subst(l_up:6:1) <> 'C';
+    return;
+  endif;
+  if %subst(l_up:7:1) = '*' or %subst(l_up:7:1) = '/' or %subst(l_up:7:1) = '+';
+    return;
+  endif;
+  if %trim(Fld(i_line:'ALLC')) = '';
+    return;
+  endif;
+  l_level = Fld(l_up:'LEVEL');
+  // A line of indicators without an operation belongs to the next operation.
+  if %trim(Fld(i_line:'BODY')) = ''
+     and (%trim(Fld(i_line:'CONDALL')) <> '' or l_level = 'AN' or l_level = 'OR');
+    g_jvPending = *on;
+    return;
+  endif;
+  l_op = %trim(Fld(l_up:'OPERATION'));
+  if l_op = '';
+    return;
+  endif;
+  l_group = g_jvPending;
+  g_jvPending = *off;
+  if g_jvCount >= C_MAXJV;
+    g_jvUnsafe = *on;
+    return;
+  endif;
+
+  l_kind = 'X';
+  if RulOpcode(l_op:l_rule:l_xx);
+    select;
+      when l_rule.kind = 'IF' or l_rule.kind = 'SELEC';
+        l_kind = 'O';
+      when l_rule.kind = 'DO' or l_rule.kind = 'DOW' or l_rule.kind = 'DOU';
+        l_kind = 'L';
+      when l_rule.kind = 'CASE';
+        g_jvUnsafe = *on;
+      when l_rule.kind = 'WHEN' or l_rule.kind = 'OTHER' or l_rule.kind = 'ELSE';
+        l_kind = 'M';
+      when l_rule.kind = 'END';
+        l_kind = 'C';
+      when l_rule.kind = 'ANDOR';
+        return;
+      when l_rule.kind = 'LOOPCTL';
+        l_kind = 'Z';
+      when l_rule.kind = 'SUBR' and l_rule.opcode = 'BEGSR';
+        l_kind = 'S';
+      when l_rule.kind = 'SUBR' and l_rule.opcode = 'ENDSR';
+        l_kind = 'E';
+      when l_rule.kind = 'GOTO' or l_rule.kind = 'JUMP';
+        l_kind = 'G';
+        if l_rule.kind = 'JUMP';
+          l_label = Up(%trim(Fld(i_line:'RESULT')));
+          l_cond = *on;
+          if %trim(Fld(l_up:'RES1')) <> '' or %trim(Fld(l_up:'RES2')) <> ''
+             or %trim(Fld(l_up:'RES3')) <> '' or RulComparison(l_xx) = '';
+            l_bad = *on;
+          endif;
+        else;
+          l_label = Up(%trim(Fld(i_line:'FACTOR2')));
+        endif;
+      when l_rule.kind = 'TAG';
+        l_kind = 'T';
+        l_label = Up(%trim(Fld(i_line:'FACTOR1')));
+    endsl;
+  endif;
+  if l_kind = 'G' or l_kind = 'T';
+    if l_label = '' or (l_level <> '  ' and l_level <> 'SR' and l_level <> 'AN'
+                        and l_level <> 'OR');
+      l_bad = *on;
+    endif;
+    if %trim(Fld(l_up:'IND1')) <> '' or %trim(Fld(l_up:'IND2')) <> ''
+       or %trim(Fld(l_up:'IND3')) <> '';
+      l_cond = *on;
+      if l_kind = 'T';
+        l_bad = *on;
+      endif;
+    endif;
+    if l_group;
+      l_cond = *on;
+    endif;
+  endif;
+
+  g_jvCount += 1;
+  g_jvLineNo(g_jvCount) = i_lineNo;
+  g_jvLine(g_jvCount) = i_line;
+  g_jvKind(g_jvCount) = l_kind;
+  g_jvLabel(g_jvCount) = l_label;
+  g_jvCondF(g_jvCount) = l_cond;
+  g_jvGroupF(g_jvCount) = l_group;
+  g_jvBad(g_jvCount) = l_bad;
+  g_jvDepth(g_jvCount) = 0;
+  g_jvBody(g_jvCount) = 0;
+  g_jvAct(g_jvCount) = ' ';
+  g_jvPeer(g_jvCount) = 0;
+  g_jvCond(g_jvCount) = '';
+  g_jvLoopAt(g_jvCount) = *off;
+  g_jvFail(g_jvCount) = *off;
+  g_jvUnconv(g_jvCount) = 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// The index of the event of the source line, 0 when there is none.
+dcl-proc JvFind;
+  dcl-pi *n int(10);
+    i_lineNo int(10) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+
+  for l_k = 1 to g_jvCount;
+    if g_jvLineNo(l_k) = i_lineNo;
+      return l_k;
+    endif;
+  endfor;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// The only TAG of a label: its index, 0 when there is none, -1 when there are
+// several or the TAG cannot be converted.
+dcl-proc JvTag;
+  dcl-pi *n int(10);
+    i_label varchar(8) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_found int(10) inz(0);
+
+  for l_k = 1 to g_jvCount;
+    if g_jvKind(l_k) = 'T' and g_jvLabel(l_k) = i_label;
+      if l_found <> 0;
+        return -1;
+      endif;
+      l_found = l_k;
+    endif;
+  endfor;
+  if l_found > 0 and g_jvBad(l_found);
+    return -1;
+  endif;
+  return l_found;
+end-proc;
+
+// ------------------------------------------------------------------
+// *ON when nothing that runs follows the TAG in its subroutine or in the main
+// part of the program (only other TAGs and whole subroutines do), and the TAG is
+// not inside a group.
+dcl-proc JvIsLast;
+  dcl-pi *n ind;
+    i_t int(10) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_base int(10) inz(0);
+
+  if g_jvBody(i_t) <> 0;
+    l_base = 1;
+  endif;
+  if g_jvDepth(i_t) <> l_base;
+    return *off;
+  endif;
+  l_k = i_t + 1;
+  dow l_k <= g_jvCount;
+    select;
+      when g_jvKind(l_k) = 'T';
+      when g_jvKind(l_k) = 'S' and g_jvBody(i_t) = 0;
+        dow l_k < g_jvCount and g_jvKind(l_k) <> 'E';
+          l_k += 1;
+        enddo;
+      when g_jvKind(l_k) = 'E' and g_jvBody(i_t) <> 0;
+        return *on;
+      other;
+        return *off;
+    endsl;
+    l_k += 1;
+  enddo;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// The statements between event i_a and event i_b (the two ends of a pattern at the
+// same depth in the same body) keep their groups whole: no ELSE, WHEN or END of the
+// group of the ends, no BEGSR or ENDSR, and no TAG that a jump outside of the two
+// ends needs. For a loop a LEAVE or ITER has to be inside a loop of its own.
+dcl-proc JvRegionOk;
+  dcl-pi *n ind;
+    i_a int(10) const;
+    i_b int(10) const;
+    i_loop ind const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_g int(10);
+  dcl-s l_d int(10);
+  dcl-s l_stack char(1) dim(60);
+  dcl-s l_top int(10) inz(0);
+  dcl-s l_s int(10);
+  dcl-s l_hasLoop ind;
+
+  l_d = g_jvDepth(i_a);
+  if g_jvDepth(i_b) <> l_d or g_jvBody(i_a) <> g_jvBody(i_b);
+    return *off;
+  endif;
+  for l_k = i_a + 1 to i_b - 1;
+    select;
+      when g_jvKind(l_k) = 'S' or g_jvKind(l_k) = 'E';
+        return *off;
+      when g_jvKind(l_k) = 'M' or g_jvKind(l_k) = 'C';
+        if g_jvDepth(l_k) < l_d + 1;
+          return *off;
+        endif;
+      when g_jvDepth(l_k) < l_d;
+        return *off;
+    endsl;
+    select;
+      when g_jvKind(l_k) = 'O' or g_jvKind(l_k) = 'L';
+        if l_top < 60;
+          l_top += 1;
+          l_stack(l_top) = g_jvKind(l_k);
+        endif;
+      when g_jvKind(l_k) = 'C';
+        if l_top > 0;
+          l_top -= 1;
+        endif;
+      when g_jvKind(l_k) = 'Z' and i_loop;
+        l_hasLoop = *off;
+        for l_s = 1 to l_top;
+          if l_stack(l_s) = 'L';
+            l_hasLoop = *on;
+          endif;
+        endfor;
+        if not l_hasLoop;
+          return *off;
+        endif;
+    endsl;
+    if g_jvKind(l_k) = 'T';
+      for l_g = 1 to g_jvCount;
+        if g_jvKind(l_g) = 'G' and g_jvLabel(l_g) = g_jvLabel(l_k)
+           and (l_g < i_a or l_g > i_b);
+          return *off;
+        endif;
+      endfor;
+    endif;
+  endfor;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// The number of backward GOTO or CABxx (after the TAG) to a TAG.
+dcl-proc JvBackCount;
+  dcl-pi *n int(10);
+    i_t int(10) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+  dcl-s l_n int(10) inz(0);
+
+  for l_g = i_t + 1 to g_jvCount;
+    if g_jvKind(l_g) = 'G' and g_jvLabel(l_g) = g_jvLabel(i_t);
+      l_n += 1;
+    endif;
+  endfor;
+  return l_n;
+end-proc;
+
+// ------------------------------------------------------------------
+// The condition of a CABxx as free-form text (factor 1 operator factor 2) or the
+// reason it cannot be written.
+dcl-proc CabCompare;
+  dcl-pi *n varchar(190);
+    i_line char(100) const;
+    o_text varchar(190);
+  end-pi;
+
+  dcl-ds l_rule likeds(IAfreeOpc_t);
+  dcl-s l_xx char(2);
+  dcl-s l_up char(100);
+  dcl-s l_operator varchar(2);
+  dcl-s l_f1 varchar(30);
+  dcl-s l_f2 varchar(30);
+  dcl-s l_c1 varchar(30);
+  dcl-s l_c2 varchar(30);
+  dcl-s l_reason varchar(150) inz('');
+
+  o_text = '';
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  if not RulOpcode(%trim(Fld(l_up:'OPERATION')):l_rule:l_xx)
+     or l_rule.kind <> 'JUMP';
+    return 'The line is not a CABxx';
+  endif;
+  l_operator = RulComparison(l_xx);
+  if l_operator = '';
+    return 'CAB needs xx: GT, LT, EQ, NE, GE or LE';
+  endif;
+  if %trim(Fld(l_up:'RES1')) <> '' or %trim(Fld(l_up:'RES2')) <> ''
+     or %trim(Fld(l_up:'RES3')) <> '';
+    return 'Resulting indicators of CABxx are not converted';
+  endif;
+  l_f1 = %trim(Fld(i_line:'FACTOR1'));
+  l_f2 = %trim(Fld(i_line:'FACTOR2'));
+  if l_f1 = '' or l_f2 = '';
+    return 'CABxx needs factor 1 and factor 2';
+  endif;
+  if not ConvOperand(l_f1:l_c1:l_reason);
+    return l_reason;
+  endif;
+  if not ConvOperand(l_f2:l_c2:l_reason);
+    return l_reason;
+  endif;
+  o_text = l_c1 + ' ' + l_operator + ' ' + l_c2;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// The condition of a GOTO or CABxx line without lines of indicators before it:
+// its own indicators and the comparison. '' or the reason in o_reason.
+dcl-proc JumpCondition;
+  dcl-pi *n varchar(300);
+    i_line char(100) const;
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_terms varchar(150);
+  dcl-s l_cmp varchar(190);
+  dcl-s l_reason varchar(150) inz('');
+  dcl-s l_cond varchar(300);
+
+  o_reason = '';
+  l_terms = LineTerms(i_line:l_reason);
+  if l_reason <> '';
+    o_reason = l_reason;
+    return '';
+  endif;
+  l_cond = l_terms;
+  if %subst(%xlate(C_LOWER:C_UPPER:%trim(Fld(i_line:'OPERATION'))):1:3) = 'CAB';
+    l_reason = CabCompare(i_line:l_cmp);
+    if l_reason <> '';
+      o_reason = l_reason;
+      return '';
+    endif;
+    if l_cond <> '';
+      l_cond += ' and ';
+    endif;
+    l_cond += l_cmp;
+  endif;
+  return l_cond;
+end-proc;
+
+// ------------------------------------------------------------------
+// The opposite of a condition: a single indicator test is turned round, anything
+// else is put in parentheses after NOT.
+dcl-proc Negate;
+  dcl-pi *n varchar(310);
+    i_cond varchar(300) const;
+  end-pi;
+
+  if %len(i_cond) > 4 and %subst(i_cond:1:4) = 'not '
+     and %scan(' ':i_cond:5) = 0;
+    return %subst(i_cond:5);
+  endif;
+  if %scan(' ':i_cond) = 0;
+    return 'not ' + i_cond;
+  endif;
+  return 'not (' + i_cond + ')';
+end-proc;
+
+// ------------------------------------------------------------------
+// Decides, once, what becomes of every GOTO, CABxx and TAG (see CalcJumpScan).
+dcl-proc BuildJumpPlan;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_g int(10);
+  dcl-s l_t int(10);
+  dcl-s l_i int(10);
+  dcl-s l_j int(10);
+  dcl-s l_depth int(10) inz(0);
+  dcl-s l_body int(10) inz(0);
+  dcl-s l_ivType char(1) dim(C_MAXIV);
+  dcl-s l_ivA int(10) dim(C_MAXIV);
+  dcl-s l_ivB int(10) dim(C_MAXIV);
+  dcl-s l_ivG int(10) dim(C_MAXIV);
+  dcl-s l_ivOn ind dim(C_MAXIV);
+  dcl-s l_ivCount int(10) inz(0);
+  dcl-s l_cond varchar(300);
+  dcl-s l_reason varchar(190);
+  dcl-s l_changed ind;
+  dcl-s l_best int(10);
+  dcl-s l_ok ind;
+
+  g_jvPlanned = *on;
+  if g_jvUnsafe or g_jvCount = 0;
+    return;
+  endif;
+
+  // The depth (open groups) before every line, and the subroutine it is in.
+  for l_k = 1 to g_jvCount;
+    g_jvDepth(l_k) = l_depth;
+    g_jvBody(l_k) = l_body;
+    select;
+      when g_jvKind(l_k) = 'O' or g_jvKind(l_k) = 'L';
+        l_depth += 1;
+      when g_jvKind(l_k) = 'S';
+        if l_body <> 0 or l_depth <> 0;
+          g_jvUnsafe = *on;
+        endif;
+        l_body = l_k;
+        g_jvBody(l_k) = l_k;
+        l_depth += 1;
+      when g_jvKind(l_k) = 'E';
+        if l_body = 0 or l_depth <> 1;
+          g_jvUnsafe = *on;
+        endif;
+        l_body = 0;
+        l_depth = 0;
+      when g_jvKind(l_k) = 'C';
+        l_depth -= 1;
+        if l_depth < 0;
+          g_jvUnsafe = *on;
+          l_depth = 0;
+        endif;
+    endsl;
+  endfor;
+  if l_depth <> 0 or g_jvUnsafe;
+    g_jvUnsafe = *on;
+    return;
+  endif;
+
+  // Every jump: to the end, skip forward or loop back.
+  for l_k = 1 to g_jvCount;
+    if g_jvKind(l_k) <> 'G' or g_jvBad(l_k);
+      iter;
+    endif;
+    l_t = JvTag(g_jvLabel(l_k));
+    if l_t <= 0;
+      iter;
+    endif;
+    g_jvPeer(l_k) = l_t;
+    select;
+      when l_t > l_k and g_jvBody(l_k) = g_jvBody(l_t) and JvIsLast(l_t);
+        g_jvAct(l_k) = 'R';
+      when l_t > l_k and g_jvCondF(l_k) and JvRegionOk(l_k:l_t:*off)
+           and l_ivCount < C_MAXIV;
+        l_ivCount += 1;
+        l_ivType(l_ivCount) = 'K';
+        l_ivA(l_ivCount) = l_k;
+        l_ivB(l_ivCount) = l_t;
+        l_ivG(l_ivCount) = l_k;
+        l_ivOn(l_ivCount) = *on;
+      when l_t < l_k and JvBackCount(l_t) = 1 and not g_jvGroupF(l_k)
+           and JvRegionOk(l_t:l_k:*on) and l_ivCount < C_MAXIV;
+        l_cond = '';
+        l_reason = '';
+        if g_jvCondF(l_k);
+          l_cond = JumpCondition(g_jvLine(l_k):l_reason);
+        endif;
+        if l_reason = '';
+          g_jvCond(l_k) = l_cond;
+          l_ivCount += 1;
+          l_ivType(l_ivCount) = 'B';
+          l_ivA(l_ivCount) = l_t;
+          l_ivB(l_ivCount) = l_k;
+          l_ivG(l_ivCount) = l_k;
+          l_ivOn(l_ivCount) = *on;
+        endif;
+    endsl;
+  endfor;
+
+  // Two patterns whose ends cross cannot both be written.
+  l_changed = *on;
+  dow l_changed;
+    l_changed = *off;
+    for l_i = 1 to l_ivCount;
+      if not l_ivOn(l_i);
+        iter;
+      endif;
+      for l_j = 1 to l_ivCount;
+        if l_j <> l_i and l_ivOn(l_j) and l_ivA(l_i) < l_ivA(l_j)
+           and l_ivA(l_j) < l_ivB(l_i) and l_ivB(l_i) < l_ivB(l_j);
+          l_ivOn(l_j) = *off;
+          l_changed = *on;
+        endif;
+      endfor;
+    endfor;
+  enddo;
+  for l_i = 1 to l_ivCount;
+    if l_ivOn(l_i);
+      l_g = l_ivG(l_i);
+      if l_ivType(l_i) = 'K';
+        g_jvAct(l_g) = 'K';
+      else;
+        g_jvAct(l_g) = 'B';
+        g_jvLoopAt(l_ivA(l_i)) = *on;
+      endif;
+    else;
+      g_jvCond(l_ivG(l_i)) = '';
+    endif;
+  endfor;
+
+  // A jump inside a loop to the TAG right after the loop leaves the loop.
+  for l_k = 1 to g_jvCount;
+    if g_jvKind(l_k) <> 'G' or g_jvBad(l_k) or g_jvAct(l_k) <> ' '
+       or g_jvPeer(l_k) <= l_k;
+      iter;
+    endif;
+    l_t = g_jvPeer(l_k);
+    l_best = 0;
+    l_g = 0;
+    for l_i = 1 to g_jvCount;
+      if g_jvKind(l_i) = 'G' and g_jvAct(l_i) = 'B' and l_i > l_k
+         and g_jvPeer(l_i) < l_k and g_jvPeer(l_i) > l_best;
+        l_best = g_jvPeer(l_i);
+        l_g = l_i;
+      endif;
+    endfor;
+    if l_g = 0;
+      iter;
+    endif;
+    l_ok = l_t > l_g and g_jvDepth(l_t) = g_jvDepth(l_best)
+           and g_jvBody(l_t) = g_jvBody(l_best);
+    if l_ok;
+      for l_i = l_g + 1 to l_t - 1;
+        if g_jvKind(l_i) <> 'T';
+          l_ok = *off;
+        endif;
+      endfor;
+    endif;
+    // No loop of its own between the start of the loop and the jump.
+    if l_ok;
+      l_ok = JvInsideNoLoop(l_best:l_k);
+    endif;
+    if l_ok;
+      g_jvAct(l_k) = 'V';
+    endif;
+  endfor;
+
+  // The jumps to a TAG that stay R.
+  for l_k = 1 to g_jvCount;
+    if g_jvKind(l_k) = 'G' and g_jvAct(l_k) = ' ';
+      for l_i = 1 to g_jvCount;
+        if g_jvKind(l_i) = 'T' and g_jvLabel(l_i) = g_jvLabel(l_k);
+          g_jvUnconv(l_i) += 1;
+        endif;
+      endfor;
+    endif;
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+// *ON when no loop group (DO, DOW, DOU) that begins after event i_a is still open
+// at event i_b: a LEAVE written for the loop of i_a is the one that is meant.
+dcl-proc JvInsideNoLoop;
+  dcl-pi *n ind;
+    i_a int(10) const;
+    i_b int(10) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_top int(10) inz(0);
+  dcl-s l_s int(10);
+  dcl-s l_stack char(1) dim(60);
+
+  for l_k = i_a + 1 to i_b - 1;
+    select;
+      when g_jvKind(l_k) = 'O' or g_jvKind(l_k) = 'L';
+        if l_top < 60;
+          l_top += 1;
+          l_stack(l_top) = g_jvKind(l_k);
+        endif;
+      when g_jvKind(l_k) = 'C';
+        if l_top > 0;
+          l_top -= 1;
+        endif;
+    endsl;
+  endfor;
+  for l_s = 1 to l_top;
+    if l_stack(l_s) = 'L';
+      return *off;
+    endif;
+  endfor;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// GOTO, CABxx and TAG as the plan of BuildJumpPlan decided; what is not planned
+// stays R (kept as a comment).
+dcl-proc ConvertJump;
+  dcl-pi *n;
+    i_c likeds(Calc_t) const;
+    i_rule likeds(IAfreeOpc_t) const;
+  end-pi;
+
+  dcl-c C_JUMP_R 'GOTO, CABxx or TAG outside the converted patterns (RV-14)';
+  dcl-s l_k int(10);
+  dcl-s l_g int(10);
+  dcl-s l_t int(10);
+  dcl-s l_cond varchar(300);
+  dcl-s l_cmp varchar(190);
+  dcl-s l_reason varchar(190);
+  dcl-s l_word varchar(10);
+  dcl-s l_note varchar(190);
+  dcl-s l_failed ind;
+
+  g_hdrIndex = 0;
+  if not g_jvPlanned;
+    BuildJumpPlan();
+  endif;
+  l_k = JvFind(i_c.lineNo);
+  if l_k = 0 or g_jvUnsafe or g_jvBad(l_k);
+    ReviewHere(i_c.line:i_c.lineNo:C_JUMP_R);
+    return;
+  endif;
+
+  // ---- TAG ------------------------------------------------------------------
+  if g_jvKind(l_k) = 'T';
+    // The skip of a jump that was written closes here.
+    for l_g = 1 to l_k - 1;
+      if g_jvKind(l_g) = 'G' and g_jvAct(l_g) = 'K' and g_jvPeer(l_g) = l_k
+         and not g_jvFail(l_g) and g_stackCount > 0
+         and g_stackKind(g_stackCount) = 'JMP';
+        Pop();
+        Emit('endif;':i_c.lineNo);
+      endif;
+    endfor;
+    // A loop starts here.
+    if g_jvLoopAt(l_k);
+      l_g = 0;
+      for l_t = l_k + 1 to g_jvCount;
+        if g_jvKind(l_t) = 'G' and g_jvAct(l_t) = 'B' and g_jvPeer(l_t) = l_k;
+          l_g = l_t;
+        endif;
+      endfor;
+      if l_g > 0 and g_jvCond(l_g) <> '';
+        Emit('dou ' + Negate(g_jvCond(l_g)) + ';':i_c.lineNo);
+        l_word = 'DOU';
+      else;
+        Emit('dow *on;':i_c.lineNo);
+        l_word = 'DOW';
+      endif;
+      if not Push(l_word:1:0:'');
+        Emit('// Groups are nested too deep':i_c.lineNo);
+      endif;
+      RptItem(C_STS_ASSUMPTION:i_c.lineNo:SpecText(i_c.line)
+              :'TAG ' + g_jvLabel(l_k) + ' starts a loop that ends at the jump back');
+      return;
+    endif;
+    if g_jvUnconv(l_k) > 0;
+      ReviewHere(i_c.line:i_c.lineNo:'A GOTO or CABxx to ' + g_jvLabel(l_k)
+                 + ' is not converted');
+      return;
+    endif;
+    Emit('// TAG ' + g_jvLabel(l_k):i_c.lineNo);
+    RptItem(C_STS_CONVERTED:i_c.lineNo:SpecText(i_c.line):'');
+    return;
+  endif;
+
+  // ---- GOTO and CABxx --------------------------------------------------------
+  if g_jvAct(l_k) = ' ';
+    ReviewHere(i_c.line:i_c.lineNo:C_JUMP_R);
+    return;
+  endif;
+
+  // The end of a loop: ENDDO, the condition is on the DOU at the TAG.
+  if g_jvAct(l_k) = 'B';
+    if g_stackCount > 0 and (g_stackKind(g_stackCount) = 'DOU'
+                             or g_stackKind(g_stackCount) = 'DOW');
+      Pop();
+      Emit('enddo;':i_c.lineNo);
+      RptItem(C_STS_ASSUMPTION:i_c.lineNo:SpecText(i_c.line)
+              :'Jump back to TAG ' + g_jvLabel(g_jvPeer(l_k)) + ' became the end of a loop');
+    else;
+      ReviewHere(i_c.line:i_c.lineNo:C_JUMP_R);
+    endif;
+    return;
+  endif;
+
+  // The condition: lines of indicators and own indicators (i_c.cond) and the
+  // comparison of CABxx.
+  l_cond = i_c.cond;
+  l_failed = *off;
+  if i_rule.kind = 'JUMP';
+    l_reason = CabCompare(i_c.line:l_cmp);
+    if l_reason <> '';
+      l_failed = *on;
+    else;
+      if l_cond <> '';
+        l_cond += ' and ';
+      endif;
+      l_cond += l_cmp;
+    endif;
+  endif;
+  if l_failed;
+    g_jvFail(l_k) = *on;
+    ReviewHere(i_c.line:i_c.lineNo:l_reason);
+    return;
+  endif;
+
+  select;
+    when g_jvAct(l_k) = 'K';
+      Emit('if ' + Negate(l_cond) + ';':i_c.lineNo);
+      if not Push('JMP':1:0:'');
+        g_jvFail(l_k) = *on;
+        Emit('// Groups are nested too deep':i_c.lineNo);
+      endif;
+      RptItem(C_STS_ASSUMPTION:i_c.lineNo:SpecText(i_c.line)
+              :'Jump forward to TAG ' + g_jvLabel(l_k) + ' became an IF around the lines'
+              + ' up to the TAG');
+    when g_jvAct(l_k) = 'R' or g_jvAct(l_k) = 'V';
+      if g_jvAct(l_k) = 'V';
+        l_word = 'leave';
+        l_note := 'Jump to TAG ' + g_jvLabel(l_k) + ' after the loop became LEAVE';
+      elseif g_inSub;
+        l_word = 'leavesr';
+        l_note = 'Jump to the last TAG of the subroutine became LEAVESR';
+      else;
+        l_word = 'return';
+        l_note = 'Jump to the last TAG of the program became RETURN';
+      endif;
+      if l_cond = '';
+        Emit(l_word + ';':i_c.lineNo);
+      else;
+        Emit('if ' + l_cond + ';':i_c.lineNo);
+        Emit(l_word + ';':i_c.lineNo:1);
+        Emit('endif;':i_c.lineNo);
+      endif;
+      RptItem(C_STS_ASSUMPTION:i_c.lineNo:SpecText(i_c.line):l_note);
   endsl;
 end-proc;
 

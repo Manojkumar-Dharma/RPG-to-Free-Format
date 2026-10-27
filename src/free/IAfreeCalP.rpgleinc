@@ -20,6 +20,14 @@ dcl-pr CalcPrescan;
   i_line char(100) const;
 end-pr;
 
+// Looks at every calculation line before the conversion for GOTO, CABxx and TAG
+// (RV-14): which jumps are a skip, a jump to the end or a loop is decided at the
+// first jump.
+dcl-pr CalcJumpScan;
+  i_line char(100) const;
+  i_lineNo int(10) const;
+end-pr;
+
 // Defines a field of known length and type (kind C alphanumeric, N numeric with
 // the length in digits) for MOVE and MOVEL.
 dcl-pr CalcDefineField;

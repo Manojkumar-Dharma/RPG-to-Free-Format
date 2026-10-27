@@ -32,7 +32,7 @@ Code status and test status follow `PLANNED.md`.
 | RV-11 | `IN`, `OUT`, `*NAMVAR DEFN`, `UNLCK` of a data area written (FREE-17); `OCUR` written (FREE-20) | data areas and data structures | Convert: `in`, `out`, `occur`; `*DTAARA` definitions through `DEFN` (RV-07) | Written | Not tested |
 | RV-12 | `EXFMT`, `READC`, `ACQ`, `NEXT`, `POST`, `REL` | WORKSTN file I/O | Convert with the display file of IACNVDSPF; needs the I/O design | Planned | Not started |
 | RV-13 | `EXCPT`, `PAGE`, `PAGE1` to `PAGE7`, O and L specifications | output | FREE-06: exception records done in part 1, the rest is RV-60 to RV-63 | Written | Not tested |
-| RV-14 | `GOTO`, `TAG`, `CABxx` | free-form has no `GOTO` | Decide: rewrite the common patterns (skip forward to a `TAG` in the same group, loop back, jump to the end) with `if`, `dow`, `leave`, `return`; the other patterns stay R | Planned | Not started |
+| RV-14 | `GOTO`, `TAG`, `CABxx` | free-form has no `GOTO` | Decided: rewrite the common patterns (skip forward to a `TAG` in the same group, loop back, jump to the end) with `if`, `dou`/`dow`, `leave`, `return`; the other patterns stay R | Written for RPG II and III (FREE-35) | Not tested; RPG IV (dialect 4) still R |
 | RV-15 | `DEBUG`, `EXIT`, `FORCE`, `FREE`, `KEY`, `RLABL`, `SET`, `SHTDN` | S/36 and external subroutine features | No form: the reason names the replacement (`dump`, `callp`, `*inlr`) | Done | N/A |
 
 ## IACNVFREE: the RPG cycle
@@ -53,7 +53,7 @@ Code status and test status follow `PLANNED.md`.
 | RV-34 | Record address and table files, address output (T), limits processing, direct file load, file addition output, packed key, noncontiguous key | not in free form | No form for most; `EXTK`: R by design | Done | N/A |
 | RV-35 | Arrays from a file (E, columns 11-18), to a file, packed or binary format (columns 43, 55) | not converted | Not possible: `FROMFILE` and `TOFILE` are not allowed in a free-form definition, `EXTFMT(P/B)` is only for such arrays (decided in FREE-19, stays R with that reason); `L` and `R` of compile-time arrays converted to `extfmt` | Written | Not tested |
 | RV-36 | Compiler directives (`/COPY`, `/TITLE` etc.) | members are fixed form | Decide: `/copy` only when the member is converted too; the other directives are dropped with a note. Decided: convert the directive. Written as in RPG IV (FREE-29): `/COPY` and `/INCLUDE` are kept with status A in RPG II and III too | Written (kept as A) | Not tested |
-| RV-37 | Embedded SQL: `WHENEVER ... GOTO`, `C/EXEC SQL` with indicators | needs `TAG` (RV-14) | with RV-14 | Planned | Not started |
+| RV-37 | Embedded SQL: `WHENEVER ... GOTO`, `C/EXEC SQL` with indicators | needs `TAG` (RV-14) | with RV-14 (done for RPG II/III, SQL not yet) | Planned | Not started |
 
 ## IACNVFREE: RPG IV
 

@@ -846,3 +846,16 @@ Reported R: a `DEFINE *DTAARA` with a length, decimals or a conditioning indicat
 | `MOVEL(P) Narrow Wide` | `Wide = Narrow;` (was already converted) | A |
 
 `MOVE`/`MOVEL` of other type pairs (character and numeric, numeric of another length or decimal positions) stay R: the digits are moved without the decimal point and the sign goes into the zone, so no assignment gives the same result.
+
+## GOTO, CABxx and TAG (RPG II and III)
+
+Free-form has no GOTO, so three patterns are rewritten; the plan is made before the first line is written (`CalcJumpScan`, `BuildJumpPlan`). Each is reported A.
+
+| Pattern | Result |
+|---|---|
+| `GOTO` or `CABxx` with a condition to a later `TAG` in the same group | `if not (cond);` ... `endif;` at the `TAG` |
+| jump to a `TAG` that is the last statement of the subroutine or program | `leavesr;` or `return;` (with `if cond;` when conditioned) |
+| one `GOTO` or `CABxx` back to an earlier `TAG` in the same group | `dou not (cond);` (`dow *on;` without a condition) at the `TAG`, `enddo;` at the jump |
+| a jump inside such a loop to the `TAG` right after it | `leave;` |
+
+Everything else stays R: two jumps back to one `TAG`, jumps into or out of groups, over `ELSE`, `BEGSR` or `ENDSR`, crossing patterns, duplicate labels, level indicators, CAB result indicators, `CASxx` in the source, and jumps in RPG IV.
