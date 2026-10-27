@@ -620,6 +620,12 @@ dcl-proc ConvertDirective;
   if l_word = '/EJECT' or l_word = '/TITLE' or l_word = '/SPACE';
     AddOut(l_text:i_lineNo);
     RptItem(C_STS_CONVERTED:i_lineNo:l_text:'');
+  elseif l_word = '/COPY' or l_word = '/INCLUDE';
+    // Same as RPG IV (ConvertDirective4): the directive is kept, the member
+    // has to be converted too (RV-36, RV-58).
+    AddOut(l_text:i_lineNo);
+    RptItem(C_STS_ASSUMPTION:i_lineNo:l_text
+            :'The member is copied into free-form source: convert it too');
   else;
     ReviewSpec(i_lineNo:i_line:'Compiler directive ' + l_word + ' is not converted');
   endif;

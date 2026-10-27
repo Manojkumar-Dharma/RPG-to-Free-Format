@@ -52,7 +52,7 @@ Code status and test status follow `PLANNED.md`.
 | RV-33 | Alternate collating sequence, file translation, transparent literals | tables | Sample: needs the tables | Planned | Not started |
 | RV-34 | Record address and table files, address output (T), limits processing, direct file load, file addition output, packed key, noncontiguous key | not in free form | No form for most; `EXTK`: R by design | Done | N/A |
 | RV-35 | Arrays from a file (E, columns 11-18), to a file, packed or binary format (columns 43, 55) | not converted | Not possible: `FROMFILE` and `TOFILE` are not allowed in a free-form definition, `EXTFMT(P/B)` is only for such arrays (decided in FREE-19, stays R with that reason); `L` and `R` of compile-time arrays converted to `extfmt` | Written | Not tested |
-| RV-36 | Compiler directives (`/COPY`, `/TITLE` etc.) | members are fixed form | Decide: `/copy` only when the member is converted too; the other directives are dropped with a note | Planned | Not started |
+| RV-36 | Compiler directives (`/COPY`, `/TITLE` etc.) | members are fixed form | Decide: `/copy` only when the member is converted too; the other directives are dropped with a note. Written as in RPG IV (FREE-29): `/COPY` and `/INCLUDE` are kept with status A in RPG II and III too; the owner can still ask for the other rule | Written (kept as A) | Not tested |
 | RV-37 | Embedded SQL: `WHENEVER ... GOTO`, `C/EXEC SQL` with indicators | needs `TAG` (RV-14) | with RV-14 | Planned | Not started |
 
 ## IACNVFREE: RPG IV
@@ -70,7 +70,7 @@ FREE-10 (module `IAfreeFx4`): the R items of the RPG IV source types `RPGLE` and
 | RV-55 | I specifications (program described and external field renames) | cycle entries, rename | Convert program described files like FREE-04; renames with RV-30 | Written for program described files (FREE-23); renames open | Not tested |
 | RV-56 | O specifications of RPG IV | columns differ | With FREE-06 part 3 | Planned | Not started |
 | RV-57 | D specifications: names continued with `...`, keyword literals continued with `+` or `-`, `FROMFILE`, `TOFILE`, `CLASS`, `PACKEVEN`, object types; the F spec designations P, S, R, T, sequence, limits | not valid or no form | Convert the continuations; No form for the rest | Planned | Not started |
-| RV-58 | `/COPY` and `/INCLUDE` members | the member is fixed form | with RV-36 | Planned | Not started |
+| RV-58 | `/COPY` and `/INCLUDE` members | the member is fixed form | with RV-36; converting the copied member itself is still open | Written (directive kept as A) | Not tested |
 | RV-59 | SQL statements inside RPG IV groups are not indented with the group | `CalcSqlLine` keeps the RPG II/III indentation | Convert: indent with the group depth of `IAfreeFx4` (`Fx4Depth`, FREE-26) | Written | Not tested |
 
 FREE-06 (module `IAfreeOut`): the R items of the output specifications.

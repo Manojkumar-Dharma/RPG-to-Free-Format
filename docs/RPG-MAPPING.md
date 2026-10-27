@@ -167,7 +167,8 @@ The F specifications at the start of the sample set up the files; the blocks are
 | Blank line | blank line | - |
 | Comment (`*` in column 7) | `//` and the text of columns 8-80 | - (not reported) |
 | `/EJECT`, `/TITLE`, `/SPACE` | kept (valid in free-form) | C |
-| Other directives such as `/COPY` | comment | R |
+| `/COPY`, `/INCLUDE` | kept; the member has to be converted too (FREE-29) | A |
+| Other directives | comment | R |
 | L, O specifications | `// RPG II:` and the line | R (FREE-06) |
 | E specifications | see "Arrays and tables (FREE-07)" | C, A or R |
 | I specifications | see "Input specification (I) to data structures" | C, A or R |
@@ -202,7 +203,7 @@ The reasons are worded slightly differently in the report; the statements and st
 | 20 | `FRECNOF  UF         80            DISK` | `// RPG II: FRECNOF  UF         80            DISK` | R | continuation records (RECNO, SUBR exit, NUM, FMTS, INFSR) are not converted |
 | 22 | ` /TITLE Customer update` | `/TITLE Customer update` | C |  |
 | 23 | ` /EJECT` | `/EJECT` | C |  |
-| 24 | ` /COPY QRPGSRC,MYCOPY` | `// RPG II:  /COPY QRPGSRC,MYCOPY` | R | directive /COPY is not converted |
+| 24 | ` /COPY QRPGSRC,MYCOPY` | `/COPY QRPGSRC,MYCOPY` | A | The member is copied into free-form source: convert it too |
 | 25 | `E                    TAB1` | `// RPG II: E                    TAB1` | R | E (extension) specification not converted yet |
 | 26 | `IORDERS      NS 01` | `// RPG II: IORDERS      NS 01` | R | I specification not converted yet (FREE-04) |
 | 27 | `C                     ADD  1         TOTAL` | `TOTAL += 1;` | A | the first calculation also reports the cycle note (see the C section) |
