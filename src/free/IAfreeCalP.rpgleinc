@@ -137,6 +137,11 @@ dcl-pr CycleControl ind;
   o_level int(10);
 end-pr;
 
+// The WORKSTN file of the source (RV-12): its name, '*MANY' for more than one, ''
+// for none. EXFMT and READC name a record format of it.
+dcl-pr WorkstnFile varchar(8);
+end-pr;
+
 // Adds the DTAARA keyword to a data structure of the I specifications.
 dcl-pr CvtDtaaraDs ind;
   i_name varchar(10) const;

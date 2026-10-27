@@ -1,0 +1,12 @@
+      * WORKSTN display file, externally described (FREE-43, RV-12, RV-31)
+     H
+     FDSPFILE CF  E                    WORKSTN
+     F                                        RRN   KSFILE SFLREC
+     C                     Z-ADD1         RRN   40
+     C                     WRITESFLREC
+     C                     EXFMTCTLREC                 90
+     C                     READCSFLREC                   91
+     C           RRN       CHAINSFLREC               92
+     C                     UPDATSFLREC
+     C                     CLOSEDSPFILE
+     C                     ACQ  DSPFILE

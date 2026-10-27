@@ -106,7 +106,8 @@ Source: SC09-1818 chapter 19. Target: SC09-2508 "Equivalent Free-form Coding for
 | File condition `U1` to `U8` | `extind(*INU1)` ... | C |
 | End of file `E` (17) on a non-cycle file | ignored | A |
 | PRINTER, type `O` | `dcl-f NAME printer` with `oflind(*INOA)` for `OA` to `OG`, `OV` | A: declared externally described, the printer file comes from the O specifications (FREE-06). Column 39 `L` also A; `E` is R |
-| WORKSTN, SPECIAL, CONSOLE, KEYBORD, CRT, BSCA | comment | R: WORKSTN needs the display file and format I/O (later item) |
+| WORKSTN of RPG III with E in column 19, type `I`, `O` or `C`, designation blank or `F` | `dcl-f NAME workstn` (`usage(*input)` or `usage(*output)` for `I` and `O`) | A: externally described, the DDS is not read (FREE-43) |
+| WORKSTN of RPG II (program described), SPECIAL, CONSOLE, KEYBORD, CRT, BSCA | comment | R |
 | Continuation records (`K` in column 53: RECNO, SUBR exit, NUM, FMTS, INFSR) | the whole file as comments | R |
 
 ## Input specification (I) to data structures
@@ -994,3 +995,21 @@ Source: SC09-2508 (7.3), Output Specifications (program described files). `IAfre
 The columns of RPG IV and RPG II/III differ (file name 7-16 and 7-14, type 17 and 15, indicators 21-29 and 23-31, EXCEPT name 30-39 and 32-37, spacing 40-51 and 17-22, field name 30-43 and 32-37, edit code 44 and 38, blank after 45 and 39, end position 47-51 and 40-43, constant 53-80 and 45-70). Names up to 10 (file, EXCEPT name) and 14 (field) characters are kept; the file name must be at most 8 characters.
 
 Reported R: heading, detail and total records (the RPG cycle is not converted for RPG IV), output of a DISK file (`EXCEPT` for a DISK record), externally described files (`ORcdname`), an end position of more than 4 characters, a constant or edit word of more than 26 characters, space before or after other than 0 to 3, skip above 99, ADD, DEL or fetch overflow together with spacing, entries in column 46 and data format.
+
+## WORKSTN: display files, EXFMT and READC (FREE-43, RV-12, RV-31, decided 2026-10-28)
+
+Source: SC09-1817 (file description, continuation line SFILE; EXFMT, READC and the other file operations). Only externally described display files of RPG III are converted; the DDS of the display file is not read. Record formats named in factor 2 are taken as formats of the one WORKSTN file of the source (more than one WORKSTN file: R).
+
+| Source | Free-form |
+|---|---|
+| `F... CF  E ... WORKSTN` | `dcl-f NAME workstn;` (A) |
+| continuation `SFILE` (record format in 60-67, relative record number field in 47-52) | `sfile(FORMAT:RRN)`; the RRN field must be declared by the program as a numeric field without decimals |
+| `EXFMT FORMAT` | `exfmt FORMAT;` |
+| `READC FORMAT` | `readc FORMAT;`, end of file indicator `*INnn = %eof;` |
+| `WRITE`, `UPDAT`, `READ`, `DELET FORMAT` | `write FORMAT;`, `update FORMAT;`, `read FORMAT;`, `delete FORMAT;` |
+| `RRN CHAIN FORMAT` (subfile record) | `chain RRN FORMAT;`, no record indicator `*INnn = not %found;` |
+| `ER` indicator | the `(e)` extender and `*INnn = %error;` |
+| `OPEN`, `CLOSE` of the file | as for DISK files |
+| `ACQ`, `REL`, `NEXT`, `POST`; `ID`, `IND`, `NUM`, `PASS`, `SAVDS`, `SLN`, `PLIST` continuations; program described display files | R |
+
+The indicators of the DDS are the `*IN` indicators, as in RPG III: no `INDDS` is written. The usage of a combined file is the default of `workstn` (input and output). Sample `samples/FREEWKS.rpg38`. Written from the manual and not from a run.

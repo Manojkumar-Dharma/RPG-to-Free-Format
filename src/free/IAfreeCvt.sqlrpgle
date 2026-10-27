@@ -924,6 +924,7 @@ dcl-proc ContinuationKeywords;
   dcl-s l_opt varchar(6);
   dcl-s l_arg varchar(8);
   dcl-s l_ext varchar(10);
+  dcl-s l_rrn varchar(6);
   dcl-s l_seen varchar(100) inz('|');
   dcl-s l_disk ind;
 
@@ -945,6 +946,10 @@ dcl-proc ContinuationKeywords;
     l_opt = %trim(%subst(l_up:54:6));
     l_arg = %trim(%subst(l_up:60:8));
     l_ext = %trim(%subst(l_up:19:10));
+    l_rrn = %trim(%subst(l_up:47:6));
+    if l_rrn <> '' and l_opt <> 'SFILE';
+      return 'Columns 47-52 of a continuation record are only for SFILE';
+    endif;
     if l_opt = '';
       return 'Continuation record without an option (columns 54-59)';
     endif;
@@ -1001,8 +1006,19 @@ dcl-proc ContinuationKeywords;
       when l_opt = 'PRTCTL';
         return 'PRTCTL needs a program-described printer file: the printer file is'
                + ' declared externally described here';
+      when l_opt = 'SFILE';
+        if i_device <> 'WORKSTN' or i_fmt <> 'E' or not ContName(l_arg)
+           or not ContName(l_rrn) or l_k = 0;
+          return 'SFILE is converted for externally described WORKSTN files, with '
+                 + 'the record format in columns 60-67 and the record number '
+                 + 'field in columns 47-52';
+        endif;
+        o_keywords += ' sfile(' + l_arg + ':' + l_rrn + ')';
+        AppendText(o_note:'Relative record number field ' + l_rrn + ' of subfile '
+                   + l_arg + ' must be a numeric field without decimals defined '
+                   + 'in the program');
       when l_opt = 'ID' or l_opt = 'IND' or l_opt = 'NUM' or l_opt = 'PASS'
-           or l_opt = 'SAVDS' or l_opt = 'SFILE' or l_opt = 'SLN'
+           or l_opt = 'SAVDS' or l_opt = 'SLN'
            or l_opt = 'PLIST';
         return 'Continuation option ' + l_opt + ' is for WORKSTN or SPECIAL files,'
                + ' which are not converted yet';
@@ -1124,10 +1140,12 @@ dcl-proc ConvertFileLine;
     when l_type <> 'I' and l_type <> 'O' and l_type <> 'U' and l_type <> 'C';
       ReviewSpec(i_lineNo:i_line:'File type (column 15) must be I, O, U or C');
       return;
-    when l_device <> 'DISK' and l_device <> 'PRINTER';
+    when l_device <> 'DISK' and l_device <> 'PRINTER'
+         and not (l_device = 'WORKSTN' and g_dialect = '3' and l_fmt = 'E');
       if l_device = 'WORKSTN';
-        ReviewSpec(i_lineNo:i_line:'Device WORKSTN is not converted yet: it needs '
-                   + 'the display file and the format I/O');
+        ReviewSpec(i_lineNo:i_line:'Device WORKSTN is converted for externally '
+                   + 'described files of RPG III (E in column 19), not for program '
+                   + 'described display files');
       elseif l_device = '';
         ReviewSpec(i_lineNo:i_line:'Device (columns 40-46) is blank');
       else;
@@ -1160,6 +1178,13 @@ dcl-proc ConvertFileLine;
                  + ' is not valid in RPG III');
       return;
   endsl;
+
+  if l_device = 'WORKSTN';
+    ConvertDisplayFile(i_lineNo:i_line:l_name:l_type:l_desig:l_mode:l_keyLen:l_addr
+                       :l_org:l_ovf:l_keyStart:l_ext:l_add:l_cond:i_keywords
+                       :i_contNote:o_ok);
+    return;
+  endif;
 
   if l_device = 'PRINTER';
     ConvertPrinterFile(i_lineNo:i_line:l_name:l_type:l_desig:l_mode:l_keyLen:l_addr
@@ -1214,13 +1239,13 @@ dcl-proc ConvertFileLine;
       ReviewSpec(i_lineNo:i_line
                  :'File addition (column 66) ' + l_add + ' is not valid');
       return;
-    when l_type = 'C';
+    when l_type = 'C' and l_device <> 'WORKSTN';
       ReviewSpec(i_lineNo:i_line:'A combined file is not valid for a DISK file');
       return;
-    when l_type = 'O' and (l_desig = 'C' or l_mode = 'R');
+    when l_type = 'O' and l_device <> 'WORKSTN' and (l_desig = 'C' or l_mode = 'R');
       ReviewSpec(i_lineNo:i_line:'Direct file load is not supported in free-form');
       return;
-    when l_type = 'O' and l_desig <> ' ';
+    when l_type = 'O' and l_desig <> ' ' and l_device <> 'WORKSTN';
       ReviewSpec(i_lineNo:i_line
                  :'An output file must have a blank file designation (column 16)');
       return;
@@ -1228,7 +1253,7 @@ dcl-proc ConvertFileLine;
       ReviewSpec(i_lineNo:i_line
                  :'Output with file addition is not supported in free-form');
       return;
-    when (l_type = 'I' or l_type = 'U') and l_desig = ' ';
+    when (l_type = 'I' or l_type = 'U') and l_desig = ' ' and l_device <> 'WORKSTN';
       ReviewSpec(i_lineNo:i_line
                  :'An input or update file needs a designation (F, C or D; F in '
                   + 'RPG III)');
@@ -1406,6 +1431,95 @@ dcl-proc ConvertPrinterFile;
   RegisterFile(i_name:0:'P':i_type:i_lineNo:*off);
   o_ok = *on;
   RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
+end-proc;
+
+// ------------------------------------------------------------------
+// WORKSTN file of RPG III, externally described (RV-12, RV-31): the display file is
+// not read; its record formats are named by EXFMT, READC, WRITE and the like.
+dcl-proc ConvertDisplayFile;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+    i_name varchar(8) const;
+    i_type char(1) const;
+    i_desig char(1) const;
+    i_mode char(1) const;
+    i_keyLen varchar(2) const;
+    i_addr char(1) const;
+    i_org char(1) const;
+    i_ovf varchar(2) const;
+    i_keyStart varchar(4) const;
+    i_ext char(1) const;
+    i_add char(1) const;
+    i_cond varchar(2) const;
+    i_keywords varchar(200) const;
+    i_contNote varchar(190) const;
+    o_ok ind;
+  end-pi;
+
+  dcl-s l_stmt varchar(200);
+  dcl-s l_note varchar(190) inz('');
+
+  select;
+    when i_type <> 'C' and i_type <> 'I' and i_type <> 'O';
+      ReviewSpec(i_lineNo:i_line:'A display file must be an input, output or '
+                 + 'combined file (I, O or C)');
+      return;
+    when i_desig <> ' ' and i_desig <> 'F';
+      ReviewSpec(i_lineNo:i_line:'File designation ' + i_desig + ' (column 16) of '
+                 + 'a display file must be blank or F');
+      return;
+    when i_mode <> ' ' or i_keyLen <> '' or i_addr <> ' ' or i_org <> ' '
+         or i_keyStart <> '' or i_add <> ' ' or i_ovf <> '' or i_ext <> ' ';
+      ReviewSpec(i_lineNo:i_line:'Entries that are only valid for DISK or PRINTER '
+                 + 'files');
+      return;
+  endsl;
+
+  l_stmt = 'dcl-f ' + i_name + ' workstn';
+  select;
+    when i_type = 'I';
+      l_stmt += ' usage(*input)';
+    when i_type = 'O';
+      l_stmt += ' usage(*output)';
+  endsl;
+  if i_cond = 'UC';
+    l_stmt += ' usropn';
+  elseif i_cond <> '';
+    l_stmt += ' extind(*IN' + i_cond + ')';
+  endif;
+  l_stmt += i_keywords + ';';
+  if i_contNote <> '';
+    AppendText(l_note:i_contNote);
+  endif;
+  AppendText(l_note:'declared externally described: the display file (DDS) is not '
+             + 'read; its record formats are named in EXFMT, READC and WRITE, and '
+             + 'the indicators of the DDS are the *IN indicators');
+  AddOut(l_stmt:i_lineNo);
+  RegisterFile(i_name:0:'W':i_type:i_lineNo:*off);
+  o_ok = *on;
+  RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
+end-proc;
+
+// ------------------------------------------------------------------
+// The WORKSTN file of the source: its name, '*MANY' for more than one, '' for none
+// (the record formats of EXFMT and READC belong to it).
+dcl-proc WorkstnFile export;
+  dcl-pi *n varchar(8);
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_name varchar(8) inz('');
+
+  for l_i = 1 to g_fileCount;
+    if g_fileDevices(l_i) = 'W';
+      if l_name <> '';
+        return '*MANY';
+      endif;
+      l_name = g_fileNames(l_i);
+    endif;
+  endfor;
+  return l_name;
 end-proc;
 
 // ------------------------------------------------------------------

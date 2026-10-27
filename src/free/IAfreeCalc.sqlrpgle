@@ -1144,6 +1144,13 @@ dcl-proc CalcLine export;
     ConvertJump(l_c:l_rule);
     return;
   endif;
+  // EXFMT and READC of the display file (RV-12): converted when the source has a
+  // WORKSTN file; the other WORKSTN operations (ACQ, REL, NEXT, POST) stay R.
+  if l_rule.kind = 'FILE' and (l_rule.opcode = 'EXFMT' or l_rule.opcode = 'READC')
+     and WorkstnFile() <> '';
+    l_rule.status = C_STS_CONVERTED;
+    l_rule.reason = '';
+  endif;
   if l_rule.status = 'R';
     ReviewHere(i_line:i_lineNo:%trim(l_rule.reason):l_isStructure);
     return;
@@ -4978,6 +4985,10 @@ dcl-proc ConvertFileOp;
   dcl-s l_note varchar(190) inz('');
   dcl-s l_slot int(10);
   dcl-s l_isArea ind inz(*off);
+  dcl-s l_wsFile varchar(8) inz('');
+  dcl-s l_wsFormat ind inz(*off);
+  dcl-s l_test varchar(250);
+  dcl-s l_code varchar(4);
   dcl-s l_statements varchar(250) dim(C_MAXSTMT);
   dcl-s l_count int(10) inz(0);
 
@@ -5015,6 +5026,10 @@ dcl-proc ConvertFileOp;
       l_free = 'commit';
     when l_op = 'ROLBK';
       l_free = 'rolbk';
+    when l_op = 'EXFMT';
+      l_free = 'exfmt';
+    when l_op = 'READC';
+      l_free = 'readc';
     other;
       l_reason = l_op + ' is not converted';
   endsl;
@@ -5035,12 +5050,29 @@ dcl-proc ConvertFileOp;
         l_name = l_formatFile;
       endif;
     endif;
+    l_wsFile = WorkstnFile();
     if not FileInfo(l_name:l_device:l_type:l_recDs:l_keyed);
-      l_reason = 'File ' + i_c.factor2 + ' is not declared by a converted file '
-                 + 'description (a record format name is converted only when an I '
-                 + 'specification names it)';
-    elseif l_device <> 'D' and l_device <> 'X';
+      // A record format of the display file (RV-12): the DDS is not read.
+      if l_wsFile <> '' and l_wsFile <> '*MANY'
+         and (l_op = 'EXFMT' or l_op = 'READC' or l_op = 'WRITE' or l_op = 'UPDAT'
+              or l_op = 'CHAIN' or l_op = 'READ' or l_op = 'DELET');
+        l_device = 'W';
+        l_wsFormat = *on;
+        AddReason(l_note:'Record format ' + l_name + ' is taken as a format of the '
+                  + 'display file ' + l_wsFile + ' (its DDS is not read)');
+      elseif l_wsFile = '*MANY' and (l_op = 'EXFMT' or l_op = 'READC');
+        l_reason = 'More than one WORKSTN file: the display file of record format '
+                   + l_name + ' is not known';
+      else;
+        l_reason = 'File ' + i_c.factor2 + ' is not declared by a converted file '
+                   + 'description (a record format name is converted only when an I '
+                   + 'specification names it)';
+      endif;
+    elseif l_device <> 'D' and l_device <> 'X' and l_device <> 'W';
       l_reason = 'File ' + l_name + ' is not a DISK file';
+    elseif (l_op = 'EXFMT' or l_op = 'READC');
+      l_reason = l_op + ' needs a record format of the display file, not the file '
+                 + l_name;
     endif;
   endif;
 
@@ -5106,7 +5138,24 @@ dcl-proc ConvertFileOp;
     l_count += 1;
     l_statements(l_count) = l_stmt;
     for l_slot = 1 to 3;
-      l_reason = ResultStatement(i_c:i_rule:l_slot:l_ind);
+      // The end of file and no record tests of a record format name no file.
+      l_test = '';
+      if l_wsFormat;
+        select;
+          when l_slot = 1;
+            l_code = i_rule.ind1;
+          when l_slot = 2;
+            l_code = i_rule.ind2;
+          other;
+            l_code = i_rule.ind3;
+        endsl;
+        if l_code = 'EOF';
+          l_test = '%eof';
+        elseif l_code = 'NR';
+          l_test = 'not %found';
+        endif;
+      endif;
+      l_reason = ResultStatement(i_c:i_rule:l_slot:l_ind:l_test);
       if l_reason <> '';
         leave;
       endif;

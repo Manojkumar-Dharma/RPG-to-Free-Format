@@ -36,6 +36,7 @@ cannot check. The R list is in `REVIEW-ITEMS.md`. Audit of 2026-10-27.
 | H, D, T output records of the cycle skeleton (FREE-37) | `OutFinish`, `CycOutput` | new: written at step 1 and in `IA_TOTALS`; the DDS is not tested |
 | RPG IV program described printer file, exception records and `EXCEPT` (FREE-42) | `Norm4` in `IAfreeOut`, `ExceptStmt` in `IAfreeFx4` | new: A for the file (declared externally described); the DDS is not tested; the field types come from the D specifications |
 | Edited output fields: width of the edit codes, `PAGNBR`, `DATE` (FREE-38) | `IAfreeOut` | new: the DDS positions come from the manual's tables, not from a run |
+| WORKSTN file and record formats of a display file (FREE-43) | `ConvertDisplayFile`, `ConvertFileOp` | new: the DDS is not read, a record format is taken as a format of the one WORKSTN file |
 
 ## Proposed changes
 

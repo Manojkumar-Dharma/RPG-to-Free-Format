@@ -30,7 +30,7 @@ Code status and test status follow `PLANNED.md`.
 | RV-09 | `DSPLY`, `DUMP` (3) | message queue and response operands | Convert: `dsply` and `dump(a)`; the queue operands as written | Written | Not tested |
 | RV-10 | `COMIT`, `ROLBK` (3) | file handling | Convert: `commit`, `rolbk`; the file list as `(e)` where used | Written | Not tested |
 | RV-11 | `IN`, `OUT`, `*NAMVAR DEFN`, `UNLCK` of a data area written (FREE-17); `OCUR` written (FREE-20) | data areas and data structures | Convert: `in`, `out`, `occur`; `*DTAARA` definitions through `DEFN` (RV-07) | Written | Not tested |
-| RV-12 | `EXFMT`, `READC`, `ACQ`, `NEXT`, `POST`, `REL` | WORKSTN file I/O | Convert with the display file of IACNVDSPF; needs the I/O design | Planned | Not started |
+| RV-12 | `EXFMT`, `READC`, `ACQ`, `NEXT`, `POST`, `REL` | WORKSTN file I/O | Decided 2026-10-28: externally described display files first; `EXFMT`, `READC` and the format operations written in FREE-43; `ACQ`, `REL`, `NEXT`, `POST` stay R | Written in part | Not tested |
 | RV-13 | `EXCPT`, `PAGE`, `PAGE1` to `PAGE7`, O and L specifications | output | FREE-06: exception records done in part 1, the rest is RV-60 to RV-63 | Written | Not tested |
 | RV-14 | `GOTO`, `TAG`, `CABxx` | free-form has no `GOTO` | Decided: rewrite the common patterns (skip forward to a `TAG` in the same group, loop back, jump to the end) with `if`, `dou`/`dow`, `leave`, `return`; the other patterns stay R | Written for RPG II and III (FREE-35) | Not tested; RPG IV (dialect 4) still R |
 | RV-15 | `DEBUG`, `EXIT`, `FORCE`, `FREE`, `KEY`, `RLABL`, `SET`, `SHTDN` | S/36 and external subroutine features | No form: the reason names the replacement (`dump`, `callp`, `*inlr`) | Done | N/A |
@@ -47,7 +47,7 @@ Code status and test status follow `PLANNED.md`.
 | ID | Item | Why R today | Resolution | Code status | Test status |
 |----|------|-------------|------------|-------------|-------------|
 | RV-30 | I specifications of externally described files: renames, field indicators | no field rename on a file in free form | Decided: renamed field is a copy (`dcl-s NEW like(EXT)`), set after READ and CHAIN when a record was read (FREE-24) and copied back to the external fields before WRITE and UPDATE of a record format named by an I specification (FREE-25); control levels, matching fields and field indicators stay R | Written | Not tested |
-| RV-31 | WORKSTN, SPECIAL and other devices (F) | display files | with RV-12 | Planned | Not started |
+| RV-31 | WORKSTN, SPECIAL and other devices (F) | display files | RPG III externally described WORKSTN written in FREE-43 (`sfile`); program described display files (RPG II) and SPECIAL stay R | Written in part | Not tested |
 | RV-32 | Continuation records (`RECNO`, `SUBR` exit, `NUM`, `FMTS`, `INFSR`) | | Convert: `dcl-f` keywords where they exist; done in FREE-18 for DISK and PRINTER files (`COMIT`, `INFDS`, `INFSR`, `RECNO`, `RENAME`, `IGNORE`); WORKSTN, SPECIAL and `PRTCTL` options stay R | Written | Not tested |
 | RV-33 | Alternate collating sequence, file translation, transparent literals | tables | Sample: needs the tables | Planned | Not started |
 | RV-34 | Record address and table files, address output (T), limits processing, direct file load, file addition output, packed key, noncontiguous key | not in free form | No form for most; `EXTK`: R by design | Done | N/A |
