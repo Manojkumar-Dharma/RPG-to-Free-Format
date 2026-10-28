@@ -995,7 +995,7 @@ Source: SC09-2508 (7.3), Output Specifications (program described files). `IAfre
 
 The columns of RPG IV and RPG II/III differ (file name 7-16 and 7-14, type 17 and 15, indicators 21-29 and 23-31, EXCEPT name 30-39 and 32-37, spacing 40-51 and 17-22, field name 30-43 and 32-37, edit code 44 and 38, blank after 45 and 39, end position 47-51 and 40-43, constant 53-80 and 45-70). Names up to 10 (file, EXCEPT name) and 14 (field) characters are kept; the file name must be at most 8 characters.
 
-Reported R: heading, detail and total records (the RPG cycle is not converted for RPG IV), output of a DISK file (`EXCEPT` for a DISK record), externally described files (`ORcdname`), an end position of more than 4 characters, a constant or edit word of more than 26 characters, space before or after other than 0 to 3, skip above 99, ADD, DEL or fetch overflow together with spacing, entries in column 46 and data format.
+Reported R: heading, detail and total records (the RPG cycle is not converted for RPG IV), externally described files (`ORcdname`), an end position of more than 4 characters, a constant or edit word of more than 26 characters, space before or after other than 0 to 3, skip above 99, ADD, DEL or fetch overflow together with spacing, entries in column 46 and data format.
 
 ## WORKSTN: display files, EXFMT and READC (FREE-43, RV-12, RV-31, decided 2026-10-28)
 
@@ -1042,7 +1042,20 @@ RPG II, RPG III (no `E` in column 19) and RPG IV (`F` in column 22). The display
 | O specification, exception records (`E`) of an output file | `write NAME NAME_REC;`, as for a DISK file |
 | keys, record address type, organization, mode, file addition, overflow indicator, extension; type `U`; designation other than blank or `F`; heading, detail and total output records; `EXFMT` and `READC` (they need record formats) | R |
 
-Written from the manual and not from a run. RPG IV program described output records are not converted (only for printer files, FREE-42).
+Written from the manual and not from a run.
+
+## RPG IV: exception records of program described DISK and WORKSTN files (FREE-47, RV-56, RV-62)
+
+The same output as for RPG II and RPG III (RV-62), written for RPG IV: the F specification of a program described DISK or WORKSTN file (`F` in column 22, no record address type) is registered for the O specifications, and an output file (type `O`, or file addition `A`) gets the record data structure `NAME_OUT`.
+
+| RPG IV | Free-form |
+|---|---|
+| `FHISTORY O F 40 DISK` | `dcl-f HISTORY disk(40) usage(*output);` and `dcl-ds HISTORY_OUT len(40) end-ds;` |
+| `OHISTORY E LOGREC` with a field ending in position 20 and a field ending in position 27 | `EXCEPT LOGREC` becomes `HISTORY_OUT = *blanks; %subst(HISTORY_OUT:1:20) = NAME; ...; write HISTORY HISTORY_OUT;` (a numeric field with `%editc(field:'X')`) |
+| `OHISTORY E 01 LOGREC` | the statements inside `if *in01; ... endif;` |
+| `ODSPOUT E SCREEN` of a program described display file | as for DISK: the record data structure is written to the display file |
+
+Reported R, as for RPG II and RPG III: heading, detail and total records, output indicators on a field, edit codes and edit words, `PAGE`, `UDATE` and `*DATE`, a field that is outside the record length, a field with no known length or type at the `EXCEPT`, `ADD` and `DEL` entries that do not fit the file. Sample `samples/FREEWK4P.rpgle`. Written from the design and not from a run.
 
 ## GOTO, CABxx and TAG in RPG IV (FREE-44, RV-14)
 

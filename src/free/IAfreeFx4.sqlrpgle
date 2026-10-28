@@ -677,6 +677,7 @@ dcl-proc ConvertF;
   dcl-s l_reason varchar(190) inz('');
   dcl-s l_isLike ind;
   dcl-s l_progPrinter ind inz(*off);
+  dcl-s l_progDisk ind inz(*off);
   dcl-s l_index int(10);
 
   if not CollectKeywords('F':i_index:i_line:l_kwText:l_extra);
@@ -776,6 +777,15 @@ dcl-proc ConvertF;
   if l_progPrinter;
     CvtRegisterFile(l_name:0:'P':l_type:i_lineNo:*off);
   endif;
+  // A program described DISK or WORKSTN file: registered for the output specifications
+  // (exception records, as for RPG II and RPG III) and its record data structure
+  // NAME_OUT is declared below (FREE-47, RV-56, RV-62).
+  l_progDisk = not l_isLike and l_fmt = 'F' and %len(l_name) <= 8 and l_addrType = ''
+               and (l_device = 'DISK' or l_device = 'WORKSTN');
+  if l_progDisk;
+    CvtRegisterFile(l_name:%int(l_recLen):'D':l_type:i_lineNo:*off);
+    CvtSetFileOutput(l_name:(l_type = 'O' or l_add = 'A'));
+  endif;
   if not l_isLike;
     select;
       when l_type = 'I' and l_add = 'A';
@@ -839,6 +849,10 @@ dcl-proc ConvertF;
   l_stmt += ';';
 
   EmitStatement(0:l_stmt:i_lineNo);
+  if l_progDisk and (l_type = 'O' or l_add = 'A');
+    EmitStatement(0:'dcl-ds ' + l_name + '_OUT len(' + %char(%int(l_recLen))
+                  + ') end-ds;':i_lineNo);
+  endif;
   g_lastLineNo = i_lineNo;
   ReportWithContinuations(i_index:i_lineNo:i_line:l_extra:l_note);
   return l_extra;
@@ -2186,6 +2200,10 @@ dcl-proc ExceptStmt;
   dcl-s l_after varchar(120);
   dcl-s l_one varchar(300);
   dcl-s l_text varchar(500) inz('');
+  dcl-s l_n int(10);
+  dcl-s l_j int(10);
+  dcl-s l_why varchar(190);
+  dcl-s l_tmp varchar(250) dim(40);
 
   o_reason = '';
   l_name = Up(i_f2);
@@ -2201,17 +2219,27 @@ dcl-proc ExceptStmt;
   endif;
   for l_k = 1 to l_count;
     if OutExceptDisk(l_name:l_k);
-      o_reason = 'EXCEPT of the record of a DISK file is not converted for RPG IV yet';
-      return '';
-    endif;
-    l_cond = OutExceptCond(l_name:l_k);
-    l_after = OutExceptAfter(l_name:l_k);
-    l_one = 'write ' + OutExceptFormat(l_name:l_k);
-    if l_after <> '';
-      l_one += '; ' + l_after;
-    endif;
-    if l_cond <> '';
-      l_one = 'if ' + l_cond + '; ' + l_one + '; endif';
+      // A record of a program described DISK or WORKSTN file: the statements
+      // come from IAfreeOut, as for RPG II and RPG III (FREE-47).
+      l_n = OutDiskStatements(l_name:l_k:l_tmp:l_why);
+      if l_n = 0;
+        o_reason = 'EXCEPT ' + l_name + ': ' + l_why;
+        return '';
+      endif;
+      l_one = l_tmp(1);
+      for l_j = 2 to l_n;
+        l_one += '; ' + l_tmp(l_j);
+      endfor;
+    else;
+      l_cond = OutExceptCond(l_name:l_k);
+      l_after = OutExceptAfter(l_name:l_k);
+      l_one = 'write ' + OutExceptFormat(l_name:l_k);
+      if l_after <> '';
+        l_one += '; ' + l_after;
+      endif;
+      if l_cond <> '';
+        l_one = 'if ' + l_cond + '; ' + l_one + '; endif';
+      endif;
     endif;
     if %len(l_text) + %len(l_one) + 2 > 500;
       o_reason = 'EXCEPT ' + l_name + ' writes too many statements for one line';

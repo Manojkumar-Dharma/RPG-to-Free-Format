@@ -61,6 +61,12 @@ dcl-pr CvtRegisterFile;
   i_keyed ind const;
 end-pr;
 
+// Whether the file takes output records (O specifications) as a program described file.
+dcl-pr CvtSetFileOutput;
+  i_name varchar(8) const;
+  i_output ind const;
+end-pr;
+
 // Kind (C character, N numeric), length and decimals of a field of the D
 // specifications or a result field of RPG IV, for the DDS of the output records.
 dcl-pr Fx4FieldInfo ind;

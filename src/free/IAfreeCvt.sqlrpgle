@@ -2588,6 +2588,15 @@ dcl-proc SetFileOutput;
   endif;
 end-proc;
 
+dcl-proc CvtSetFileOutput export;
+  dcl-pi *n;
+    i_name varchar(8) const;
+    i_output ind const;
+  end-pi;
+
+  SetFileOutput(i_name:i_output);
+end-proc;
+
 // ------------------------------------------------------------------
 // RV-62: record length and usage of a program described DISK file for the
 // output specifications (IAfreeOut): the length, whether usage has *output and
