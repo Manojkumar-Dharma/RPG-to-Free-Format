@@ -1140,13 +1140,8 @@ dcl-proc ConvertFileLine;
     when l_type <> 'I' and l_type <> 'O' and l_type <> 'U' and l_type <> 'C';
       ReviewSpec(i_lineNo:i_line:'File type (column 15) must be I, O, U or C');
       return;
-    when l_device <> 'DISK' and l_device <> 'PRINTER'
-         and not (l_device = 'WORKSTN' and g_dialect = '3' and l_fmt = 'E');
-      if l_device = 'WORKSTN';
-        ReviewSpec(i_lineNo:i_line:'Device WORKSTN is converted for externally '
-                   + 'described files of RPG III (E in column 19), not for program '
-                   + 'described display files');
-      elseif l_device = '';
+    when l_device <> 'DISK' and l_device <> 'PRINTER' and l_device <> 'WORKSTN';
+      if l_device = '';
         ReviewSpec(i_lineNo:i_line:'Device (columns 40-46) is blank');
       else;
         ReviewSpec(i_lineNo:i_line:'Device ' + l_device + ' is not converted yet');
@@ -1178,6 +1173,13 @@ dcl-proc ConvertFileLine;
                  + ' is not valid in RPG III');
       return;
   endsl;
+
+  if l_device = 'WORKSTN' and l_fmt <> 'E';
+    ConvertProgDisplayFile(i_lineNo:i_line:l_name:l_type:l_desig:l_mode:l_keyLen:l_addr
+                           :l_org:l_ovf:l_keyStart:l_ext:l_add:l_cond:i_keywords
+                           :i_contNote:ToInt(l_recLen):l_eof:o_ok);
+    return;
+  endif;
 
   if l_device = 'WORKSTN';
     ConvertDisplayFile(i_lineNo:i_line:l_name:l_type:l_desig:l_mode:l_keyLen:l_addr
@@ -1497,6 +1499,85 @@ dcl-proc ConvertDisplayFile;
              + 'the indicators of the DDS are the *IN indicators');
   AddOut(l_stmt:i_lineNo);
   RegisterFile(i_name:0:'W':i_type:i_lineNo:*off);
+  o_ok = *on;
+  RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
+end-proc;
+
+// ------------------------------------------------------------------
+// WORKSTN file, program described (RV-31): declared with its record length, like a
+// DISK file. The I specifications give the record layout (the data structure
+// FILE_REC), READ and the output records use it as for DISK files. The display
+// file itself (DDS) has no record formats here.
+dcl-proc ConvertProgDisplayFile;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+    i_name varchar(8) const;
+    i_type char(1) const;
+    i_desig char(1) const;
+    i_mode char(1) const;
+    i_keyLen varchar(2) const;
+    i_addr char(1) const;
+    i_org char(1) const;
+    i_ovf varchar(2) const;
+    i_keyStart varchar(4) const;
+    i_ext char(1) const;
+    i_add char(1) const;
+    i_cond varchar(2) const;
+    i_keywords varchar(200) const;
+    i_contNote varchar(190) const;
+    i_recLen int(10) const;
+    i_eof char(1) const;
+    o_ok ind;
+  end-pi;
+
+  dcl-s l_stmt varchar(200);
+  dcl-s l_note varchar(190) inz('');
+
+  select;
+    when i_type <> 'C' and i_type <> 'I' and i_type <> 'O';
+      ReviewSpec(i_lineNo:i_line:'A display file must be an input, output or '
+                 + 'combined file (I, O or C)');
+      return;
+    when i_desig <> ' ' and i_desig <> 'F';
+      ReviewSpec(i_lineNo:i_line:'File designation ' + i_desig + ' (column 16) of '
+                 + 'a display file must be blank or F');
+      return;
+    when i_mode <> ' ' or i_keyLen <> '' or i_addr <> ' ' or i_org <> ' '
+         or i_keyStart <> '' or i_add <> ' ' or i_ovf <> '' or i_ext <> ' ';
+      ReviewSpec(i_lineNo:i_line:'Entries that are only valid for DISK or PRINTER '
+                 + 'files');
+      return;
+    when i_recLen < 1;
+      ReviewSpec(i_lineNo:i_line:'Record length (columns 24-27) is missing');
+      return;
+  endsl;
+
+  l_stmt = 'dcl-f ' + i_name + ' workstn(' + %trim(%char(i_recLen)) + ')';
+  select;
+    when i_type = 'I';
+      l_stmt += ' usage(*input)';
+    when i_type = 'O';
+      l_stmt += ' usage(*output)';
+  endsl;
+  if i_cond = 'UC';
+    l_stmt += ' usropn';
+  elseif i_cond <> '';
+    l_stmt += ' extind(*IN' + i_cond + ')';
+  endif;
+  l_stmt += i_keywords + ';';
+  if i_contNote <> '';
+    AppendText(l_note:i_contNote);
+  endif;
+  if i_eof <> ' ';
+    AppendText(l_note:'end of file entry (column 17) ignored');
+  endif;
+  AppendText(l_note:'program described display file: the record is the data '
+             + 'structure of the I specifications; the DDS is not read and its '
+             + 'indicators are the *IN indicators');
+  AddOut(l_stmt:i_lineNo);
+  RegisterFile(i_name:i_recLen:'D':i_type:i_lineNo:*off);
+  SetFileOutput(i_name:(i_type = 'O'));
   o_ok = *on;
   RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
 end-proc;

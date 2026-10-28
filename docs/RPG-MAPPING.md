@@ -107,7 +107,8 @@ Source: SC09-1818 chapter 19. Target: SC09-2508 "Equivalent Free-form Coding for
 | End of file `E` (17) on a non-cycle file | ignored | A |
 | PRINTER, type `O` | `dcl-f NAME printer` with `oflind(*INOA)` for `OA` to `OG`, `OV` | A: declared externally described, the printer file comes from the O specifications (FREE-06). Column 39 `L` also A; `E` is R |
 | WORKSTN of RPG III with E in column 19, type `I`, `O` or `C`, designation blank or `F` | `dcl-f NAME workstn` (`usage(*input)` or `usage(*output)` for `I` and `O`) | A: externally described, the DDS is not read (FREE-43) |
-| WORKSTN of RPG II (program described), SPECIAL, CONSOLE, KEYBORD, CRT, BSCA | comment | R |
+| WORKSTN, program described (no E in column 19, record length given), type I, O or C, designation blank or F | `dcl-f NAME workstn(len)` (`usage(*input)` or `usage(*output)` for `I` and `O`) | A: FREE-46, see the section on program described display files |
+| SPECIAL, CONSOLE, KEYBORD, CRT, BSCA | comment | R |
 | Continuation records (`K` in column 53: RECNO, SUBR exit, NUM, FMTS, INFSR) | the whole file as comments | R |
 
 ## Input specification (I) to data structures
@@ -1010,7 +1011,7 @@ Source: SC09-1817 (file description, continuation line SFILE; EXFMT, READC and t
 | `RRN CHAIN FORMAT` (subfile record) | `chain RRN FORMAT;`, no record indicator `*INnn = not %found;` |
 | `ER` indicator | the `(e)` extender and `*INnn = %error;` |
 | `OPEN`, `CLOSE` of the file | as for DISK files |
-| `ACQ`, `REL`, `NEXT`, `POST`; `ID`, `IND`, `NUM`, `PASS`, `SAVDS`, `SLN`, `PLIST` continuations; program described display files | R |
+| `ACQ`, `REL`, `NEXT`, `POST`; `ID`, `IND`, `NUM`, `PASS`, `SAVDS`, `SLN`, `PLIST` continuations | R |
 
 The indicators of the DDS are the `*IN` indicators, as in RPG III: no `INDDS` is written. The usage of a combined file is the default of `workstn` (input and output). Sample `samples/FREEWKS.rpg38`. Written from the manual and not from a run.
 
@@ -1024,9 +1025,24 @@ Same rules as FREE-43 for the source in RPG IV columns. Only externally describe
 | `EXFMT FORMAT` | `exfmt FORMAT;` (ER in 73-74 gives the `(e)` extender and `*INnn = (%error)`) |
 | `READC FORMAT` | `readc FORMAT;`, EOF in 75-76 gives `*INnn = (%eof);` |
 | `WRITE`, `UPDATE`, `READ`, `DELETE`, `CHAIN` of a record format | as for DISK files; `%found`, `%eof` and `%equal` have no argument for a record format of the display file (they take a file name) |
-| `ACQ`, `REL`, `NEXT`, `POST`; program described WORKSTN (F in column 22); a display file of type U | R |
+| `ACQ`, `REL`, `NEXT`, `POST`; a display file of type U | R |
+| program described WORKSTN (F in column 22) | `dcl-f NAME workstn(len)`, FREE-46 | A |
 
 Sample `samples/FREEWKS4.rpgle`. Written from the manual and not from a run.
+
+## WORKSTN: program described display files (FREE-46, RV-31)
+
+RPG II, RPG III (no `E` in column 19) and RPG IV (`F` in column 22). The display file has no record formats here: the record is the data structure of the I specifications and the DDS is not read.
+
+| Source | Free-form |
+|---|---|
+| `F... CF  80  WORKSTN` (record length in 24-27 or 23-27) | `dcl-f NAME workstn(80);` (a combined file has no `usage`; `I` gives `usage(*input)`, `O` gives `usage(*output)`) |
+| I specification of the file with one record type | `dcl-ds NAME_REC len(80);` with the fields, as for a DISK file |
+| `READ` of the file | `read NAME NAME_REC;`, as for a DISK file |
+| O specification, exception records (`E`) of an output file | `write NAME NAME_REC;`, as for a DISK file |
+| keys, record address type, organization, mode, file addition, overflow indicator, extension; type `U`; designation other than blank or `F`; heading, detail and total output records; `EXFMT` and `READC` (they need record formats) | R |
+
+Written from the manual and not from a run. RPG IV program described output records are not converted (only for printer files, FREE-42).
 
 ## GOTO, CABxx and TAG in RPG IV (FREE-44, RV-14)
 

@@ -738,9 +738,6 @@ dcl-proc ConvertF;
     when l_device <> 'DISK' and l_device <> 'PRINTER' and l_device <> 'WORKSTN'
          and l_device <> 'SEQ' and l_device <> 'SPECIAL';
       l_reason = 'Device (columns 36-42) ' + l_device + ' is not valid';
-    when l_device = 'WORKSTN' and l_fmt = 'F';
-      l_reason = 'A program described WORKSTN file is not converted (only externally '
-                 + 'described display files, RV-31)';
     when l_device = 'WORKSTN' and l_type = 'U';
       l_reason = 'A display file is an input, output or combined file (I, O or C)';
     when l_fmt = 'F' and not IsDigits(l_recLen);
@@ -811,7 +808,8 @@ dcl-proc ConvertF;
                + 'RPG cycle';
     endif;
     l_stmt = 'dcl-f ' + l_name + ' ' + l_deviceText;
-    // The usage of a combined display file is the default of workstn.
+    // The usage of a combined display file (also a program described one) is the
+    // default of workstn.
     if not (l_device = 'WORKSTN' and l_type = 'C');
       l_stmt += ' usage(' + l_usage + ')';
     endif;
@@ -1122,8 +1120,9 @@ dcl-proc ConvertI;
     when g_flLen(l_file) = 0;
       l_reason = 'File ' + l_name + ' is externally described: field renames and '
                  + 'field indicators are not converted yet';
-    when g_flDevice(l_file) <> 'DISK' and g_flDevice(l_file) <> 'SEQ';
-      l_reason = 'File ' + l_name + ' is not a DISK or SEQ file';
+    when g_flDevice(l_file) <> 'DISK' and g_flDevice(l_file) <> 'SEQ'
+         and g_flDevice(l_file) <> 'WORKSTN';
+      l_reason = 'File ' + l_name + ' is not a DISK, SEQ or WORKSTN file';
     when g_flType(l_file) <> 'I' and g_flType(l_file) <> 'U'
          and g_flType(l_file) <> 'C';
       l_reason = 'File ' + l_name + ' is not an input, update or combined file';

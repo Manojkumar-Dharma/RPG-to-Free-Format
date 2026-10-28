@@ -1,0 +1,9 @@
+      * WORKSTN display file, program described (FREE-46, RV-31)
+     H
+     FDSPLAY  CF         80            WORKSTN
+     FDSPOUT  O          80            WORKSTN
+     IDSPLAY  AA
+     I                                        1  10 CODE
+     I                                       11  30 NAME
+     C                     READ DSPLAY                   90
+     C                     SETON                     LR
