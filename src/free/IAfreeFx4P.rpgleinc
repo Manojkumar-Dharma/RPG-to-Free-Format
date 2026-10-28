@@ -27,6 +27,12 @@ dcl-pr Fx4Line ind;
   o_extra int(10);
 end-pr;
 
+// Reads the jumps of the whole source for the planner (RV-14) and the WHENEVER
+// jumps of embedded SQL (RV-37) when that has not been done. Called before the
+// first line is converted, because an SQL statement needs the plan too.
+dcl-pr Fx4ScanJumps;
+end-pr;
+
 // Closes a data structure, prototype or procedure interface that is still open.
 // Called before every specification that is not a D specification, and at the
 // end of the source.

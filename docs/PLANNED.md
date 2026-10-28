@@ -81,12 +81,13 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-45 | IACNVFREE | RPG IV (fixed form) externally described WORKSTN files: `dcl-f NAME workstn` (a combined file without `usage`), `SFILE` kept as keyword, `READC` with `readc` and `*INnn = %eof`, `%found` and `%eof` without file argument for a record format of the display file (RV-12, RV-31) | Written | Not tested | `samples/FREEWKS4.rpgle`; needs a compile and test; the DDS is not read; `ACQ`, `REL`, `NEXT`, `POST` and a type U display file stay R |
 | FREE-46 | IACNVFREE | WORKSTN files, program described (RPG II, RPG III without E, RPG IV with F): `dcl-f NAME workstn(len)`, the record layout of the I specifications (`NAME_REC`) and exception records of an output file as for DISK files (RV-31) | Written | Not tested | `samples/FREEWKS2.rpg36`; needs a compile and test; keys, type U, heading, detail and total records, `EXFMT` and `READC` stay R |
 | FREE-47 | IACNVFREE | RPG IV exception records (`EXCEPT`) of program described DISK and WORKSTN files: the F specification is registered for the O specifications, `NAME_OUT` is declared, the statements come from `OutDiskStatements` as for RPG II and RPG III (RV-56, RV-62) | Written | Not tested | `samples/FREEWK4P.rpgle`; needs a compile and test; heading, detail and total records, output indicators on fields, edit codes stay R |
+| FREE-48 | IACNVFREE | Embedded SQL `WHENEVER ... GOTO` (RPG III and RPG IV): the `WHENEVER` is kept as a comment and an `if` that tests `SQLCODE` is written after every executable SQL statement that follows it; the RV-14 planner gives each test its target (RV-37 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEWHN.sqlrpg`, `samples/FREE4WHN.sqlrpgle`; needs a compile and test; `CalcSqlJumpScan` (IAfreeCalc) makes one jump event per statement and condition, `Fx4SkipOpen` and `Fx4ScanJumps` (IAfreeFx4) for RPG IV; a jump back, a `WHENEVER` that is not `CONTINUE` or `GOTO label`, and a `/FREE` block or `CASxx` in the source stay R |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-42 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-48 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.

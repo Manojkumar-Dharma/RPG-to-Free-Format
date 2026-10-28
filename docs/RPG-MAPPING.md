@@ -745,7 +745,7 @@ Source: SC09-1816 (RPG/400 User's Guide), chapter 1, "The Structured Query Langu
 | `C/EXEC SQL` (text after column 15 optional), `C+` lines (columns 8-74), `C/END-EXEC` | `exec sql <first line>`, the other lines of the statement under it, indented one level, and the closing `;` on the last line. The SQL text is not changed and every source line stays one output line | C |
 | `C* comment` between the lines of a statement | `// comment`, written before the statement | C |
 | A `--` comment at the end of the last line | The `;` goes on a line of its own, so the comment cannot hide it | C |
-| `WHENEVER ... GOTO label` | Converted as written; `TAG` is not converted, so the label does not exist in the result | A |
+| `WHENEVER ... GOTO label` and `WHENEVER ... CONTINUE` | Kept as a comment; the tests of `SQLCODE` after the statements that follow take its place, see "WHENEVER ... GOTO (FREE-48, RV-37)" below | A |
 | The first statement outside a subroutine | Also carries the cycle note, as the first calculation does | A |
 | Conditioning indicators before `C/EXEC SQL`, `EXEC SQL` in a `CASxx` group, a `;` in the SQL text outside a literal, no SQL text, more than 200 lines | Lines kept as `// RPG III: ...` | R |
 | `C/EXEC SQL` without `C/END-EXEC` (the next specification ends it), `C/END-EXEC` or `C+` without `C/EXEC SQL` | Lines kept as comments | R |
@@ -761,9 +761,42 @@ Host variables (`:name`) are not changed. A field that is only used in an SQL st
 | `C/EXEC SQL` + 3 `C+` lines (a comment line between) | the comment, then `exec sql select count(*)`, `into :CNT`, `from CUSTMAS`, `where CUSTNO = :KEY;` on separate lines (SQL text as typed) |
 | `IFGT` + `C/EXEC SQL UPDATE ...` + `END` | the statement indented inside `if KEY > 0;` ... `endif;` |
 | `DELETE FROM WORKFILE -- clear the work file` | `exec sql DELETE FROM WORKFILE -- clear the work file` and `;` on the next line |
-| `WHENEVER SQLERROR GOTO ERR` | `exec sql WHENEVER SQLERROR GOTO ERR;`, A (TAG) |
+| `WHENEVER SQLERROR GOTO ERR` | `// exec sql WHENEVER SQLERROR GOTO ERR`, A (no executable statement follows that is converted, so no test is written) |
 | `C   01` before `C/EXEC SQL` | indicator line and statement as `// RPG III:` comments, R |
 | `C/EXEC SQL` with no `C/END-EXEC`, then `ADD 1 KEY` | statement kept as comments, R; `ADD` converted; the `C/END-EXEC` after it R |
+
+### WHENEVER ... GOTO (FREE-48, RV-37)
+
+The precompiler adds a jump to the label after every executable SQL statement that follows a `WHENEVER` in the source (in source order, not in the order of execution, also across subroutines). Free form has no label, so the jump is written out. `CalcSqlJumpScan` (IAfreeCalc; called by `CalcJumpScan` for RPG III and by `ScanJumps` of IAfreeFx4 for RPG IV) follows the three conditions and gives the RV-14 planner one jump event for each executable statement and each condition that has a label. The condition of the event is the test; the planner decides what the test does, with the rules of FREE-35 and FREE-44.
+
+| Condition | Test after the statement |
+|---|---|
+| `SQLERROR` | `sqlcode < 0` |
+| `NOT FOUND` | `sqlcode = 100` |
+| `SQLWARNING` | `sqlwarn0 = 'W' or (sqlcode > 0 and sqlcode <> 100)` |
+
+| Plan for the jump | Written after the statement | Status |
+|---|---|---|
+| The `TAG` is the last statement of the subroutine (an executable SQL statement after it, a cleanup or `ROLLBACK` after `WHENEVER ... CONTINUE`, counts as a statement: then the skip below is written) | `if <test>;` `leavesr;` `endif;` | A |
+| The `TAG` is the last statement of the program | `if <test>;` `return;` `endif;` (RPG III detail calculations of the cycle skeleton: `iter;`) | A |
+| The `TAG` is later in the same group | `if not (<test>);` and the `endif;` at the `TAG`, as for a conditioned `GOTO` (FREE-35); with several statements the IFs are nested | A |
+| The `TAG` is before the statement (a jump back), missing, or in another subroutine; a `/FREE` block or `CASxx` anywhere in the source (no jump of the member is converted) | The statement, a comment line `// WHENEVER ... is not converted: test SQLCODE here`; the `TAG` is R too | R |
+
+The `WHENEVER` itself is kept as `// exec sql WHENEVER ...`: the precompiler would otherwise add its own jump to a label that no longer exists. `WHENEVER cond CONTINUE` ends the tests of that condition. A `WHENEVER` that is not `NOT FOUND`, `SQLERROR` or `SQLWARNING` followed by `CONTINUE`, `GOTO label` or `GO TO label` is kept as written and reported R; the statements after it are R too, because it is not known which conditions are in force. `INCLUDE`, `DECLARE` of a cursor or statement, `BEGIN`/`END DECLARE SECTION` and `SET OPTION` get no test (the precompiler adds no jump after them); `DECLARE GLOBAL TEMPORARY TABLE` does. No loop is built for a jump back: it would repeat an SQL statement until it succeeds.
+
+Limits that stay R with a comment line `// WHENEVER ... is not converted: test SQLCODE here` after the statement: the group stack is full (each skip nests one level), or the planner table is full (1500 jumps and SQL statements; then no `return`/`leavesr` is written either, because it cannot be known that nothing follows the `TAG`). A `WHENEVER` that is not understood gives one comment line after each later statement, not three.
+
+Assumptions to check on the first compile: `SQLCODE` and `SQLWARN0` are available in the converted `SQLRPGLE` member without a declaration (check the field names in the SQLCA that `QSYSINC/QRPGLESRC` supplies: the RPG SQLCA may name the warning flag `SQLWN0`; if it does, change `WhenTest` in IAfreeCalc, or test `%subst(sqlstt:1:2) = '01'`); the nesting of the IFs for a label with many statements before it stays readable (prefer a label at the end of the program or subroutine).
+
+`samples/FREEWHN.sqlrpg` (RPG III) and `samples/FREE4WHN.sqlrpgle` (RPG IV), expected result written from the design and not from a run:
+
+| Case | Expected |
+|---|---|
+| 1. `WHENEVER NOT FOUND GOTO NOROW`, statement, `ADD`, `NOROW TAG` | comment, the statement, `if not (sqlcode = 100);`, `KEY = ...;` at `NOROW` `endif;` |
+| 2. `WHENEVER NOT FOUND CONTINUE`, statement | comment, the statement with no test |
+| 3. `AGAIN TAG`, `WHENEVER SQLWARNING GOTO AGAIN`, statement, `... CONTINUE` | the statement, the comment `// WHENEVER SQLWARNING GOTO AGAIN is not converted`, R; the `TAG` R |
+| 4. `WHENEVER SQLERROR GOTO FIN`, two statements, `FIN TAG` last | `if sqlcode < 0;` `return;` `endif;` after each statement (RPG IV: the first one inside the `if` group) |
+| 5. `WHENEVER SQLERROR STOP` | `exec sql WHENEVER SQLERROR STOP;` as written, R |
 
 ## More mapping tables
 

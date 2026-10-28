@@ -187,6 +187,10 @@ dcl-proc FreeConvert export;
       CalcPrescan(g_sourceLines(l_index));
       CalcJumpScan(g_sourceLines(l_index):g_sourceLineNos(l_index));
     endfor;
+  else;
+    // RPG IV: the jumps, including the WHENEVER jumps of embedded SQL (RV-37), are
+    // read before the first line is converted.
+    Fx4ScanJumps();
   endif;
   ConvertSource();
   if g_dialect = '4';

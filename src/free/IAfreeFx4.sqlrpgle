@@ -1951,6 +1951,37 @@ dcl-proc CPush;
   endif;
 end-proc;
 
+// The group of a skip written by IAfreeCalc after an SQL statement (RV-37): the
+// TAG of the jump closes it like any other skip of ConvertJumpC ('J').
+dcl-proc Fx4SkipOpen export;
+  dcl-pi *n ind;
+    i_open ind const;
+  end-pi;
+
+  // *OFF when the group stack is full (CPush would do nothing): nothing may be
+  // written then, or the IF would have no ENDIF. With i_open *off only the room is
+  // tested: the IF is written first (at the depth before the group) and the group
+  // is opened after it, as ConvertJumpC does.
+  if g_depth >= 60;
+    return *off;
+  endif;
+  if i_open;
+    CPush('J');
+  endif;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc Fx4ScanJumps export;
+  dcl-pi *n;
+  end-pi;
+
+  if not g_jvScanned;
+    ScanJumps();
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc CPop;
   dcl-pi *n;
     i_kind char(1) const;
@@ -3764,6 +3795,8 @@ dcl-proc ScanJumps;
       JumpUnsafe();
       iter;
     endif;
+    // The lines of an embedded SQL statement: the WHENEVER jumps (RV-37).
+    CalcSqlJumpScan(l_line:SrcLineNo(l_i));
     if %subst(%xlate(C_LOWER:C_UPPER:l_line):6:1) <> 'C'
        or %subst(l_line:7:1) = '*' or %subst(l_line:7:1) = '/'
        or %subst(l_line:7:1) = '+';

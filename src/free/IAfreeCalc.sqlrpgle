@@ -120,6 +120,24 @@ dcl-s g_jvFail ind dim(C_MAXJV);        // G: not written (the IF is not open)
 dcl-s g_jvUnconv int(10) dim(C_MAXJV);  // T: GOTO or CABxx to it that stay R
 dcl-s g_jvPre ind dim(C_MAXJV);         // the condition comes from the caller (RPG IV)
 dcl-s g_jvCondPre varchar(300) dim(C_MAXJV);
+dcl-s g_jvSql ind dim(C_MAXJV);         // G: the implicit jump of an SQL WHENEVER (RV-37)
+
+// WHENEVER ... GOTO of embedded SQL (RV-37). The scan before the conversion follows
+// the three conditions in source order (1 SQLERROR, 2 NOT FOUND, 3 SQLWARNING): a
+// WHENEVER holds for every executable SQL statement after it, whatever the order of
+// execution is. Each such statement gets one jump event for every condition that
+// has a label; the key of the event is the negative number from SqlKey, so it
+// cannot meet the line number of a real line.
+dcl-c C_WHEN_N 3;
+dcl-s g_wnLabel varchar(14) dim(C_WHEN_N);   // '' when the condition is not active
+dcl-s g_wnBad ind dim(C_WHEN_N);             // active but the WHENEVER was not understood
+dcl-s g_ssOpen ind;                          // scan: an SQL statement is being read
+dcl-s g_ssLines int(10);
+dcl-s g_ssFirstNo int(10);
+dcl-s g_ssHead varchar(200);                 // the first 200 positions of its text
+dcl-s g_ssHasText ind;
+dcl-s g_ssBlocked ind;                       // the conversion will reject the statement
+dcl-s g_ssOver ind;                          // more events than C_MAXJV: the tests are lost
 
 // The last converted IFxx, DOWxx, DOUxx or WHxx header: ANDxx and ORxx lines
 // that follow extend its condition. g_hdrIndex is 0 when there is none.
@@ -232,6 +250,8 @@ dcl-proc CalcStart export;
   dcl-pi *n;
   end-pi;
 
+  dcl-s l_n int(10);
+
   g_stackCount = 0;
   g_depth = 0;
   g_inSub = *off;
@@ -270,6 +290,17 @@ dcl-proc CalcStart export;
   g_jvUnsafe = *off;
   g_jvPlanned = *off;
   g_jvPending = *off;
+  for l_n = 1 to C_WHEN_N;
+    g_wnLabel(l_n) = '';
+    g_wnBad(l_n) = *off;
+  endfor;
+  g_ssOpen = *off;
+  g_ssLines = 0;
+  g_ssFirstNo = 0;
+  g_ssHead = '';
+  g_ssHasText = *off;
+  g_ssBlocked = *off;
+  g_ssOver = *off;
   g_cycState = ' ';
   g_cycChecked = *off;
   g_cycFile = '';
@@ -1366,6 +1397,8 @@ dcl-proc CalcJumpScan export;
   if %subst(l_up:6:1) <> 'C';
     return;
   endif;
+  // The lines of an embedded SQL statement: the WHENEVER jumps (RV-37).
+  CalcSqlJumpScan(i_line:i_lineNo);
   if %subst(l_up:7:1) = '*' or %subst(l_up:7:1) = '/' or %subst(l_up:7:1) = '+';
     return;
   endif;
@@ -1463,6 +1496,7 @@ dcl-proc CalcJumpScan export;
   g_jvUnconv(g_jvCount) = 0;
   g_jvPre(g_jvCount) = *off;
   g_jvCondPre(g_jvCount) = '';
+  g_jvSql(g_jvCount) = *off;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1814,7 +1848,10 @@ dcl-proc BuildJumpPlan;
         l_ivB(l_ivCount) = l_t;
         l_ivG(l_ivCount) = l_k;
         l_ivOn(l_ivCount) = *on;
+      // No loop for the implicit jump of a WHENEVER (RV-37): it would repeat an
+      // SQL statement until it succeeds, which nobody meant.
       when l_t < l_k and JvBackCount(l_t) = 1 and not g_jvGroupF(l_k)
+           and not g_jvSql(l_k)
            and JvRegionOk(l_t:l_k:*on) and l_ivCount < C_MAXIV;
         l_cond = '';
         l_reason = '';
@@ -1987,6 +2024,7 @@ dcl-proc JumpEvent export;
   g_jvUnconv(g_jvCount) = 0;
   g_jvPre(g_jvCount) = *on;
   g_jvCondPre(g_jvCount) = i_cond;
+  g_jvSql(g_jvCount) = *off;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -5645,7 +5683,18 @@ dcl-proc SqlReject;
   end-pi;
 
   dcl-s l_index int(10);
+  dcl-s l_n int(10);
+  dcl-s l_k int(10);
 
+  // A statement that is not written must not leave a skip of RV-37 open at its TAG.
+  if g_sqlCount > 0;
+    for l_n = 1 to C_WHEN_N;
+      l_k = JvFind(SqlKey(g_sqlLineNo(1):l_n));
+      if l_k > 0;
+        g_jvFail(l_k) = *on;
+      endif;
+    endfor;
+  endif;
   for l_index = 1 to g_sqlCount;
     if l_index = 1;
       // Also writes the lines of indicators that were waiting for an operation.
@@ -5663,6 +5712,524 @@ dcl-proc SqlReject;
 end-proc;
 
 // ------------------------------------------------------------------
+// WHENEVER ... GOTO of embedded SQL (RV-37). The precompiler adds a jump to the label
+// after every executable SQL statement that follows the WHENEVER in the source.
+// Free form has no label to jump to, so the jump is written out: after each such
+// statement an IF tests SQLCODE and the planner of RV-14 decides what the IF does
+// (skip the lines up to the TAG, or LEAVESR, RETURN or ITER when the TAG is the end
+// of the subroutine or the program). The WHENEVER statement itself is kept as a
+// comment: the precompiler would otherwise add its own jump to a label that does
+// not exist any more. A jump back to an earlier TAG is not converted (no loop is
+// built for it): the statement then stays, with a comment and an R in the report.
+// ------------------------------------------------------------------
+// The key of the jump event of an SQL statement: the line of its EXEC SQL and the
+// condition (1 SQLERROR, 2 NOT FOUND, 3 SQLWARNING) as a negative number, so it can
+// not be the number of a source line.
+dcl-proc SqlKey;
+  dcl-pi *n int(10);
+    i_lineNo int(10) const;
+    i_n int(10) const;
+  end-pi;
+
+  return 0 - (i_lineNo * 4 + i_n);
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc WhenName;
+  dcl-pi *n varchar(10);
+    i_n int(10) const;
+  end-pi;
+
+  select;
+    when i_n = 1;
+      return 'SQLERROR';
+    when i_n = 2;
+      return 'NOT FOUND';
+  endsl;
+  return 'SQLWARNING';
+end-proc;
+
+// ------------------------------------------------------------------
+// The test of a condition after an SQL statement (SQL Reference: SQLCODE below 0 is
+// an error, 100 is no row, SQLWARN0 = 'W' or another positive SQLCODE is a warning).
+dcl-proc WhenTest;
+  dcl-pi *n varchar(80);
+    i_n int(10) const;
+  end-pi;
+
+  select;
+    when i_n = 1;
+      return 'sqlcode < 0';
+    when i_n = 2;
+      return 'sqlcode = 100';
+  endsl;
+  return 'sqlwarn0 = ''W'' or (sqlcode > 0 and sqlcode <> 100)';
+end-proc;
+
+// ------------------------------------------------------------------
+// Upper case, without a comment, one blank between the words.
+dcl-proc Squeeze;
+  dcl-pi *n varchar(200);
+    i_text varchar(200) const;
+  end-pi;
+
+  dcl-s l_t varchar(200);
+  dcl-s l_p int(10);
+
+  l_t = %trim(%xlate(C_LOWER:C_UPPER:i_text));
+  l_p = %scan('  ':l_t);
+  dow l_p > 0;
+    l_t = %subst(l_t:1:l_p) + %triml(%subst(l_t:l_p + 1));
+    l_p = %scan('  ':l_t);
+  enddo;
+  return l_t;
+end-proc;
+
+// ------------------------------------------------------------------
+// The text from position i_from, '' when the text is shorter.
+dcl-proc Tail;
+  dcl-pi *n varchar(200);
+    i_text varchar(200) const;
+    i_from int(10) const;
+  end-pi;
+
+  if i_from > %len(i_text);
+    return '';
+  endif;
+  return %subst(i_text:i_from);
+end-proc;
+
+// ------------------------------------------------------------------
+// Adds a line of an SQL statement to its head (the first 200 positions), without
+// the -- comment at its end.
+dcl-proc HeadAdd;
+  dcl-pi *n;
+    io_head varchar(200);
+    i_text varchar(100) const;
+  end-pi;
+
+  dcl-s l_text varchar(100);
+  dcl-s l_p int(10);
+
+  l_text = %trimr(i_text);
+  l_p = SqlFindOutside(l_text:'--');
+  if l_p = 1;
+    return;
+  elseif l_p > 1;
+    l_text = %trimr(%subst(l_text:1:l_p - 1));
+  endif;
+  // The head keeps the first words only (they decide the kind of statement); it can
+  // not grow past its 200 positions: room for a line of 70 after 120.
+  if l_text = '' or %len(io_head) >= 120;
+    return;
+  endif;
+  if io_head <> '';
+    io_head += ' ';
+  endif;
+  io_head += l_text;
+end-proc;
+
+// ------------------------------------------------------------------
+// 'W' for a WHENEVER, 'N' for a statement that is not executed (INCLUDE, DECLARE
+// of a cursor or statement, BEGIN and END DECLARE SECTION, SET OPTION: the
+// precompiler adds no jump after them), 'X' for every other statement.
+dcl-proc SqlKind;
+  dcl-pi *n char(1);
+    i_head varchar(200) const;
+  end-pi;
+
+  dcl-s l_t varchar(200);
+  dcl-s l_p int(10);
+  dcl-s l_word varchar(20);
+
+  l_t = Squeeze(i_head);
+  l_p = %scan(' ':l_t);
+  if l_p = 0;
+    l_word = l_t;
+  else;
+    l_word = %subst(l_t:1:l_p - 1);
+  endif;
+  select;
+    when l_word = 'WHENEVER';
+      return 'W';
+    when l_word = 'INCLUDE' or l_word = 'BEGIN' or l_word = 'END';
+      return 'N';
+    when l_word = 'DECLARE' and %scan('DECLARE GLOBAL ':l_t) <> 1;
+      return 'N';
+    when l_word = 'SET' and %scan('SET OPTION':l_t) = 1;
+      return 'N';
+  endsl;
+  return 'X';
+end-proc;
+
+// ------------------------------------------------------------------
+// WHENEVER {NOT FOUND | SQLERROR | SQLWARNING} {CONTINUE | GOTO label | GO TO label}.
+// Returns *off when the statement is not of that form. o_n is the condition
+// (1 SQLERROR, 2 NOT FOUND, 3 SQLWARNING), o_goto *on for GOTO.
+dcl-proc WheneverParse;
+  dcl-pi *n ind;
+    i_text varchar(200) const;
+    o_n int(10);
+    o_goto ind;
+    o_label varchar(14);
+  end-pi;
+
+  dcl-s l_t varchar(200);
+  dcl-s l_rest varchar(200);
+
+  o_n = 0;
+  o_goto = *off;
+  o_label = '';
+  l_t = Squeeze(i_text);
+  if %len(l_t) < 9 or %subst(l_t:1:9) <> 'WHENEVER ';
+    return *off;
+  endif;
+  l_rest = Tail(l_t:10);
+  select;
+    when %len(l_rest) >= 9 and %subst(l_rest:1:9) = 'NOT FOUND';
+      o_n = 2;
+      l_rest = %triml(Tail(l_rest:10));
+    when %len(l_rest) >= 8 and %subst(l_rest:1:8) = 'SQLERROR';
+      o_n = 1;
+      l_rest = %triml(Tail(l_rest:9));
+    when %len(l_rest) >= 10 and %subst(l_rest:1:10) = 'SQLWARNING';
+      o_n = 3;
+      l_rest = %triml(Tail(l_rest:11));
+    other;
+      return *off;
+  endsl;
+  if l_rest = 'CONTINUE';
+    return *on;
+  endif;
+  select;
+    when %len(l_rest) > 5 and %subst(l_rest:1:5) = 'GOTO ';
+      l_rest = %triml(Tail(l_rest:6));
+    when %len(l_rest) > 6 and %subst(l_rest:1:6) = 'GO TO ';
+      l_rest = %triml(Tail(l_rest:7));
+    other;
+      return *off;
+  endsl;
+  if %len(l_rest) = 0 or %len(l_rest) > 14 or not IsName(l_rest);
+    return *off;
+  endif;
+  o_goto = *on;
+  o_label = l_rest;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// The scan before the conversion (called for every source line, RPG III from
+// CalcJumpScan, RPG IV from IAfreeFx4): follows the WHENEVER statements in source
+// order and gives the planner one jump event for each executable SQL statement and
+// each condition that has a label. It repeats the checks that make SqlEnd reject a
+// statement (no event is made for one that is rejected).
+dcl-proc CalcSqlJumpScan export;
+  dcl-pi *n;
+    i_line char(100) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  dcl-s l_up char(100);
+  dcl-s l_key char(9);
+
+  if RulDialect() <> '3' and RulDialect() <> '4';
+    return;
+  endif;
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  if %subst(l_up:6:1) <> 'C' or %subst(l_up:7:1) = '*';
+    return;
+  endif;
+  l_key = %subst(l_up:7:9);
+  select;
+    when l_key = '/EXEC SQL';
+      g_ssOpen = *on;
+      g_ssLines = 0;
+      g_ssFirstNo = i_lineNo;
+      g_ssHead = '';
+      g_ssHasText = *off;
+      // Lines of indicators before it make the conversion reject it.
+      g_ssBlocked = g_jvPending;
+      g_jvPending = *off;
+      SqlScanText(%trim(%subst(i_line:16:59)));
+    when l_key = '/END-EXEC';
+      if g_ssOpen;
+        SqlScanEnd();
+      endif;
+    when %subst(i_line:7:1) = '+';
+      if g_ssOpen;
+        SqlScanText(%trim(%subst(i_line:8:67)));
+      endif;
+    other;
+      // Any other specification ends a statement that was not closed.
+      g_ssOpen = *off;
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc SqlScanText;
+  dcl-pi *n;
+    i_text varchar(70) const;
+  end-pi;
+
+  g_ssLines += 1;
+  if g_ssLines > C_MAXSQL;
+    g_ssBlocked = *on;
+  endif;
+  if i_text <> '';
+    g_ssHasText = *on;
+    if SqlFindOutside(i_text:';') > 0;
+      g_ssBlocked = *on;
+    endif;
+    HeadAdd(g_ssHead:i_text);
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc SqlScanEnd;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_n int(10);
+  dcl-s l_goto ind;
+  dcl-s l_label varchar(14);
+
+  g_ssOpen = *off;
+  if g_ssBlocked or not g_ssHasText;
+    return;
+  endif;
+  select;
+    when SqlKind(g_ssHead) = 'W';
+      if WheneverParse(g_ssHead:l_n:l_goto:l_label);
+        g_wnBad(l_n) = *off;
+        if l_goto;
+          g_wnLabel(l_n) = l_label;
+        else;
+          g_wnLabel(l_n) = '';
+        endif;
+      else;
+        // Not understood: no condition is known any more, every statement after it
+        // gets a note instead of a test.
+        for l_n = 1 to C_WHEN_N;
+          g_wnLabel(l_n) = '?';
+          g_wnBad(l_n) = *on;
+        endfor;
+      endif;
+    when SqlKind(g_ssHead) = 'X';
+      // Every executable statement is an event, also when no WHENEVER is active:
+      // a TAG is the last statement of a subroutine or program only when no SQL
+      // statement (cleanup, ROLLBACK) follows it either.
+      SqlJumpEvent(0);
+      for l_n = 1 to C_WHEN_N;
+        if g_wnLabel(l_n) <> '';
+          SqlJumpEvent(l_n);
+        endif;
+      endfor;
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc SqlJumpEvent;
+  dcl-pi *n;
+    i_n int(10) const;
+  end-pi;
+
+  // i_n = 0: the statement itself (kind X, no jump), 1 to 3: a condition with a label.
+  // A full table: the tests of a condition are lost, so no jump of the source is
+  // converted; a plain statement only stops the jumps to the end (the planner can
+  // not know that nothing follows the TAG), see SqlJumpWrite.
+  if g_jvCount >= C_MAXJV;
+    if i_n > 0;
+      g_jvUnsafe = *on;
+    endif;
+    g_ssOver = *on;
+    return;
+  endif;
+  g_jvCount += 1;
+  g_jvLineNo(g_jvCount) = SqlKey(g_ssFirstNo:i_n);
+  g_jvLine(g_jvCount) = '';
+  if i_n = 0;
+    g_jvKind(g_jvCount) = 'X';
+    g_jvLabel(g_jvCount) = '';
+    g_jvBad(g_jvCount) = *off;
+  else;
+    g_jvKind(g_jvCount) = 'G';
+    g_jvLabel(g_jvCount) = g_wnLabel(i_n);
+    g_jvBad(g_jvCount) = g_wnBad(i_n);
+  endif;
+  g_jvCondF(g_jvCount) = *on;
+  g_jvGroupF(g_jvCount) = *off;
+  g_jvDepth(g_jvCount) = 0;
+  g_jvBody(g_jvCount) = 0;
+  g_jvAct(g_jvCount) = ' ';
+  g_jvPeer(g_jvCount) = 0;
+  g_jvCond(g_jvCount) = '';
+  g_jvLoopAt(g_jvCount) = *off;
+  g_jvFail(g_jvCount) = *off;
+  g_jvUnconv(g_jvCount) = 0;
+  g_jvPre(g_jvCount) = *on;
+  if i_n = 0;
+    g_jvCondPre(g_jvCount) = '';
+  else;
+    g_jvCondPre(g_jvCount) = WhenTest(i_n);
+  endif;
+  g_jvSql(g_jvCount) = *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// Writes what the plan decided for one condition after an SQL statement that has
+// just been written. Returns *off when nothing could be written (a comment is
+// written instead and the note says why).
+dcl-proc SqlJumpWrite;
+  dcl-pi *n ind;
+    i_lineNo int(10) const;
+    i_n int(10) const;
+    i_outNo int(10) const;
+    io_note varchar(190);
+  end-pi;
+
+  dcl-s l_key int(10);
+  dcl-s l_k int(10);
+  dcl-s l_kind char(1);
+  dcl-s l_act char(1);
+  dcl-s l_label varchar(14);
+  dcl-s l_cond varchar(300);
+  dcl-s l_inSub ind;
+  dcl-s l_loop ind;
+  dcl-s l_loopCond varchar(300);
+  dcl-s l_kEnds int(10);
+  dcl-s l_unconv int(10);
+  dcl-s l_word varchar(10);
+  dcl-s l_what varchar(60);
+  dcl-s l_room ind;
+
+  l_key = SqlKey(i_lineNo:i_n);
+  l_k = JvFind(l_key);
+  if l_k = 0;
+    // No event: the table was full (g_ssOver) or the source has no event for this
+    // statement. A condition that is in force must not be dropped without a word.
+    if g_wnLabel(i_n) <> '' and g_ssOver;
+      Emit('// WHENEVER ' + WhenName(i_n) + ' GOTO ' + g_wnLabel(i_n)
+           + ' is not converted: test SQLCODE here':i_outNo);
+      AddReason(io_note:'WHENEVER ' + WhenName(i_n) + ' GOTO is not converted '
+                + '(RV-37): too many jumps and SQL statements in the source');
+      return *off;
+    endif;
+    return *on;
+  endif;
+  // A WHENEVER that was not understood: one comment for all three conditions.
+  if g_jvBad(l_k);
+    if i_n = 1;
+      Emit('// A WHENEVER before this statement is not understood: test SQLCODE '
+           + 'here':i_outNo);
+      AddReason(io_note:'A WHENEVER before this statement is not understood '
+                + '(RV-37): test SQLCODE by hand');
+      return *off;
+    endif;
+    return *on;
+  endif;
+  l_what = 'WHENEVER ' + WhenName(i_n) + ' GOTO ' + g_jvLabel(l_k);
+  if not JumpInfo(l_key:l_kind:l_act:l_label:l_cond:l_inSub:l_loop:l_loopCond
+                  :l_kEnds:l_unconv)
+     or (l_act <> 'K' and l_act <> 'R')
+     or (l_act = 'R' and g_ssOver);
+    Emit('// ' + l_what + ' is not converted: test SQLCODE here':i_outNo);
+    AddReason(io_note:l_what + ' is not converted (RV-37): TAG is missing, before '
+              + 'the statement, or not in a pattern that can be written');
+    return *off;
+  endif;
+
+  if l_act = 'K';
+    // Room first: when the group cannot be opened nothing may be written, or the IF
+    // would have no ENDIF. The IF is written before the group is opened, so it
+    // stands at the depth of the statement.
+    l_room = (g_stackCount < C_MAXSTACK);
+    if RulDialect() = '4';
+      l_room = Fx4SkipOpen(*off);
+    endif;
+    if not l_room;
+      g_jvFail(l_k) = *on;
+      Emit('// ' + l_what + ' is not converted: groups nested too deep':i_outNo);
+      AddReason(io_note:l_what + ' is not converted (RV-37): groups nested too '
+                + 'deep');
+      return *off;
+    endif;
+    Emit('if ' + Negate(l_cond) + ';':i_outNo);
+    if RulDialect() = '4';
+      Fx4SkipOpen(*on);
+    else;
+      Push('JMP':1:0:'');
+    endif;
+    AddReason(io_note:l_what + ' became an IF around the lines up to TAG '
+              + l_label);
+    return *on;
+  endif;
+
+  if l_inSub;
+    l_word = 'leavesr';
+    AddReason(io_note:l_what + ' became a LEAVESR (TAG ' + l_label
+              + ' is the last statement of the subroutine)');
+  elseif RulDialect() = '3' and g_cycState = 'D';
+    l_word = 'iter';
+    AddReason(io_note:l_what + ' became an ITER (TAG ' + l_label
+              + ' is the last statement of the detail calculations)');
+  else;
+    l_word = 'return';
+    AddReason(io_note:l_what + ' became a RETURN (TAG ' + l_label
+              + ' is the last statement of the program)');
+  endif;
+  Emit('if ' + l_cond + ';':i_outNo);
+  Emit(l_word + ';':i_outNo:1);
+  Emit('endif;':i_outNo);
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// A WHENEVER that is understood: kept as a comment, the tests of SQLCODE written
+// after the following statements take its place.
+dcl-proc SqlWhenever;
+  dcl-pi *n;
+    i_first int(10) const;
+    i_last int(10) const;
+    i_n int(10) const;
+    i_goto ind const;
+    i_label varchar(14) const;
+    i_line char(100) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+  dcl-s l_note varchar(190);
+
+  for l_index = i_first to i_last;
+    if g_sqlText(l_index) = '';
+      iter;
+    endif;
+    if l_index = i_first;
+      Emit('// exec sql ' + g_sqlText(l_index):g_sqlLineNo(l_index));
+    else;
+      Emit('//   ' + g_sqlText(l_index):g_sqlLineNo(l_index));
+    endif;
+  endfor;
+  if i_goto;
+    l_note = 'WHENEVER ' + WhenName(i_n) + ' GOTO ' + i_label
+             + ' is replaced by a test of SQLCODE after each SQL statement that '
+             + 'follows (RV-37)';
+  else;
+    l_note = 'WHENEVER ' + WhenName(i_n) + ' CONTINUE: no test of SQLCODE for this '
+             + 'condition in the statements that follow (RV-37)';
+  endif;
+  for l_index = 1 to g_sqlCount;
+    if l_index = 1;
+      RptItem(C_STS_ASSUMPTION:g_sqlLineNo(1):SpecText(g_sqlRaw(1)):l_note);
+    else;
+      RptItem(C_STS_CONVERTED:g_sqlLineNo(l_index):SpecText(g_sqlRaw(l_index)):'');
+    endif;
+  endfor;
+  RptItem(C_STS_CONVERTED:i_lineNo:SpecText(i_line):'');
+  g_sqlCount = 0;
+end-proc;
+
+// ------------------------------------------------------------------
 // The END-EXEC line: the statement becomes one free-form EXEC SQL statement. The
 // lines of the source stay lines of the output, so the SQL text is not changed.
 dcl-proc SqlEnd;
@@ -5675,7 +6242,12 @@ dcl-proc SqlEnd;
   dcl-s l_first int(10) inz(0);
   dcl-s l_last int(10) inz(0);
   dcl-s l_text varchar(100);
-  dcl-s l_all varchar(5000) inz('');
+  dcl-s l_head varchar(200) inz('');
+  dcl-s l_kind char(1);
+  dcl-s l_n int(10);
+  dcl-s l_wgoto ind;
+  dcl-s l_wlabel varchar(14);
+  dcl-s l_jumpBad ind inz(*off);
   dcl-s l_reason varchar(150) inz('');
   dcl-s l_note varchar(190) inz('');
   dcl-s l_status char(1);
@@ -5714,6 +6286,18 @@ dcl-proc SqlEnd;
     return;
   endif;
 
+  // WHENEVER (RV-37): a WHENEVER that is understood is kept as a comment, the tests
+  // of SQLCODE after the statements that follow take its place.
+  for l_index = l_first to l_last;
+    HeadAdd(l_head:g_sqlText(l_index));
+  endfor;
+  l_kind = SqlKind(l_head);
+  if l_kind = 'W' and WheneverParse(l_head:l_n:l_wgoto:l_wlabel);
+    g_hdrIndex = 0;
+    SqlWhenever(l_first:l_last:l_n:l_wgoto:l_wlabel:i_line:i_lineNo);
+    return;
+  endif;
+
   // The declarations of the result fields go before the first statement.
   if g_declAt = 0;
     AddOut('':g_sqlLineNo(1));
@@ -5739,21 +6323,36 @@ dcl-proc SqlEnd;
     Emit(';':g_sqlLineNo(l_last));
   endif;
 
-  // The report: each line of the source is converted; the notes go on the first.
-  l_all = %xlate(C_LOWER:C_UPPER:g_sqlText(l_first));
-  for l_index = l_first + 1 to l_last;
-    l_all += ' ' + %xlate(C_LOWER:C_UPPER:g_sqlText(l_index));
-  endfor;
-  if %scan('WHENEVER':l_all) > 0 and %scan('GOTO':l_all) > 0;
-    AddReason(l_note:'WHENEVER ... GOTO names a TAG label, and TAG is not converted');
+  // A WHENEVER that is not of the form WHENEVER condition CONTINUE or GOTO label
+  // stays as written (it is still in force for the precompiler) and is reported.
+  if l_kind = 'W';
+    AddReason(l_note:'WHENEVER is not understood and kept as written: a GOTO to a '
+              + 'label of the RPG source does not exist in free form (RV-37)');
+    l_jumpBad = *on;
   endif;
+
+  // The tests of SQLCODE for the WHENEVER ... GOTO that are in force (RV-37).
+  if l_kind = 'X';
+    for l_n = 1 to C_WHEN_N;
+      if not SqlJumpWrite(g_sqlLineNo(1):l_n:g_sqlLineNo(l_last):l_note);
+        l_jumpBad = *on;
+      endif;
+    endfor;
+  endif;
+
+  // The report: each line of the source is converted; the notes go on the first.
   l_status = C_STS_CONVERTED;
   if l_note <> '';
     l_status = C_STS_ASSUMPTION;
   endif;
+  if l_jumpBad;
+    l_status = C_STS_REVIEW;
+  endif;
   if not g_inSub and not g_cycleNoted;
     g_cycleNoted = *on;
-    l_status = C_STS_ASSUMPTION;
+    if l_status <> C_STS_REVIEW;
+      l_status = C_STS_ASSUMPTION;
+    endif;
     AddReason(l_note:RulConfig('CYCLE_NOTE':'The RPG cycle is not emulated'));
   endif;
   for l_index = 1 to g_sqlCount;

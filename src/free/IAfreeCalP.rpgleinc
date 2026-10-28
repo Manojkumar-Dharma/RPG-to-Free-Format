@@ -28,6 +28,15 @@ dcl-pr CalcJumpScan;
   i_lineNo int(10) const;
 end-pr;
 
+// The WHENEVER ... GOTO of embedded SQL (RV-37): every source line goes through here
+// before the conversion; the executable SQL statements after a WHENEVER get a jump
+// event for the planner. Called by CalcJumpScan (RPG II and III) and by IAfreeFx4
+// (RPG IV, which makes its own events for the other operations).
+dcl-pr CalcSqlJumpScan;
+  i_line char(100) const;
+  i_lineNo int(10) const;
+end-pr;
+
 // The jumps of an RPG IV source (RV-14): IAfreeFx4 gives its GOTO, CABxx, TAG and
 // group operations to the planner of IAfreeCalc and asks what to write.
 dcl-pr JumpEvent;
@@ -120,6 +129,14 @@ end-pr;
 // The number of open groups of the RPG IV C specifications (IAfreeFx4), 0 for
 // RPG II and III: SQL statements are indented with it (RV-59).
 dcl-pr Fx4Depth int(10);
+end-pr;
+
+// Opens the group of a skip (the IF that a jump forward became) in the group stack
+// of IAfreeFx4: the TAG closes it with ENDIF. Used for the tests of SQLCODE written
+// after an SQL statement (RV-37); RPG IV only. Returns *off, and opens nothing, when
+// the group stack is full. With i_open *off it only tests for room.
+dcl-pr Fx4SkipOpen ind;
+  i_open ind const;
 end-pr;
 
 // The renamed fields of a file as assignments back to the external fields
