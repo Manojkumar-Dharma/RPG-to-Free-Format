@@ -37,6 +37,7 @@ cannot check. The R list is in `REVIEW-ITEMS.md`. Audit of 2026-10-27.
 | RPG IV program described printer file, exception records and `EXCEPT` (FREE-42) | `Norm4` in `IAfreeOut`, `ExceptStmt` in `IAfreeFx4` | new: A for the file (declared externally described); the DDS is not tested; the field types come from the D specifications |
 | Edited output fields: width of the edit codes, `PAGNBR`, `DATE` (FREE-38) | `IAfreeOut` | new: the DDS positions come from the manual's tables, not from a run |
 | WORKSTN file and record formats of a display file (FREE-43) | `ConvertDisplayFile`, `ConvertFileOp` | new: the DDS is not read, a record format is taken as a format of the one WORKSTN file |
+| WORKSTN file and record formats of a display file in RPG IV (FREE-45) | `ConvertF`, `ResultInds`, `IsDisplayFormat` | new: as FREE-43; a name that is not a declared file is taken as a record format when the source has a WORKSTN file |
 | `GOTO`, `CABxx`, `TAG` patterns in RPG IV (FREE-44) | `ConvertJumpC` | new: as FREE-35 |
 
 ## Proposed changes

@@ -738,6 +738,11 @@ dcl-proc ConvertF;
     when l_device <> 'DISK' and l_device <> 'PRINTER' and l_device <> 'WORKSTN'
          and l_device <> 'SEQ' and l_device <> 'SPECIAL';
       l_reason = 'Device (columns 36-42) ' + l_device + ' is not valid';
+    when l_device = 'WORKSTN' and l_fmt = 'F';
+      l_reason = 'A program described WORKSTN file is not converted (only externally '
+                 + 'described display files, RV-31)';
+    when l_device = 'WORKSTN' and l_type = 'U';
+      l_reason = 'A display file is an input, output or combined file (I, O or C)';
     when l_fmt = 'F' and not IsDigits(l_recLen);
       l_reason = 'Record length (columns 23-27) is missing';
     when l_fmt = 'E' and l_recLen <> '';
@@ -805,7 +810,11 @@ dcl-proc ConvertF;
       l_note = 'end of file entry (column 19) ignored: it only matters for the '
                + 'RPG cycle';
     endif;
-    l_stmt = 'dcl-f ' + l_name + ' ' + l_deviceText + ' usage(' + l_usage + ')';
+    l_stmt = 'dcl-f ' + l_name + ' ' + l_deviceText;
+    // The usage of a combined display file is the default of workstn.
+    if not (l_device = 'WORKSTN' and l_type = 'C');
+      l_stmt += ' usage(' + l_usage + ')';
+    endif;
     if l_keyed <> '';
       l_stmt += ' ' + l_keyed;
     endif;
@@ -3433,6 +3442,27 @@ dcl-proc LookupStmts;
 end-proc;
 
 // ------------------------------------------------------------------
+// True when the name is not a declared file but the source has a WORKSTN file: it is
+// taken as a record format of the display file (RV-12, RV-31; the DDS is not read).
+dcl-proc IsDisplayFormat;
+  dcl-pi *n ind;
+    i_name varchar(14) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+
+  if i_name = '' or FlFind(i_name) > 0;
+    return *off;
+  endif;
+  for l_k = 1 to g_flCount;
+    if g_flDevice(l_k) = 'WORKSTN';
+      return *on;
+    endif;
+  endfor;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
 // The statements that give the resulting indicators of an operation their value
 // (Table 99 of SC09-2508): '; ' separated, '' when there are none. o_error is
 // *on when an error indicator needs the (E) extender. o_reason is set for an
@@ -3454,9 +3484,17 @@ dcl-proc ResultInds;
   dcl-s l_test varchar(100);
   dcl-s l_isFile ind inz(*off);
   dcl-s l_pos int(10);
+  dcl-s l_arg varchar(16);
 
   o_error = *off;
   o_reason = '';
+  // The built-in functions of file operations take a file name: the record format
+  // of a display file (RV-12, RV-31) is not one, so no argument is written and the
+  // function refers to the file of the operation just done.
+  l_arg = '(' + i_f2 + ')';
+  if IsDisplayFormat(i_f2);
+    l_arg = '';
+  endif;
   l_ind(1) = Txt('C':'HI':i_line);
   l_ind(2) = Txt('C':'LO':i_line);
   l_ind(3) = Txt('C':'EQ':i_line);
@@ -3464,7 +3502,8 @@ dcl-proc ResultInds;
              or i_op = 'DELETE' or i_op = 'READ' or i_op = 'READE'
              or i_op = 'READP' or i_op = 'READPE' or i_op = 'WRITE'
              or i_op = 'UPDATE' or i_op = 'EXFMT' or i_op = 'OPEN'
-             or i_op = 'CLOSE' or i_op = 'UNLOCK' or i_op = 'FEOD';
+             or i_op = 'CLOSE' or i_op = 'UNLOCK' or i_op = 'FEOD'
+             or i_op = 'READC';
 
   for l_k = 1 to 3;
     if l_ind(l_k) = '';
@@ -3474,15 +3513,15 @@ dcl-proc ResultInds;
     select;
       when l_isFile and l_k = 1 and (i_op = 'CHAIN' or i_op = 'SETLL'
            or i_op = 'SETGT' or i_op = 'DELETE');
-        l_test = 'not %found(' + i_f2 + ')';
+        l_test = 'not %found' + l_arg;
       when l_isFile and l_k = 2;
         o_error = *on;
         l_test = '%error';
       when l_isFile and l_k = 3 and (i_op = 'READ' or i_op = 'READE'
-           or i_op = 'READP' or i_op = 'READPE');
-        l_test = '%eof(' + i_f2 + ')';
+           or i_op = 'READP' or i_op = 'READPE' or i_op = 'READC');
+        l_test = '%eof' + l_arg;
       when l_isFile and l_k = 3 and i_op = 'SETLL';
-        l_test = '%equal(' + i_f2 + ')';
+        l_test = '%equal' + l_arg;
       when i_op = 'CALL' and l_k = 2;
         o_error = *on;
         l_test = '%error';
@@ -4452,7 +4491,7 @@ dcl-proc ConvertC;
       when l_op = 'CHAIN' or l_op = 'READE' or l_op = 'READPE' or l_op = 'SETLL'
            or l_op = 'SETGT' or l_op = 'DELETE' or l_op = 'READ' or l_op = 'READP'
            or l_op = 'WRITE' or l_op = 'UPDATE' or l_op = 'OPEN' or l_op = 'CLOSE'
-           or l_op = 'UNLOCK' or l_op = 'FEOD' or l_op = 'EXFMT';
+           or l_op = 'UNLOCK' or l_op = 'FEOD' or l_op = 'EXFMT' or l_op = 'READC';
         if l_err and %scan('e':l_ext) = 0;
           if l_ext = '';
             l_ext = '(e)';
@@ -4489,12 +4528,15 @@ dcl-proc ConvertC;
         endif;
         if l_res <> '' and (l_op = 'CHAIN' or l_op = 'READE' or l_op = 'READPE'
            or l_op = 'READ' or l_op = 'READP' or l_op = 'WRITE' or l_op = 'UPDATE'
-           or l_op = 'EXFMT');
+           or l_op = 'EXFMT' or l_op = 'READC');
           l_args += ' ' + l_res;
         elseif l_res <> '';
           l_reason = 'Result field on ' + l_op + ' is not converted';
         endif;
         l_stmt += ' ' + l_args;
+      when l_op = 'ACQ' or l_op = 'REL' or l_op = 'NEXT' or l_op = 'POST';
+        l_reason = l_op + ' (multiple device files and WORKSTN) has no free-form '
+                   + 'equivalent that is converted';
       other;
         l_reason = 'Operation ' + l_op + ' is not converted yet (RPG IV)';
     endsl;

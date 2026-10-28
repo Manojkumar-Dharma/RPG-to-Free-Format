@@ -1014,6 +1014,20 @@ Source: SC09-1817 (file description, continuation line SFILE; EXFMT, READC and t
 
 The indicators of the DDS are the `*IN` indicators, as in RPG III: no `INDDS` is written. The usage of a combined file is the default of `workstn` (input and output). Sample `samples/FREEWKS.rpg38`. Written from the manual and not from a run.
 
+## WORKSTN: display files in RPG IV (FREE-45, RV-12, RV-31)
+
+Same rules as FREE-43 for the source in RPG IV columns. Only externally described display files are converted; the DDS is not read.
+
+| Source | Free-form |
+|---|---|
+| `F... CF  E ... WORKSTN SFILE(FMT:RRN)` | `dcl-f NAME workstn sfile(FMT:RRN);` (a combined file has no `usage`; `I` gives `usage(*input)`, `O` gives `usage(*output)`) |
+| `EXFMT FORMAT` | `exfmt FORMAT;` (ER in 73-74 gives the `(e)` extender and `*INnn = (%error)`) |
+| `READC FORMAT` | `readc FORMAT;`, EOF in 75-76 gives `*INnn = (%eof);` |
+| `WRITE`, `UPDATE`, `READ`, `DELETE`, `CHAIN` of a record format | as for DISK files; `%found`, `%eof` and `%equal` have no argument for a record format of the display file (they take a file name) |
+| `ACQ`, `REL`, `NEXT`, `POST`; program described WORKSTN (F in column 22); a display file of type U | R |
+
+Sample `samples/FREEWKS4.rpgle`. Written from the manual and not from a run.
+
 ## GOTO, CABxx and TAG in RPG IV (FREE-44, RV-14)
 
 The same patterns and the same planner as for RPG II and III (see the section above): `IAfreeFx4` reads its own columns (conditioning indicator in columns 9-11, `CABxx` factors and label in the result field) and gives every group operation, `GOTO`, `CABxx` and `TAG` to the planner (`JumpEvent`) when the first calculation is converted; each line then writes what the plan decided (`JumpInfo`).
