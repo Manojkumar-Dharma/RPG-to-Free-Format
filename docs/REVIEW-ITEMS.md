@@ -32,7 +32,7 @@ Code status and test status follow `PLANNED.md`.
 | RV-11 | `IN`, `OUT`, `*NAMVAR DEFN`, `UNLCK` of a data area written (FREE-17); `OCUR` written (FREE-20) | data areas and data structures | Convert: `in`, `out`, `occur`; `*DTAARA` definitions through `DEFN` (RV-07) | Written | Not tested |
 | RV-12 | `EXFMT`, `READC`, `ACQ`, `NEXT`, `POST`, `REL` | WORKSTN file I/O | Decided 2026-10-28: externally described display files first; `EXFMT`, `READC` and the format operations written in FREE-43; `ACQ`, `REL`, `NEXT`, `POST` stay R | Written in part | Not tested |
 | RV-13 | `EXCPT`, `PAGE`, `PAGE1` to `PAGE7`, O and L specifications | output | FREE-06: exception records done in part 1, the rest is RV-60 to RV-63 | Written | Not tested |
-| RV-14 | `GOTO`, `TAG`, `CABxx` | free-form has no `GOTO` | Decided: rewrite the common patterns (skip forward to a `TAG` in the same group, loop back, jump to the end) with `if`, `dou`/`dow`, `leave`, `return`; the other patterns stay R | Written for RPG II and III (FREE-35) | Not tested; RPG IV (dialect 4) still R |
+| RV-14 | `GOTO`, `TAG`, `CABxx` | free-form has no `GOTO` | Decided: rewrite the common patterns (skip forward to a `TAG` in the same group, loop back, jump to the end) with `if`, `dou`/`dow`, `leave`, `return`; the other patterns stay R | Written for RPG II and III (FREE-35) and RPG IV fixed form (FREE-44) | Not tested |
 | RV-15 | `DEBUG`, `EXIT`, `FORCE`, `FREE`, `KEY`, `RLABL`, `SET`, `SHTDN` | S/36 and external subroutine features | No form: the reason names the replacement (`dump`, `callp`, `*inlr`) | Done | N/A |
 
 ## IACNVFREE: the RPG cycle

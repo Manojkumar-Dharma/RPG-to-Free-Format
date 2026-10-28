@@ -32,8 +32,9 @@ dcl-s g_block char(2) inz('');          // DS, PR or PI that is still open
 dcl-s g_blockName varchar(150) inz('');
 dcl-s g_inFree ind inz(*off);           // inside /FREE ... /END-FREE
 dcl-s g_lastLineNo int(10) inz(0);
-dcl-s g_stack char(1) dim(60);          // open C groups: I, L, S, W, M, E, R
+dcl-s g_stack char(1) dim(60);          // open C groups: I, L, S, W, M, E, R, J (skip of a GOTO)
 dcl-s g_depth int(10) inz(0);
+dcl-s g_jvScanned ind inz(*off);       // the jumps of the source are given to the planner
 dcl-s g_hdrIdx int(10) dim(60);         // output line and text of a DO header
 dcl-s g_hdrTxt varchar(300) dim(60);
 dcl-s g_klName varchar(14) dim(50);     // KLIST names and their key fields
@@ -154,6 +155,7 @@ dcl-proc Fx4Start export;
   g_constCount = 0;
   g_kwCount = 0;
   g_depth = 0;
+  g_jvScanned = *off;
   g_klCount = 0;
   g_klDone = *off;
   g_symCount = 0;
@@ -3627,6 +3629,263 @@ dcl-proc NextCalcLine;
 end-proc;
 
 // ------------------------------------------------------------------
+// GOTO, CABxx and TAG of the C specifications (review item RV-14). The whole source
+// is given once to the planner of IAfreeCalc (skip forward, jump to the end of the
+// subroutine or program, loop back, leave: see RPG-MAPPING.md); the line then
+// writes what the plan decided.
+dcl-proc JumpIndicator;
+  dcl-pi *n varchar(40);
+    i_line char(100) const;
+    o_bad ind;
+  end-pi;
+
+  dcl-s l_ind varchar(2);
+  dcl-s l_text varchar(40) inz('');
+
+  o_bad = *off;
+  l_ind = Up(Txt('C':'IND1':i_line));
+  if l_ind = '';
+    if Txt('C':'NOT1':i_line) <> '';
+      o_bad = *on;
+    endif;
+    return '';
+  endif;
+  if %check(C_UPPER + C_DIGITS:l_ind) > 0 or l_ind = 'RT'
+     or %subst(l_ind:1:1) = 'L';
+    o_bad = *on;
+    return '';
+  endif;
+  l_text = '*in' + l_ind;
+  if Up(Txt('C':'NOT1':i_line)) = 'N';
+    l_text = 'not ' + l_text;
+  endif;
+  return l_text;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc IsCabOp;
+  dcl-pi *n ind;
+    i_op varchar(10) const;
+  end-pi;
+
+  return %len(i_op) = 5 and %subst(i_op:1:3) = 'CAB'
+         and CompareSymbol(%subst(i_op:4:2)) <> '';
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc ScanJumps;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_line char(100);
+  dcl-s l_op varchar(10);
+  dcl-s l_p varchar(15);
+  dcl-s l_kind char(1);
+  dcl-s l_label varchar(14);
+  dcl-s l_cond varchar(300);
+  dcl-s l_ind varchar(40);
+  dcl-s l_bad ind;
+  dcl-s l_condF ind;
+  dcl-s l_word varchar(10);
+
+  g_jvScanned = *on;
+  for l_i = 1 to SrcCount();
+    l_line = SrcLine(l_i);
+    // A /FREE block or a CASxx: the planner cannot follow it.
+    l_word = Up(%trim(%subst(l_line:7:6)));
+    if %scan('/FREE':l_word) = 1;
+      JumpUnsafe();
+      iter;
+    endif;
+    if %subst(%xlate(C_LOWER:C_UPPER:l_line):6:1) <> 'C'
+       or %subst(l_line:7:1) = '*' or %subst(l_line:7:1) = '/'
+       or %subst(l_line:7:1) = '+';
+      iter;
+    endif;
+    l_op = OpOf(l_line);
+    if l_op = '' or IsAndOr(l_op);
+      iter;
+    endif;
+    l_p = l_op + '     ';
+    l_kind = 'X';
+    l_label = '';
+    l_cond = '';
+    l_bad = *off;
+    l_condF = *off;
+    select;
+      when l_op = 'IF' or l_op = 'SELECT' or l_op = 'MONITOR'
+           or (%subst(l_p:1:2) = 'IF'
+               and CompareSymbol(%trim(%subst(l_p:3:2))) <> '');
+        l_kind = 'O';
+      when l_op = 'DO' or l_op = 'DOW' or l_op = 'DOU' or l_op = 'FOR'
+           or ((%subst(l_p:1:3) = 'DOW' or %subst(l_p:1:3) = 'DOU')
+               and CompareSymbol(%trim(%subst(l_p:4:2))) <> '');
+        l_kind = 'L';
+      when l_op = 'ELSE' or l_op = 'ELSEIF' or l_op = 'WHEN' or l_op = 'OTHER'
+           or l_op = 'ON-ERROR'
+           or (%subst(l_p:1:2) = 'WH'
+               and CompareSymbol(%trim(%subst(l_p:3:2))) <> '');
+        l_kind = 'M';
+      when l_op = 'ENDIF' or l_op = 'ENDDO' or l_op = 'ENDFOR' or l_op = 'ENDSL'
+           or l_op = 'ENDMON' or l_op = 'END';
+        l_kind = 'C';
+      when l_op = 'BEGSR';
+        l_kind = 'S';
+      when l_op = 'ENDSR';
+        l_kind = 'E';
+      when l_op = 'ITER' or l_op = 'LEAVE';
+        l_kind = 'Z';
+      when l_op = 'CAS' or (%subst(l_p:1:3) = 'CAS'
+           and CompareSymbol(%trim(%subst(l_p:4:2))) <> '');
+        JumpUnsafe();
+      when l_op = 'GOTO' or IsCabOp(l_op);
+        l_kind = 'G';
+        l_ind = JumpIndicator(l_line:l_bad);
+        l_condF = (l_ind <> '');
+        l_cond = l_ind;
+        if l_op = 'GOTO';
+          l_label = Up(Txt('C':'FACTOR2':l_line));
+        else;
+          l_label = Up(Txt('C':'RESULT':l_line));
+          l_condF = *on;
+          if Txt('C':'FACTOR1':l_line) = '' or Txt('C':'FACTOR2':l_line) = ''
+             or Txt('C':'HI':l_line) <> '' or Txt('C':'LO':l_line) <> ''
+             or Txt('C':'EQ':l_line) <> '';
+            l_bad = *on;
+          else;
+            if l_cond <> '';
+              l_cond += ' and ';
+            endif;
+            l_cond += Txt('C':'FACTOR1':l_line) + ' '
+                      + CompareSymbol(%subst(l_op:4:2)) + ' '
+                      + Txt('C':'FACTOR2':l_line);
+          endif;
+        endif;
+      when l_op = 'TAG';
+        l_kind = 'T';
+        l_label = Up(Txt('C':'FACTOR1':l_line));
+        l_ind = JumpIndicator(l_line:l_bad);
+        if l_ind <> '';
+          l_bad = *on;
+        endif;
+    endsl;
+    if l_kind = 'G' or l_kind = 'T';
+      if l_label = '' or Txt('C':'LEVEL':l_line) <> '';
+        l_bad = *on;
+      endif;
+    endif;
+    JumpEvent(SrcLineNo(l_i):l_kind:l_label:l_condF:l_bad:l_cond);
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+// The conversion of one GOTO, CABxx or TAG line (i_op is one of them).
+dcl-proc ConvertJumpC;
+  dcl-pi *n;
+    i_index int(10) const;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_kind char(1);
+  dcl-s l_act char(1);
+  dcl-s l_label varchar(14);
+  dcl-s l_cond varchar(300);
+  dcl-s l_inSub ind;
+  dcl-s l_loop ind;
+  dcl-s l_loopCond varchar(300);
+  dcl-s l_kEnds int(10);
+  dcl-s l_unconv int(10);
+  dcl-s l_n int(10);
+  dcl-s l_word varchar(10);
+  dcl-s l_note varchar(190);
+
+  if not g_jvScanned;
+    ScanJumps();
+  endif;
+  if not JumpInfo(i_lineNo:l_kind:l_act:l_label:l_cond:l_inSub:l_loop:l_loopCond
+                  :l_kEnds:l_unconv);
+    ReviewWithContinuations(i_index:i_lineNo:i_line:0
+                            :'GOTO, CABxx or TAG outside the converted patterns '
+                             + '(RV-14)');
+    return;
+  endif;
+
+  if l_kind = 'T';
+    // The IFs of the skips that were written end here.
+    for l_n = 1 to l_kEnds;
+      if g_depth > 0 and g_stack(g_depth) = 'J';
+        CPop(' ');
+        EmitStatement(2 * g_depth:'endif;':i_lineNo);
+      endif;
+    endfor;
+    if l_loop;
+      if l_loopCond <> '';
+        EmitStatement(2 * g_depth:'dou ' + JumpNegate(l_loopCond) + ';':i_lineNo);
+      else;
+        EmitStatement(2 * g_depth:'dow *on;':i_lineNo);
+      endif;
+      CPush('L');
+      ReportWithContinuations(i_index:i_lineNo:i_line:0
+                              :'TAG ' + l_label + ' starts a loop that ends at the '
+                               + 'jump back');
+    elseif l_unconv > 0;
+      ReviewWithContinuations(i_index:i_lineNo:i_line:0
+                              :'A GOTO or CABxx to ' + l_label + ' is not converted');
+    else;
+      EmitStatement(2 * g_depth:'// TAG ' + l_label:i_lineNo);
+      ReportWithContinuations(i_index:i_lineNo:i_line:0:'');
+    endif;
+    return;
+  endif;
+
+  select;
+    when l_act = 'K';
+      EmitStatement(2 * g_depth:'if ' + JumpNegate(l_cond) + ';':i_lineNo);
+      CPush('J');
+      ReportWithContinuations(i_index:i_lineNo:i_line:0
+                              :'Jump forward to TAG ' + l_label + ' became an IF '
+                               + 'around the lines up to the TAG');
+    when l_act = 'B';
+      if g_depth > 0 and g_stack(g_depth) = 'L';
+        CPop(' ');
+        EmitStatement(2 * g_depth:'enddo;':i_lineNo);
+        ReportWithContinuations(i_index:i_lineNo:i_line:0
+                                :'Jump back to TAG ' + l_label + ' became the end of '
+                                 + 'a loop');
+      else;
+        ReviewWithContinuations(i_index:i_lineNo:i_line:0
+                                :'GOTO, CABxx or TAG outside the converted patterns '
+                                 + '(RV-14)');
+      endif;
+    when l_act = 'R' or l_act = 'V';
+      if l_act = 'V';
+        l_word = 'leave';
+        l_note = 'Jump to TAG ' + l_label + ' after the loop became LEAVE';
+      elseif l_inSub;
+        l_word = 'leavesr';
+        l_note = 'Jump to the last TAG of the subroutine became LEAVESR';
+      else;
+        l_word = 'return';
+        l_note = 'Jump to the last TAG of the program became RETURN';
+      endif;
+      if l_cond = '';
+        EmitStatement(2 * g_depth:l_word + ';':i_lineNo);
+      else;
+        EmitStatement(2 * g_depth:'if ' + l_cond + ';':i_lineNo);
+        EmitStatement(2 * g_depth + 2:l_word + ';':i_lineNo);
+        EmitStatement(2 * g_depth:'endif;':i_lineNo);
+      endif;
+      ReportWithContinuations(i_index:i_lineNo:i_line:0:l_note);
+    other;
+      ReviewWithContinuations(i_index:i_lineNo:i_line:0
+                              :'GOTO, CABxx or TAG outside the converted patterns '
+                               + '(RV-14)');
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc ConvertC;
   dcl-pi *n int(10);
     i_index int(10) const;
@@ -3702,6 +3961,12 @@ dcl-proc ConvertC;
   l_f1 = Txt('C':'FACTOR1':i_line);
   l_f2 = Txt('C':'FACTOR2':i_line);
   l_res = Txt('C':'RESULT':i_line);
+
+  // GOTO, CABxx and TAG (RV-14).
+  if l_op = 'GOTO' or l_op = 'TAG' or IsCabOp(l_op);
+    ConvertJumpC(i_index:i_lineNo:i_line);
+    return 0;
+  endif;
 
   // Extended factor 2 and its continuation lines.
   if IsExtF2Op(l_op);

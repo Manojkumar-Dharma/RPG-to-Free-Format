@@ -28,6 +28,37 @@ dcl-pr CalcJumpScan;
   i_lineNo int(10) const;
 end-pr;
 
+// The jumps of an RPG IV source (RV-14): IAfreeFx4 gives its GOTO, CABxx, TAG and
+// group operations to the planner of IAfreeCalc and asks what to write.
+dcl-pr JumpEvent;
+  i_lineNo int(10) const;
+  i_kind char(1) const;
+  i_label varchar(14) const;
+  i_condF ind const;
+  i_bad ind const;
+  i_cond varchar(300) const;
+end-pr;
+
+dcl-pr JumpUnsafe;
+end-pr;
+
+dcl-pr JumpNegate varchar(310);
+  i_cond varchar(300) const;
+end-pr;
+
+dcl-pr JumpInfo ind;
+  i_lineNo int(10) const;
+  o_kind char(1);
+  o_act char(1);
+  o_label varchar(14);
+  o_cond varchar(300);
+  o_inSub ind;
+  o_loop ind;
+  o_loopCond varchar(300);
+  o_kEnds int(10);
+  o_unconv int(10);
+end-pr;
+
 // Defines a field of known length and type (kind C alphanumeric, N numeric with
 // the length in digits) for MOVE and MOVEL.
 dcl-pr CalcDefineField;

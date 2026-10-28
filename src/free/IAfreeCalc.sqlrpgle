@@ -106,7 +106,7 @@ dcl-s g_jvPending ind;
 dcl-s g_jvLineNo int(10) dim(C_MAXJV);
 dcl-s g_jvLine char(100) dim(C_MAXJV);
 dcl-s g_jvKind char(1) dim(C_MAXJV);
-dcl-s g_jvLabel varchar(8) dim(C_MAXJV);
+dcl-s g_jvLabel varchar(14) dim(C_MAXJV);
 dcl-s g_jvCondF ind dim(C_MAXJV);       // G: conditioned (CABxx, indicators, group)
 dcl-s g_jvGroupF ind dim(C_MAXJV);      // G: lines of indicators before it
 dcl-s g_jvBad ind dim(C_MAXJV);         // not convertible (level, indicators, label)
@@ -118,6 +118,8 @@ dcl-s g_jvCond varchar(300) dim(C_MAXJV);   // G of a loop: the condition
 dcl-s g_jvLoopAt ind dim(C_MAXJV);      // T: a loop starts here
 dcl-s g_jvFail ind dim(C_MAXJV);        // G: not written (the IF is not open)
 dcl-s g_jvUnconv int(10) dim(C_MAXJV);  // T: GOTO or CABxx to it that stay R
+dcl-s g_jvPre ind dim(C_MAXJV);         // the condition comes from the caller (RPG IV)
+dcl-s g_jvCondPre varchar(300) dim(C_MAXJV);
 
 // The last converted IFxx, DOWxx, DOUxx or WHxx header: ANDxx and ORxx lines
 // that follow extend its condition. g_hdrIndex is 0 when there is none.
@@ -1355,7 +1357,7 @@ dcl-proc CalcJumpScan export;
   dcl-s l_op varchar(5);
   dcl-s l_level char(2);
   dcl-s l_kind char(1);
-  dcl-s l_label varchar(8) inz('');
+  dcl-s l_label varchar(14) inz('');
   dcl-s l_cond ind inz(*off);
   dcl-s l_bad ind inz(*off);
   dcl-s l_group ind inz(*off);
@@ -1459,6 +1461,8 @@ dcl-proc CalcJumpScan export;
   g_jvLoopAt(g_jvCount) = *off;
   g_jvFail(g_jvCount) = *off;
   g_jvUnconv(g_jvCount) = 0;
+  g_jvPre(g_jvCount) = *off;
+  g_jvCondPre(g_jvCount) = '';
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1483,7 +1487,7 @@ end-proc;
 // several or the TAG cannot be converted.
 dcl-proc JvTag;
   dcl-pi *n int(10);
-    i_label varchar(8) const;
+    i_label varchar(14) const;
   end-pi;
 
   dcl-s l_k int(10);
@@ -1814,7 +1818,9 @@ dcl-proc BuildJumpPlan;
            and JvRegionOk(l_t:l_k:*on) and l_ivCount < C_MAXIV;
         l_cond = '';
         l_reason = '';
-        if g_jvCondF(l_k);
+        if g_jvCondF(l_k) and g_jvPre(l_k);
+          l_cond = g_jvCondPre(l_k);
+        elseif g_jvCondF(l_k);
           l_cond = JumpCondition(g_jvLine(l_k):l_reason);
         endif;
         if l_reason = '';
@@ -1939,6 +1945,124 @@ dcl-proc JvInsideNoLoop;
   for l_s = 1 to l_top;
     if l_stack(l_s) = 'L';
       return *off;
+    endif;
+  endfor;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// The jumps of an RPG IV source (RV-14): IAfreeFx4 reads its own columns and gives
+// each GOTO, CABxx, TAG and group operation to the planner here. i_kind as in
+// CalcJumpScan (O, L, M, C, S, E, Z, G, T, X); i_cond is the whole condition of a
+// GOTO or CABxx as free-form text (its indicator and the comparison).
+dcl-proc JumpEvent export;
+  dcl-pi *n;
+    i_lineNo int(10) const;
+    i_kind char(1) const;
+    i_label varchar(14) const;
+    i_condF ind const;
+    i_bad ind const;
+    i_cond varchar(300) const;
+  end-pi;
+
+  if g_jvCount >= C_MAXJV;
+    g_jvUnsafe = *on;
+    return;
+  endif;
+  g_jvCount += 1;
+  g_jvLineNo(g_jvCount) = i_lineNo;
+  g_jvLine(g_jvCount) = '';
+  g_jvKind(g_jvCount) = i_kind;
+  g_jvLabel(g_jvCount) = i_label;
+  g_jvCondF(g_jvCount) = i_condF;
+  g_jvGroupF(g_jvCount) = *off;
+  g_jvBad(g_jvCount) = i_bad;
+  g_jvDepth(g_jvCount) = 0;
+  g_jvBody(g_jvCount) = 0;
+  g_jvAct(g_jvCount) = ' ';
+  g_jvPeer(g_jvCount) = 0;
+  g_jvCond(g_jvCount) = '';
+  g_jvLoopAt(g_jvCount) = *off;
+  g_jvFail(g_jvCount) = *off;
+  g_jvUnconv(g_jvCount) = 0;
+  g_jvPre(g_jvCount) = *on;
+  g_jvCondPre(g_jvCount) = i_cond;
+end-proc;
+
+// ------------------------------------------------------------------
+// The source has something the planner cannot follow (a /FREE block, CASxx): no
+// jump is converted.
+dcl-proc JumpUnsafe export;
+  dcl-pi *n;
+  end-pi;
+
+  g_jvUnsafe = *on;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc JumpNegate export;
+  dcl-pi *n varchar(310);
+    i_cond varchar(300) const;
+  end-pi;
+
+  return Negate(i_cond);
+end-proc;
+
+// ------------------------------------------------------------------
+// What the plan decided for the line (a jump or a TAG). *OFF when the line is not
+// converted. o_act of a jump: K skip, B end of a loop, R end of the subroutine or
+// program, V leave. For a TAG: o_loop and o_loopCond (the loop that starts here),
+// o_kEnds (the IFs of skips that end here), o_unconv (jumps to it that stay R).
+dcl-proc JumpInfo export;
+  dcl-pi *n ind;
+    i_lineNo int(10) const;
+    o_kind char(1);
+    o_act char(1);
+    o_label varchar(14);
+    o_cond varchar(300);
+    o_inSub ind;
+    o_loop ind;
+    o_loopCond varchar(300);
+    o_kEnds int(10);
+    o_unconv int(10);
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_g int(10);
+
+  o_kind = ' ';
+  o_act = ' ';
+  o_label = '';
+  o_cond = '';
+  o_inSub = *off;
+  o_loop = *off;
+  o_loopCond = '';
+  o_kEnds = 0;
+  o_unconv = 0;
+  if not g_jvPlanned;
+    BuildJumpPlan();
+  endif;
+  l_k = JvFind(i_lineNo);
+  if l_k = 0 or g_jvUnsafe or g_jvBad(l_k);
+    return *off;
+  endif;
+  o_kind = g_jvKind(l_k);
+  o_label = g_jvLabel(l_k);
+  o_inSub = (g_jvBody(l_k) <> 0);
+  if g_jvKind(l_k) = 'G';
+    o_act = g_jvAct(l_k);
+    o_cond = g_jvCondPre(l_k);
+    return *on;
+  endif;
+  o_unconv = g_jvUnconv(l_k);
+  o_loop = g_jvLoopAt(l_k);
+  for l_g = 1 to g_jvCount;
+    if g_jvKind(l_g) = 'G' and g_jvPeer(l_g) = l_k and not g_jvFail(l_g);
+      if g_jvAct(l_g) = 'K';
+        o_kEnds += 1;
+      elseif g_jvAct(l_g) = 'B';
+        o_loopCond = g_jvCond(l_g);
+      endif;
     endif;
   endfor;
   return *on;

@@ -1013,3 +1013,16 @@ Source: SC09-1817 (file description, continuation line SFILE; EXFMT, READC and t
 | `ACQ`, `REL`, `NEXT`, `POST`; `ID`, `IND`, `NUM`, `PASS`, `SAVDS`, `SLN`, `PLIST` continuations; program described display files | R |
 
 The indicators of the DDS are the `*IN` indicators, as in RPG III: no `INDDS` is written. The usage of a combined file is the default of `workstn` (input and output). Sample `samples/FREEWKS.rpg38`. Written from the manual and not from a run.
+
+## GOTO, CABxx and TAG in RPG IV (FREE-44, RV-14)
+
+The same patterns and the same planner as for RPG II and III (see the section above): `IAfreeFx4` reads its own columns (conditioning indicator in columns 9-11, `CABxx` factors and label in the result field) and gives every group operation, `GOTO`, `CABxx` and `TAG` to the planner (`JumpEvent`) when the first calculation is converted; each line then writes what the plan decided (`JumpInfo`).
+
+| Source | Free-form |
+|---|---|
+| `GOTO` with an indicator (or `CABxx`) to a later `TAG` in the same group | `if not (cond);` ... `endif;` at the `TAG` |
+| jump to the last `TAG` of the subroutine or program | `leavesr;` or `return;` |
+| one jump back to an earlier `TAG` | `dou not (cond);` or `dow *on;` at the `TAG`, `enddo;` at the jump |
+| a jump in that loop to the `TAG` after it | `leave;` |
+
+Stay R: a `/FREE` block or a `CASxx` anywhere in the source, a level indicator, an indicator on a `TAG`, result indicators (columns 71-76) on `CABxx`, two jumps back to one `TAG`, a jump into or out of a group, over an `ELSE`, `WHEN`, `BEGSR` or `ENDSR`, and crossing patterns. Sample `samples/FREE4JMP.rpgle`. Written from the design, not from a run.
