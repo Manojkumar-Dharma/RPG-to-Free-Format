@@ -77,12 +77,12 @@ Source: SC09-1818 chapter 18. Target: `ctl-opt` keywords (SC09-2508). Only the f
 | 18 | a currency symbol | `cursym('c')` | C. `0 * , & . - C R` are R |
 | 19-21 | date format `M` `D` `Y`, date edit, inverted print | `datedit(*MDY or *DMY or *YMD` + separator`)`. Blank format is `*DMY` when column 21 is `D`, `I` or `J`, else `*MDY`. A blank separator is `.` when the format is `Y` or blank and column 21 is `I` or `J`, else `/`; `&` means a blank separator. | C. The Reference says `DATEDIT` also sets the `UDATE` format, as columns 19-21 do. |
 | 21 | `I` or `J` | `decedit(',')` or `decedit('0,')` | C |
-| 26 | `S` (alternate collating sequence) | comment | R: needs its table |
+| 26 | `S` (alternate collating sequence) | `altseq(*src)` with the table of the source (FREE-50) | A. R without a valid table |
 | 37 | `B` (inquiry) | comment | R: System/36 environment function. Blank and `I` are ignored |
 | 41 | `1` (1P forms position) | `formsalign(*yes)` | C |
-| 43 | `F` (file translation) | comment | R: needs its table |
+| 43 | `F` (file translation) | `ftrans(*src)` with the table of the source (FREE-50) | A. R without a valid table |
 | 45 | `1` (nonprint characters) | none | A: no equivalent |
-| 57 | `1` (transparent literals) | comment | R: double-byte data |
+| 57 | `1` (transparent literals) | comment | R: no entry for it in ILE RPG; check the literals with double-byte data |
 | 75-80 | program name | none | A: the name is set on the compile command |
 
 ## File description specification (F) to `dcl-f`
@@ -1089,6 +1089,18 @@ The same output as for RPG II and RPG III (RV-62), written for RPG IV: the F spe
 | `ODSPOUT E SCREEN` of a program described display file | as for DISK: the record data structure is written to the display file |
 
 Reported R, as for RPG II and RPG III: heading, detail and total records, output indicators on a field, edit codes and edit words, `PAGE`, `UDATE` and `*DATE`, a field that is outside the record length, a field with no known length or type at the `EXCEPT`, `ADD` and `DEL` entries that do not fit the file. Sample `samples/FREEWK4P.rpgle`. Written from the design and not from a run.
+
+## Alternate collating sequence and file translation tables (FREE-50, RV-33)
+
+Source: SC09-1817 chapter 15 and SC09-2508 (`ALTSEQ`, `FTRANS`). RPG II is not converted. The `**` records are in this order: the file translation table (H column 43 `F`), the alternate collating sequence (H column 26 `S`), then the compile-time arrays. `samples/FREEALT.rpg38`.
+
+| RPG III | Free-form |
+|---|---|
+| H column 43 `F`, with a `**` section of file name (or `*FILES`) and pairs of hexadecimal digits in groups of four from column 9 | `ctl-opt ftrans(*src);`, the section is written as `**FTRANS` with the pairs from column 11 |
+| H column 26 `S`, with a `**` section of `ALTSEQ` and pairs from column 9 | `ctl-opt altseq(*src);`, the section is written as `**ALTSEQ` with the pairs from column 11 |
+| the compile-time arrays after the tables | `**CTDATA name`, in the order of the E specifications as before |
+
+A table record holds at most 17 groups of four in ILE RPG (18 in RPG III): the rest is written in a second record with the same name. The records are checked: a name or `ALTSEQ` in columns 1-8, then pairs of hexadecimal digits in groups of four; a table with a record that does not fit is kept as is and reported R, and the H column stays R. A table section with no record is the same. Written from the manuals and not from a run.
 
 ## GOTO, CABxx and TAG in RPG IV (FREE-44, RV-14)
 

@@ -92,6 +92,15 @@ dcl-s g_blockCount int(10);
 dcl-s g_ctNames varchar(6) dim(C_MAXCT);
 dcl-s g_ctCount int(10);
 dcl-s g_ctSection int(10);
+dcl-s g_curTable char(1) inz(' ');
+// RV-33: the ** sections of the file translation (H column 43 F) and alternate
+// collating sequence (H column 26 S) tables. They come before the sections of the
+// compile-time arrays: file translation first, then the alternate sequence.
+dcl-s g_ftSection int(10);
+dcl-s g_asSection int(10);
+dcl-s g_ftOk ind;
+dcl-s g_asOk ind;
+dcl-s g_tableSkip int(10);
 // The named data structures (I specifications) and the output line of their
 // first line, so DEFN *NAMVAR can add the DTAARA keyword.
 dcl-s g_dsNames varchar(10) dim(C_MAXDS);
@@ -140,6 +149,11 @@ dcl-proc FreeConvert export;
   g_blockCount = 0;
   g_ctCount = 0;
   g_ctSection = 0;
+  g_ftSection = 0;
+  g_asSection = 0;
+  g_ftOk = *off;
+  g_asOk = *off;
+  g_tableSkip = 0;
   g_dsCount = 0;
   clear g_dsOccurs;
 
@@ -191,6 +205,9 @@ dcl-proc FreeConvert export;
   CalcStart();
   Fx4Start();
   OutStart();
+  if g_dialect = '3';
+    ScanTables();
+  endif;
   if g_dialect <> '4';
     for l_index = 1 to g_sourceCount;
       CalcPrescan(g_sourceLines(l_index));
@@ -335,7 +352,7 @@ dcl-proc ConvertSource;
         l_data = *on;
         ConvertDataHeader(l_lineNo:l_line);
       when l_data;
-        AddOut(%trimr(l_line):l_lineNo);
+        TableRecord(l_line:l_lineNo);
       when %trim(%subst(l_line:6:75)) = '';
         AddOut('':l_lineNo);
       when %subst(l_line:7:1) = '*';
@@ -662,6 +679,157 @@ dcl-proc AddCompileTime;
 end-proc;
 
 // ------------------------------------------------------------------
+// RV-33: a record of the file translation or alternate collating sequence table:
+// the name (or ALTSEQ) in columns 1-8, then pairs of hexadecimal digits in groups
+// of four from column 9. The first blank group ends the record.
+dcl-proc TableRecordOk;
+  dcl-pi *n ind;
+    i_line char(100) const;
+    i_kind char(1) const;
+  end-pi;
+
+  dcl-s l_name varchar(8);
+  dcl-s l_pairs varchar(72);
+
+  l_name = %trim(%subst(i_line:1:8));
+  l_pairs = %trimr(%xlate(C_LOWER:C_UPPER:%subst(i_line:9:72)));
+  if l_name = '' or l_pairs = '' or %rem(%len(l_pairs):4) <> 0
+     or %check('0123456789ABCDEF':l_pairs) > 0;
+    return *off;
+  endif;
+  if i_kind = 'A';
+    return %subst(i_line:1:8) = 'ALTSEQ  ';
+  endif;
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// RV-33: reads the ** sections of the source before the conversion. With H column 43
+// F the first section is the file translation table, with H column 26 S the next one
+// the alternate collating sequence (the order of SC09-1817); both must have valid
+// records to be converted.
+dcl-proc ScanTables;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_section int(10) inz(0);
+  dcl-s l_wantF ind inz(*off);
+  dcl-s l_wantS ind inz(*off);
+  dcl-s l_hFound ind inz(*off);
+  dcl-s l_okF ind inz(*on);
+  dcl-s l_okS ind inz(*on);
+  dcl-s l_next int(10) inz(1);
+  dcl-s l_line char(100);
+  
+  for l_k = 1 to g_sourceCount;
+    l_line = g_sourceLines(l_k);
+    if %subst(l_line:1:2) = '**';
+      leave;
+    endif;
+    if not l_hFound and %subst(l_line:6:1) = 'H' and %subst(l_line:7:1) <> '*';
+      l_hFound = *on;
+      l_wantS = (%xlate(C_LOWER:C_UPPER:%subst(l_line:26:1)) = 'S');
+      l_wantF = (%xlate(C_LOWER:C_UPPER:%subst(l_line:43:1)) = 'F');
+    endif;
+  endfor;
+  if not l_wantF and not l_wantS;
+    return;
+  endif;
+  if l_wantF;
+    g_ftSection = l_next;
+    l_next += 1;
+  endif;
+  if l_wantS;
+    g_asSection = l_next;
+  endif;
+  g_tableSkip = 0;
+  if l_wantF;
+    g_tableSkip += 1;
+  endif;
+  if l_wantS;
+    g_tableSkip += 1;
+  endif;
+
+  for l_k = 1 to g_sourceCount;
+    l_line = g_sourceLines(l_k);
+    if %subst(l_line:1:2) = '**';
+      l_section += 1;
+      iter;
+    endif;
+    if l_section = 0 or l_section > g_tableSkip or %trim(%subst(l_line:1:80)) = '';
+      iter;
+    endif;
+    if l_section = g_ftSection and not TableRecordOk(l_line:'F');
+      l_okF = *off;
+    endif;
+    if l_section = g_asSection and not TableRecordOk(l_line:'A');
+      l_okS = *off;
+    endif;
+  endfor;
+  g_ftOk = l_wantF and l_okF and TableSectionHasData('F');
+  g_asOk = l_wantS and l_okS and TableSectionHasData('A');
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc TableSectionHasData;
+  dcl-pi *n ind;
+    i_kind char(1) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_section int(10) inz(0);
+  dcl-s l_want int(10);
+
+  l_want = g_ftSection;
+  if i_kind = 'A';
+    l_want = g_asSection;
+  endif;
+  if l_want = 0;
+    return *off;
+  endif;
+  for l_k = 1 to g_sourceCount;
+    if %subst(g_sourceLines(l_k):1:2) = '**';
+      l_section += 1;
+    elseif l_section = l_want and %trim(%subst(g_sourceLines(l_k):1:80)) <> '';
+      return *on;
+    endif;
+  endfor;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+// RV-33: a data record. In a converted table section the pairs move from column 9
+// to column 11 (ILE RPG), at most 17 groups of four in a record: more are written
+// in a second record with the same name. Other data records are copied as they are.
+dcl-proc TableRecord;
+  dcl-pi *n;
+    i_line char(100) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  dcl-s l_name varchar(8);
+  dcl-s l_pairs varchar(72);
+  dcl-s l_part varchar(68);
+
+  if g_curTable = ' ' or %trim(%subst(i_line:1:80)) = '';
+    AddOut(%trimr(i_line):i_lineNo);
+    return;
+  endif;
+  l_name = %subst(i_line:1:8);
+  l_pairs = %trimr(%subst(i_line:9:72));
+  dow %len(l_pairs) > 0;
+    l_part = %subst(l_pairs:1:%min(68:%len(l_pairs)));
+    AddOut(%trimr(l_name + '  ' + l_part):i_lineNo);
+    if %len(l_pairs) > 68;
+      l_pairs = %subst(l_pairs:69);
+    else;
+      l_pairs = '';
+    endif;
+  enddo;
+end-proc;
+
+// ------------------------------------------------------------------
 // A ** record (the first one separates the source from the compile-time data):
 // the data records after it belong to the next compile-time array or table in the
 // order of the E specifications. It becomes **CTDATA name. The data records are
@@ -673,12 +841,34 @@ dcl-proc ConvertDataHeader;
   end-pi;
 
   g_ctSection += 1;
-  if g_dialect = '4';
+  g_curTable = ' ';
+  if g_dialect = '3' and g_ctSection <= g_tableSkip;
+    select;
+      when g_ctSection = g_ftSection and g_ftOk;
+        g_curTable = 'F';
+        AddOut('**FTRANS':i_lineNo);
+        RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(i_line)
+                :'File translation table of H column 43: **FTRANS, the pairs of '
+                 + 'hexadecimal digits start in column 11 (column 9 in RPG III)');
+      when g_ctSection = g_asSection and g_asOk;
+        g_curTable = 'A';
+        AddOut('**ALTSEQ':i_lineNo);
+        RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(i_line)
+                :'Alternate collating sequence of H column 26: **ALTSEQ, the pairs '
+                 + 'of hexadecimal digits start in column 11 (column 9 in RPG III)');
+      other;
+        AddOut(%trimr(i_line):i_lineNo);
+        RptItem(C_STS_REVIEW:i_lineNo:%trimr(i_line)
+                :'The table records are not valid (a name or ALTSEQ, then pairs of '
+                 + 'hexadecimal digits): kept as is');
+    endsl;
+  elseif g_dialect = '4';
     AddOut(%trimr(i_line):i_lineNo);
     RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(i_line)
             :'Compile-time data section kept as is: check its name');
-  elseif g_ctSection <= g_ctCount and g_ctNames(g_ctSection) <> '';
-    AddOut('**CTDATA ' + g_ctNames(g_ctSection):i_lineNo);
+  elseif g_ctSection - g_tableSkip <= g_ctCount
+         and g_ctNames(g_ctSection - g_tableSkip) <> '';
+    AddOut('**CTDATA ' + g_ctNames(g_ctSection - g_tableSkip):i_lineNo);
     RptItem(C_STS_CONVERTED:i_lineNo:%trimr(i_line)
             :'');
   else;
@@ -845,8 +1035,14 @@ dcl-proc ConvertHeader;
 
   // Column 26: alternate collating sequence needs its table (not converted).
   if %subst(l_up:26:1) = 'S';
-    AppendText(l_review:'Alternate collating sequence (column 26) needs its '
-               + 'table');
+    if g_asOk;
+      AppendKeyword(l_kw:'altseq(*src)');
+      AppendText(l_note:'column 26: the table of the ** records is converted to '
+                 + '**ALTSEQ');
+    else;
+      AppendText(l_review:'Alternate collating sequence (column 26) needs its '
+                 + 'table (ALTSEQ records after a ** record)');
+    endif;
   endif;
   // Column 37: inquiry. Blank and I behave the same; B is S/36 specific.
   if %subst(l_up:37:1) = 'B';
@@ -858,7 +1054,14 @@ dcl-proc ConvertHeader;
   endif;
   // Column 43: file translation needs its table (not converted).
   if %subst(l_up:43:1) = 'F';
-    AppendText(l_review:'File translation (column 43) needs its table');
+    if g_ftOk;
+      AppendKeyword(l_kw:'ftrans(*src)');
+      AppendText(l_note:'column 43: the table of the ** records is converted to '
+                 + '**FTRANS');
+    else;
+      AppendText(l_review:'File translation (column 43) needs its table (records '
+                 + 'of file name and pairs after a ** record)');
+    endif;
   endif;
   // Column 45: nonprint characters has no equivalent.
   if %subst(l_up:45:1) = '1';
