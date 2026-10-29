@@ -2,7 +2,7 @@
 00020 * LISTA: 10 continuous rows (lines 6 to 15), same fields and columns.
 00030 *   Expected: reported as a subfile candidate, output unchanged.
 00040 * LISTB: rows with a gap and a changed column: not a candidate.
-00050 * LISTC: only 2 repeated rows: below the threshold, not a candidate.
+00050 * LISTC: only 2 repeated rows (the threshold is 4): not a candidate.
 00060 * Not a real subfile member: no SFL or SFLCTL is made from it.
 00070 * === LISTA: a list of 10 identical rows ===
 00080SLISTA      1   N

@@ -260,3 +260,15 @@ Not in the sample (would stop the compile or needs a program): fields in columns
 | `FDDS` | `*DDS` line, comment, blank | `*DDS` line copied as a DDS line; comment kept; blank skipped |
 
 Note the letters W and E: they are not DDS edit codes (W and E are RPG codes only), so they are reported, not passed through. If a real S/36 member shows other values in column 25, add them to the table above and to `C_EDTCDES` in `IAdspCvt`.
+
+## Subfile candidates (DSP-06, RV-42, FREE-52)
+
+Several D records on consecutive display lines with the same fields at the same positions are what a program that was changed to use a subfile starts from. The converter does not make `SFL` and `SFLCTL`: that waits for a real example that shows how the program was changed (the program must write the subfile records and set the relative record number). It only reports the candidate, and the format is converted as written.
+
+Rule (`CheckSubfileRows` in `IAdspCvt`), for the D records of one format:
+
+- A record counts when it is a field: input (column 26 `Y`) or output other than `N` and blank. A constant is a label and does not count.
+- The fields of one display line (column 19-20) make its signature: column, length, output entry, input entry and data type of each field, in the order of the records. Names, line number and constant text are not part of it.
+- `C_SFLMIN` (4) or more consecutive display lines with the same signature are reported once, on the first record of the first line, status R: "Display lines a to b repeat the same fields at the same positions: a subfile candidate".
+
+`samples/ORDLIST.dspf36`: `LISTA` has 10 identical rows (lines 6 to 15, reported), `LISTB` has 3 rows then a gap and 2 rows with another column (not reported), `LISTC` has 2 rows (not reported). The sample is written by hand; a member that was converted to a subfile is still wanted. Written from the design and not from a run.

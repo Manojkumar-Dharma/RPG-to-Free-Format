@@ -1542,8 +1542,99 @@ dcl-proc ConvertHelpDefinition;
 end-proc;
 
 // ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// DSP-06, RV-42: subfile candidates. In the D records of one format (from the first
+// record after the S record to the last before the next S record) the lines that
+// have the same fields at the same positions (column, length, output entry, input,
+// data type; names, text and line number do not count) on C_SFLMIN or more
+// consecutive display lines are reported once as R. The output is not changed:
+// SFL and SFLCTL are only made when a real example shows how the program was changed.
+dcl-c C_SFLMIN 4;
+dcl-c C_MAXDSPLINE 27;
+
+dcl-proc CheckSubfileRows;
+  dcl-pi *n;
+    i_first int(10) const;
+    i_last int(10) const;
+  end-pi;
+
+  dcl-s l_sig varchar(400) dim(C_MAXDSPLINE);
+  dcl-s l_rec int(10) dim(C_MAXDSPLINE);
+  dcl-s l_k int(10);
+  dcl-s l_line int(10);
+  dcl-s l_record char(80);
+  dcl-s l_isField ind;
+  dcl-s l_run int(10);
+  dcl-s l_start int(10);
+  dcl-s l_out varchar(3);
+  dcl-s l_inp char(1);
+
+  for l_k = 1 to C_MAXDSPLINE;
+    l_sig(l_k) = '';
+    l_rec(l_k) = 0;
+  endfor;
+  for l_k = i_first + 1 to i_last;
+    l_record = g_sourceLines(l_k);
+    if %xlate(C_LOWER:C_UPPER:%subst(l_record:6:1)) <> 'D'
+       or %subst(l_record:7:1) = '*';
+      iter;
+    endif;
+    l_line = ToNumber(ColumnText(l_record:19:20));
+    if l_line < 1 or l_line > C_MAXDSPLINE;
+      iter;
+    endif;
+    l_out = ParseIndicatorSpec(ColumnText(l_record:23:24));
+    l_inp = %xlate(C_LOWER:C_UPPER:%subst(l_record:26:1));
+    // A constant (output N or blank, no input) is a label, not a field of the row.
+    l_isField = (l_inp = 'Y' or (l_out <> 'N' and l_out <> ''));
+    if not l_isField;
+      iter;
+    endif;
+    if l_rec(l_line) = 0;
+      l_rec(l_line) = l_k;
+    endif;
+    l_sig(l_line) += ColumnText(l_record:21:22) + '/' + ColumnText(l_record:15:18)
+                     + '/' + l_out + '/' + l_inp + '/'
+                     + %xlate(C_LOWER:C_UPPER:%subst(l_record:27:1)) + ';';
+  endfor;
+
+  l_run = 0;
+  l_start = 0;
+  for l_k = 1 to C_MAXDSPLINE + 1;
+    if l_k <= C_MAXDSPLINE and l_sig(l_k) <> ''
+       and l_k > 1 and l_sig(l_k) = l_sig(l_k - 1);
+      l_run += 1;
+    else;
+      if l_run >= C_SFLMIN;
+        ReportSubfileRun(l_rec(l_start):l_start:l_start + l_run - 1);
+      endif;
+      l_run = 1;
+      l_start = l_k;
+    endif;
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc ReportSubfileRun;
+  dcl-pi *n;
+    i_index int(10) const;
+    i_firstLine int(10) const;
+    i_lastLine int(10) const;
+  end-pi;
+
+  if i_index < 1;
+    return;
+  endif;
+  RptItem(C_STS_REVIEW:g_sourceLineNos(i_index):%trimr(g_sourceLines(i_index))
+          :'Display lines ' + %char(i_firstLine) + ' to ' + %char(i_lastLine)
+           + ' repeat the same fields at the same positions: a subfile candidate. '
+           + 'The format is converted as written; SFL and SFLCTL are not made');
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc ConvertDsp36;
   dcl-s l_index int(10);
+  dcl-s l_fmtFirst int(10) inz(0);
   dcl-s l_record char(80);
   dcl-s l_recordType char(1);
   dcl-s l_outputRecord char(80);
@@ -1575,6 +1666,10 @@ dcl-proc ConvertDsp36;
         AddOutputLine(l_outputRecord);
         RptItem(C_STS_CONVERTED:g_sourceLineNos(l_index):%trimr(l_record):'');
       when l_recordType = 'S';
+        if l_fmtFirst > 0;
+          CheckSubfileRows(l_fmtFirst:l_index - 1);
+        endif;
+        l_fmtFirst = l_index;
         ConvertDisplayControl(l_record:g_sourceLineNos(l_index));
       when l_recordType = 'H';
         if not g_formatOpen;
@@ -1601,6 +1696,9 @@ dcl-proc ConvertDsp36;
     endsl;
     l_index += 1;
   enddo;
+  if l_fmtFirst > 0;
+    CheckSubfileRows(l_fmtFirst:g_sourceCount);
+  endif;
 end-proc;
 
 // ------------------------------------------------------------------
