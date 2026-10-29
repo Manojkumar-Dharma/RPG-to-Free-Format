@@ -86,7 +86,7 @@ FREE-06 (module `IAfreeOut`): the R items of the output specifications.
 
 | ID | Item | Resolution | Code status | Test status |
 |----|------|------------|-------------|-------------|
-| RV-40 | OCL statements reported R (`PROMPT`, `HELP`, the `?F'S,..'?` field name, the DATAF1 date form) | see OCL-07, OCL-09 in `PLANNED.md`; samples `samples/PROMPTS.ocl` (PROMPT and HELP forms) and `samples/FSIZEDAT.ocl` (`?F'S,..'?`, DATAF1 with a date) | In progress | Not tested |
+| RV-40 | OCL statements reported R (`PROMPT`, `HELP`, the `?F'S,..'?` field name, the DATAF1 date form) | see OCL-07, OCL-09 in `PLANNED.md`; samples `samples/PROMPTS.ocl` (PROMPT and HELP forms) and `samples/FSIZEDAT.ocl` (`?F'S,..'?`, DATAF1 with a date); DATAF1 date form written in FREE-51; `PROMPT` and `HELP` stay R by design (see OCL-07); the field name of `?F'S,..'?` still has to be checked on a system | In progress | Not tested |
 | RV-41 | DSPF layout against a real member | Hand-written member `samples/ORDENTRY.dspf36` (order entry, 3 formats); a real QS36SRC member is still wanted: DSP-05 | Planned | Not started |
 | RV-42 | Subfile candidates | Hand-written member `samples/ORDLIST.dspf36` (a list of 10 rows, one with a gap, one with 2 rows); a member that was converted to a subfile is still wanted: DSP-06 | Planned | Not started |
 

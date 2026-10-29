@@ -22,6 +22,7 @@ dcl-c C_DQUOTE '''''';          // two apostrophes (an apostrophe inside text)
 dcl-c C_MAXPARMITEMS 41;           // 40 call parameters plus one to detect more
 dcl-c C_CALLPARMLEN 10;            // length every converted program declares
 dcl-c C_ALLSCOPE '*LIBL';          // where DATAF1-'name,ALL' looks for files
+dcl-c C_SESSDATE 'MDY';          // session date format of DATAF1-'name,date': MDY, DMY or YMD (assumed)
 dcl-c C_FDINITFLD 'PHRCDC';   // DSPFD initial records (unverified)
 dcl-c C_MARKLIB 'QGPL';          // library of the ACTIVE- marker data areas
 dcl-c C_MSGPREFIX 'USR';         // message id prefix of CRTS36MSGF (assumed)
@@ -98,6 +99,7 @@ dcl-s g_initLineCnt int(10);
 dcl-s g_dataf1Count int(10);     // DATAF1- flags: &D1, &D2, ...
 dcl-s g_activeCount int(10);     // ACTIVE- flags: &A1, &A2, ...
 dcl-s g_procName varchar(10);    // OCL procedure (source member) name
+dcl-s g_useCrtDate ind;         // &CRTD (creation date of DATAF1-'name,date') is needed
 dcl-s g_useFileSize ind;         // &FSN and &FSD work variables are needed
 dcl-s g_usePause ind;            // &PAUSERPY reply variable is needed
 dcl-s g_useCd ind;               // &CD return code variable is needed (?CD?)
@@ -2245,6 +2247,24 @@ dcl-proc ConditionOperand;
 end-proc;
 
 // ------------------------------------------------------------------
+// A creation date of the DATAF1 and ?F'..'? forms in the session date format
+// (C_SESSDATE: MDY mmddyy, DMY ddmmyy, YMD yymmdd) as yymmdd.
+dcl-proc YymmddOfSessionDate;
+  dcl-pi *n varchar(6);
+    i_date varchar(6) const;
+  end-pi;
+
+  select;
+    when C_SESSDATE = 'DMY';
+      return %subst(i_date:5:2) + %subst(i_date:3:2) + %subst(i_date:1:2);
+    when C_SESSDATE = 'YMD';
+      return i_date;
+    other;
+      return %subst(i_date:5:2) + %subst(i_date:1:2) + %subst(i_date:3:2);
+  endsl;
+end-proc;
+
+// ------------------------------------------------------------------
 // DATAF1-name: true when the file (with at least one member) or the library
 // exists. Writes the CHKOBJ statements that set a logical variable &Dn and
 // returns it, or '' for the forms not converted: 'name,date' and 'name,ALL'.
@@ -2263,6 +2283,7 @@ dcl-proc DataFileCondition;
   dcl-s l_keyword varchar(60);
   dcl-s l_libraries varchar(200) inz('');
   dcl-s l_restComma int(10);
+  dcl-s l_date varchar(6) inz('');
 
   l_text = i_operand;
   if %len(l_text) >= 2 and SafeSubstr(l_text:1:1) = C_QUOTE
@@ -2281,10 +2302,14 @@ dcl-proc DataFileCondition;
       l_keyword = %trim(SafeSubstr(l_rest:1:l_restComma - 1));
       l_libraries = %trim(SafeSubstrToEnd(l_rest:l_restComma + 1));
     endif;
-    if ToUpper(l_keyword) <> 'ALL';
+    if ToUpper(l_keyword) = 'ALL';
+      l_allForm = *on;
+    elseif l_libraries = '' and %len(l_keyword) = 6 and %check('0123456789':l_keyword) = 0;
+      // 'name,date': the creation date of the file, in the session date format.
+      l_date = YymmddOfSessionDate(l_keyword);
+    else;
       return '';
     endif;
-    l_allForm = *on;
     l_text = %trim(SafeSubstr(l_text:1:l_commaPos - 1));
   endif;
   if %len(l_text) = 0 or %scan(C_QUOTE:l_text) > 0;
@@ -2308,6 +2333,23 @@ dcl-proc DataFileCondition;
   AddBody('CHGVAR VAR(' + l_flag + ') VALUE(''1'')');
   AddBody('CHKOBJ OBJ(' + l_name + ') OBJTYPE(*FILE) MBR(*FIRST)');
   AddBody('MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(' + l_flag + ') VALUE(''0''))');
+  if l_date <> '';
+    // A file with that creation date: the creation date of the file is CYYMMDDHHMMSS.
+    // A library with a date gives a false condition (SC41-4731), so QSYS is not tried.
+    g_useCrtDate = *on;
+    AddBody('IF COND(' + l_flag + ') THEN(DO)');
+    AddBody('CHGVAR VAR(&CRTD) VALUE('' '')');
+    AddBody('RTVOBJD OBJ(' + l_name + ') OBJTYPE(*FILE) CRTDATE(&CRTD)');
+    AddBody('MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(' + l_flag + ') VALUE(''0''))');
+    AddBody('IF COND(%SST(&CRTD 2 6) *NE ' + C_QUOTE + l_date + C_QUOTE
+            + ') THEN(CHGVAR VAR(' + l_flag + ') VALUE(''0''))');
+    AddBody('ENDDO');
+    RptItem(C_STS_ASSUMPTION:g_curLineNo:g_curText
+            :'DATAF1 with a date: the file is tested with CHKOBJ and its creation date '
+            + 'with RTVOBJD; the date is read as ' + C_SESSDATE + ' (C_SESSDATE), the '
+            + 'session date format is not known');
+    return l_flag;
+  endif;
   AddBody('IF COND(*NOT ' + l_flag + ') THEN(DO)');
   AddBody('CHGVAR VAR(' + l_flag + ') VALUE(''1'')');
   AddBody('CHKOBJ OBJ(QSYS/' + l_name + ') OBJTYPE(*LIB)');
@@ -4719,6 +4761,11 @@ dcl-proc WriteProgram;
       return 1;
     endif;
   endfor;
+  if g_useCrtDate;
+    if WriteCl('DCL VAR(&CRTD) TYPE(*CHAR) LEN(13)':o_msgId:o_msgData) <> 0;
+      return 1;
+    endif;
+  endif;
   if g_usePause;
     if WriteCl('DCL VAR(&PAUSERPY) TYPE(*CHAR) LEN(1)':o_msgId:o_msgData) <> 0;
       return 1;
@@ -4887,6 +4934,7 @@ dcl-proc OclConvert export;
   g_activeCount = 0;
   g_procName = ToUpper(%trim(i_source.mbr));
   g_dataf1Count = 0;
+  g_useCrtDate = *off;
   g_useFileSize = *off;
   g_usePause = *off;
   g_useCd = *off;

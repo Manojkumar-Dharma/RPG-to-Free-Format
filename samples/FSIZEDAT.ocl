@@ -9,11 +9,11 @@
 // EVALUATE P3=?F'A,CUSTMST'?+?F'A,WORK'?
 // IF ?F'S,CUSTMST'?/00000050 GOTO SIZE
 // IF ?F'S,CUSTMST,102926'?/00000050 GOTO SIZE
-* DATAF1: name, name with date (mmddyy, ddmmyy, yymmdd), name with ALL
+* DATAF1: name, name with date (converted as mmddyy, see C_SESSDATE), name with ALL
 // IF DATAF1-CUSTMST GOTO FOUND
 // IF DATAF1-'CUSTMST,102926' GOTO FOUND
 // IFF DATAF1-'CUSTMST,102926' GOTO MISSING
-// IFT DATAF1-'CUSTMST,261029' GOTO FOUND
+// IFT DATAF1-'CUSTMST,010126' GOTO FOUND
 // IF DATAF1-'?2?,102926' GOTO FOUND
 // IF DATAF1-'CUST,ALL' GOTO ANY
 * A library name (a library with a date gives a false condition)

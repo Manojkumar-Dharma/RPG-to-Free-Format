@@ -81,7 +81,18 @@ MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(&FSN) VALUE(0))
 IF COND(&FSN *GT 0) THEN(CHGVAR VAR(&D2) VALUE('1'))
 ```
 
-Assumptions (A): `ALL` means the current library list (confirmed by the author; constant `C_ALLSCOPE` in `IAoclCvt`), then each extra library given (one `DSPOBJD ... *ADD` line each, shown above for `library1`), libraries in QSYS; a name given as a variable gets the `*` added at run time. Not tested on the system yet: `DSPOBJD` with a generic name that matches nothing is expected to send a message that the `MONMSG` ignores. Not converted (R): `'name,date'` (the date selects a creation date). The statement is copied as a comment.
+Assumptions (A): `ALL` means the current library list (confirmed by the author; constant `C_ALLSCOPE` in `IAoclCvt`), then each extra library given (one `DSPOBJD ... *ADD` line each, shown above for `library1`), libraries in QSYS; a name given as a variable gets the `*` added at run time. Not tested on the system yet: `DSPOBJD` with a generic name that matches nothing is expected to send a message that the `MONMSG` ignores. `DATAF1-'name,date'` (FREE-51, OCL-09): the date is the creation date of the file, six digits in the session date format. It is written after the file test, and `RTVOBJD` gives the creation date (`CYYMMDDHHMMSS`) in `&CRTD`:
+
+```
+IF COND(&D3) THEN(DO)
+CHGVAR VAR(&CRTD) VALUE(' ')
+RTVOBJD OBJ(name) OBJTYPE(*FILE) CRTDATE(&CRTD)
+MONMSG MSGID(CPF0000) EXEC(CHGVAR VAR(&D3) VALUE('0'))
+IF COND(%SST(&CRTD 2 6) *NE 'yymmdd') THEN(CHGVAR VAR(&D3) VALUE('0'))
+ENDDO
+```
+
+Assumptions (A): the session date format is the constant `C_SESSDATE` of `IAoclCvt` (`MDY`, `DMY` or `YMD`, set to `MDY`; the member does not say it), and the two-digit year is compared without the century. A library with a date is false by the reference, so only the file is tested. A date that is not 6 digits, a date with an expression and a date with extra libraries are R and copied as a comment. Sample `samples/FSIZEDAT.ocl`. Written from the manual and not from a run.
 
 ### ACTIVE condition
 
