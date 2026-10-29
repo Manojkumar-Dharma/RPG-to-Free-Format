@@ -16,7 +16,7 @@
 00160D          4224 2N                                 ENTER=CONTINUE   CMD3=EX
 00170 ND   CMD12=CANCEL
 00180 * === ORDDET: detail line: input, protected and message fields ===
-00190SORDDET     1  YN   Y
+00190SORDDET     1  YN  Y
 00200D          11 132N                                 ORDER LINE
 00210D          11 4 5N                                 ITEM NUMBER
 00220DITEMNO     8 420N  Y
