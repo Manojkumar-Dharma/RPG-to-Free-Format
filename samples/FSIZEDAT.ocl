@@ -1,0 +1,25 @@
+* File size expressions and DATAF1 with a date (OCL-03, OCL-09, RV-40).
+* From SC41-4731 chapter 3. S is the allocated size, A the number of records.
+// FILE NAME-FILEB,BLOCKS-?F'S,FILEA'?
+// FILE NAME-FILEB,RECORDS-?F'A,FILEA'?
+* With the creation date of the file (session date format)
+// FILE NAME-FILEC,BLOCKS-?F'S,FILEA,102926'?
+// EVALUATE P1=?F'S,CUSTMST'?
+// EVALUATE P2=?F'S,CUSTMST,102926'?
+// EVALUATE P3=?F'A,CUSTMST'?+?F'A,WORK'?
+// IF ?F'S,CUSTMST'?/00000050 GOTO SIZE
+// IF ?F'S,CUSTMST,102926'?/00000050 GOTO SIZE
+* DATAF1: name, name with date (mmddyy, ddmmyy, yymmdd), name with ALL
+// IF DATAF1-CUSTMST GOTO FOUND
+// IF DATAF1-'CUSTMST,102926' GOTO FOUND
+// IFF DATAF1-'CUSTMST,102926' GOTO MISSING
+// IFT DATAF1-'CUSTMST,261029' GOTO FOUND
+// IF DATAF1-'?2?,102926' GOTO FOUND
+// IF DATAF1-'CUST,ALL' GOTO ANY
+* A library name (a library with a date gives a false condition)
+// IF DATAF1-MYLIB GOTO LIBOK
+// TAG FOUND
+// TAG MISSING
+// TAG SIZE
+// TAG ANY
+// TAG LIBOK

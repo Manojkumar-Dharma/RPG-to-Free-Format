@@ -56,6 +56,6 @@ cannot check. The R list is in `REVIEW-ITEMS.md`. Audit of 2026-10-27.
 - Written, waiting for a compile and test: RV-01 to RV-11, RV-13, RV-14 (RPG II/III), RV-30, RV-32, RV-36, RV-37 (WHENEVER GOTO, 2026-10-28, option decided by the owner: explicit SQLCODE tests), RV-50 to RV-55, RV-57, RV-58, RV-59.
 - Decided 2026-10-27: RV-20/21 (cycle skeleton, FREE-36 first increment), FREE-06 second member for the printer DDS, RV-12/31 (WORKSTN through IACNVDSPF display files, after the cycle).
 - Needs a decision: none open.
-- Needs a sample member: RV-33, DSP-05/06.
+- Needs a sample member: RV-33, DSP-05/06. Hand-written samples exist (`FREEALT.rpg38`, `ORDENTRY.dspf36`, `ORDLIST.dspf36`, `PROMPTS.ocl`, `FSIZEDAT.ocl`), made from the IBM manuals and not from a real system.
 - Follow-ups: RV-56, RV-61 to RV-63 (output). RV-14 for RPG IV and RV-37 (SQL `WHENEVER GOTO`) are written (FREE-44, FREE-48).
 - Stale entries corrected today: RV-55 and the "Order of work" list.

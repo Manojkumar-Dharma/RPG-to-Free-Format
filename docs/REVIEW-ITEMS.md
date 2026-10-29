@@ -49,7 +49,7 @@ Code status and test status follow `PLANNED.md`.
 | RV-30 | I specifications of externally described files: renames, field indicators | no field rename on a file in free form | Decided: renamed field is a copy (`dcl-s NEW like(EXT)`), set after READ and CHAIN when a record was read (FREE-24) and copied back to the external fields before WRITE and UPDATE of a record format named by an I specification (FREE-25); control levels, matching fields and field indicators stay R | Written | Not tested |
 | RV-31 | WORKSTN, SPECIAL and other devices (F) | display files | externally described WORKSTN written for RPG III in FREE-43 (`sfile`) and RPG IV in FREE-45; program described display files in FREE-46 (declaration and I specification layout); SPECIAL stays R | Written | Not tested |
 | RV-32 | Continuation records (`RECNO`, `SUBR` exit, `NUM`, `FMTS`, `INFSR`) | | Convert: `dcl-f` keywords where they exist; done in FREE-18 for DISK and PRINTER files (`COMIT`, `INFDS`, `INFSR`, `RECNO`, `RENAME`, `IGNORE`); WORKSTN, SPECIAL and `PRTCTL` options stay R | Written | Not tested |
-| RV-33 | Alternate collating sequence, file translation, transparent literals | tables | Sample: needs the tables | Planned | Not started |
+| RV-33 | Alternate collating sequence, file translation, transparent literals | tables | Hand-written sample `samples/FREEALT.rpg38` (H columns 26, 43, 57, `**` records of file translation and ALTSEQ, one compile-time array); a real member with tables is still wanted | Planned | Not started |
 | RV-34 | Record address and table files, address output (T), limits processing, direct file load, file addition output, packed key, noncontiguous key | not in free form | No form for most; `EXTK`: R by design | Done | N/A |
 | RV-35 | Arrays from a file (E, columns 11-18), to a file, packed or binary format (columns 43, 55) | not converted | Not possible: `FROMFILE` and `TOFILE` are not allowed in a free-form definition, `EXTFMT(P/B)` is only for such arrays (decided in FREE-19, stays R with that reason); `L` and `R` of compile-time arrays converted to `extfmt` | Written | Not tested |
 | RV-36 | Compiler directives (`/COPY`, `/TITLE` etc.) | members are fixed form | Decide: `/copy` only when the member is converted too; the other directives are dropped with a note. Decided: convert the directive. Written as in RPG IV (FREE-29): `/COPY` and `/INCLUDE` are kept with status A in RPG II and III too | Written (kept as A) | Not tested |
@@ -86,9 +86,9 @@ FREE-06 (module `IAfreeOut`): the R items of the output specifications.
 
 | ID | Item | Resolution | Code status | Test status |
 |----|------|------------|-------------|-------------|
-| RV-40 | OCL statements reported R (`PROMPT`, `HELP`, the `?F'S,..'?` field name, the DATAF1 date form) | see OCL-07, OCL-09 in `PLANNED.md` | In progress | Not tested |
-| RV-41 | DSPF layout against a real member | Sample: DSP-05 | Planned | Not started |
-| RV-42 | Subfile candidates | Sample: DSP-06 | Planned | Not started |
+| RV-40 | OCL statements reported R (`PROMPT`, `HELP`, the `?F'S,..'?` field name, the DATAF1 date form) | see OCL-07, OCL-09 in `PLANNED.md`; samples `samples/PROMPTS.ocl` (PROMPT and HELP forms) and `samples/FSIZEDAT.ocl` (`?F'S,..'?`, DATAF1 with a date) | In progress | Not tested |
+| RV-41 | DSPF layout against a real member | Hand-written member `samples/ORDENTRY.dspf36` (order entry, 3 formats); a real QS36SRC member is still wanted: DSP-05 | Planned | Not started |
+| RV-42 | Subfile candidates | Hand-written member `samples/ORDLIST.dspf36` (a list of 10 rows, one with a gap, one with 2 rows); a member that was converted to a subfile is still wanted: DSP-06 | Planned | Not started |
 
 ## Order of work
 

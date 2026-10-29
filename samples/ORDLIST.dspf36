@@ -1,0 +1,71 @@
+00010 * ORDLIST - subfile candidates for DSP-06, RV-42 (hand written)
+00020 * LISTA: 10 continuous rows (lines 6 to 15), same fields and columns.
+00030 *   Expected: reported as a subfile candidate, output unchanged.
+00040 * LISTB: rows with a gap and a changed column: not a candidate.
+00050 * LISTC: only 2 repeated rows: below the threshold, not a candidate.
+00060 * Not a real subfile member: no SFL or SFLCTL is made from it.
+00070 * === LISTA: a list of 10 identical rows ===
+00080SLISTA      1   N
+00090D          12 130N                                 ORDER LIST
+00100D           4 4 3N                                 SEL
+00110D           8 4 9N                                 ORDER NO
+00120D          20 420N                                 CUSTOMER
+00130D           8 445N                                 AMOUNT
+00140DSEL01      1 6 4N  Y
+00150DORD01      6 6 9Y   S
+00160DCUS01     20 620Y
+00170DAMT01      8 645Y   S
+00180DSEL02      1 7 4N  Y
+00190DORD02      6 7 9Y   S
+00200DCUS02     20 720Y
+00210DAMT02      8 745Y   S
+00220DSEL03      1 8 4N  Y
+00230DORD03      6 8 9Y   S
+00240DCUS03     20 820Y
+00250DAMT03      8 845Y   S
+00260DSEL04      1 9 4N  Y
+00270DORD04      6 9 9Y   S
+00280DCUS04     20 920Y
+00290DAMT04      8 945Y   S
+00300DSEL05      110 4N  Y
+00310DORD05      610 9Y   S
+00320DCUS05     201020Y
+00330DAMT05      81045Y   S
+00340DSEL06      111 4N  Y
+00350DORD06      611 9Y   S
+00360DCUS06     201120Y
+00370DAMT06      81145Y   S
+00380DSEL07      112 4N  Y
+00390DORD07      612 9Y   S
+00400DCUS07     201220Y
+00410DAMT07      81245Y   S
+00420DSEL08      113 4N  Y
+00430DORD08      613 9Y   S
+00440DCUS08     201320Y
+00450DAMT08      81345Y   S
+00460DSEL09      114 4N  Y
+00470DORD09      614 9Y   S
+00480DCUS09     201420Y
+00490DAMT09      81445Y   S
+00500DSEL10      115 4N  Y
+00510DORD10      615 9Y   S
+00520DCUS10     201520Y
+00530DAMT10      81545Y   S
+00540 * === LISTB: rows 6 to 8, a gap, rows 10 to 11 with another column ===
+00550SLISTB      1
+00560DNAME6     20 6 5Y
+00570DQTY6       5 630Y   S
+00580DNAME7     20 7 5Y
+00590DQTY7       5 730Y   S
+00600DNAME8     20 8 5Y
+00610DQTY8       5 830Y   S
+00620DNAME10    2010 8Y
+00630DQTY10      51030Y   S
+00640DNAME11    2011 8Y
+00650DQTY11      51130Y   S
+00660 * === LISTC: two repeated rows ===
+00670SLISTC      1
+00680DNAMEC6    20 6 5Y
+00690DQTYC6      5 630Y   S
+00700DNAMEC7    20 7 5Y
+00710DQTYC7      5 730Y   S

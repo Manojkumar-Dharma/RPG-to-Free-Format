@@ -1,0 +1,23 @@
+      * RPG III: ALTSEQ, file translation, transparent literals (RV-33)
+      * H: column 26 S, 43 F, 57 1. Tables are at the end of the source:
+      * file translation, then ALTSEQ records, then compile-time arrays.
+     H                   S                F             1
+     FCUSTMAS IF  F      80            DISK
+     FORDERS  UF  F      80            DISK
+     E                    TAB     3   3  4
+     ICUSTMAS AA
+     I                                        1   6 NAME
+      * Transparent literal: double-byte data between shift-out and shift-in
+      * characters: the compiler scans literals when column 57 of H is 1
+     C           NAME      COMP 'ABC'                    60
+     C           NAME      IFGT 'ABC'
+     C                     MOVE 'AB'      NAME
+     C                     END
+     C                     SETON                     LR
+** FILE TRANSLATION TABLES: one record for each file, hex pairs from position 9
+CUSTMAS 818182828383
+ORDERS  A1C1A2C2A3C3
+** ALTSEQ: lowercase a, b, c sort as uppercase A, B, C
+ALTSEQ  81C182C283C3
+** TAB: compile-time array
+AAAABBBBCCCC

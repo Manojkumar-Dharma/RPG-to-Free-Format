@@ -1,0 +1,28 @@
+* PROMPT and HELP forms (OCL-07, RV-40). From SC41-4731 chapters 4 and 5.
+* Each PROMPT and HELP is reported R and copied as a comment.
+* Example 1: the minimum
+// PROMPT MEMBER-PROMPTS,FORMAT-DISPLAY1
+* LIBRARY and a length for each parameter
+// PROMPT MEMBER-SCREENS,FORMAT-DISPLAY1,LIBRARY-MYLIB,LENGTH-'8,6,8,8,8'
+* Example 3: parameters 6 to 10, blank lengths are 8
+// PROMPT MEMBER-SCREENS,FORMAT-DISPLAY2,START-6,LENGTH-',,,20,'
+* Length 0 skips a parameter, PDATA-YES, UPSI switches as indicators 91 to 98
+// PROMPT MEMBER-SCREENS,FORMAT-DISPLAY3,LENGTH-'1,0,2',PDATA-YES,UPSI-YES
+* Example 4: a value set before the PROMPT, then the procedure call
+// EVALUATE P1=A
+// PROMPT MEMBER-SCREENS,FORMAT-DISPLAY3,LENGTH-'1,2'
+PROCB ?1?,?2?
+* The key pressed is in ?CD?: 0000 Enter, 2001 to 2024 CF1 to CF24, 2090 to 2093
+// IF ?CD?-2003 GOTO END
+// IF ?CD?-2092 GOTO HLP
+* PROMPT as the statement part of an IF
+// IF ?1?/ PROMPT MEMBER-SCREENS,FORMAT-F1
+// IF DSPLY-IGC PROMPT MEMBER-FORMATS,FORMAT-FMT1
+// TAG HLP
+* HELP: the User Support menu, a procedure, OCL help and PCE help
+HELP
+HELP LISTLIBR
+HELP BLDLIBR,MYLIB
+HELP OCL
+HELP PCE
+// TAG END

@@ -1,0 +1,34 @@
+00010 * ORDENTRY - order entry DSPF36 member, production style (DSP-05, RV-41)
+00020 * Three formats: header, detail line, confirmation. Written by hand from
+00030 * SC41-4730 Appendix B, not a real member: replace it with one if you can.
+00040 * === ORDHDR: customer and order number ===
+00050SORDHDR     1  YN    Y                                    3
+00060DTITLE     11 135N                                 ORDER ENTRY
+00070D          11 3 5N                                 CUSTOMER NO
+00080DCUSTNO     6 320N  YS
+00090D          11 4 5N                                 ORDER DATE
+00100DORDDAT     6 420N  YS
+00110D          11 5 5N                                 CUST NAME
+00120DCUSTNM    30 520Y
+00130D          11 7 5N                                 SHIP VIA
+00140DSHIPVA     2 720N  Y
+00150DERRMSG    6023 241
+00160D          4224 2N                                 ENTER=CONTINUE   CMD3=EX
+00170 ND   CMD12=CANCEL
+00180 * === ORDDET: detail line: input, protected and message fields ===
+00190SORDDET     1  YN   Y
+00200D          11 132N                                 ORDER LINE
+00210D          11 4 5N                                 ITEM NUMBER
+00220DITEMNO     8 420N  Y
+00230D          11 5 5N                                 DESCRIPTION
+00240DITEMDS    30 520Y
+00250D          11 6 5N                                 QUANTITY
+00260DQTY        5 620N  YS
+00270D          11 7 5N                                 UNIT PRICE
+00280DPRICE      7 720Y  YS
+00290DMSG1      4022 2Y                                M0001U1
+00300 * === ORDCNF: output fields, a constant shown when indicator 50 is off ===
+00310SORDCNF     1
+00320D          18 3 5N                                 ORDER ACCEPTED NO.
+00330DORDNO      6 325Y   S
+00340DCNFTXT    20 5 550                                ORDER ON CREDIT HOLD
