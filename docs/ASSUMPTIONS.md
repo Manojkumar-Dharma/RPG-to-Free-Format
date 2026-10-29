@@ -33,6 +33,8 @@ cannot check. The R list is in `REVIEW-ITEMS.md`. Audit of 2026-10-27.
 | Compile-time data kept as is (`**CTDATA`) | `IAfreeCvt` | keep: check the name |
 | `EXTFMT` length includes the sign | E specification | keep |
 | Printer file DDS comments, or the DDS member with `DDSTGT` (FREE-06) | `IAfreeCvt` | keep until tested |
+| Record types of the primary file (FREE-49): record identifying indicators and codes | `CycleTypeParse` in `IAfreeCvt`, `CycTypeTest` and `CycKeepControl` in `IAfreeCalc` | new: A once for the record layout; a field of another record type holds the bytes of the record, not its old value; sequence checking (columns 15-16) and a record that matches no type (the RPG halt) are not emulated; a control field is compared with `IA_P_name`, the value of the last record of its type |
+| `RT` return indicator (FREE-49) | `CycOpen` in `IAfreeCalc` | new: A; `if *inrt; *inrt = *off; return;` at the top of the cycle, after the output of step 1; the total calculations of that cycle are not run and LR stays off |
 | H, D, T output records of the cycle skeleton (FREE-37) | `OutFinish`, `CycOutput` | new: written at step 1 and in `IA_TOTALS`; the DDS is not tested |
 | RPG IV program described printer file, exception records and `EXCEPT` (FREE-42) | `Norm4` in `IAfreeOut`, `ExceptStmt` in `IAfreeFx4` | new: A for the file (declared externally described); the DDS is not tested; the field types come from the D specifications |
 | Edited output fields: width of the edit codes, `PAGNBR`, `DATE` (FREE-38) | `IAfreeOut` | new: the DDS positions come from the manual's tables, not from a run |

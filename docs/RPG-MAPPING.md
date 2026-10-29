@@ -1102,3 +1102,19 @@ The same patterns and the same planner as for RPG II and III (see the section ab
 | a jump in that loop to the `TAG` after it | `leave;` |
 
 Stay R: a `/FREE` block or a `CASxx` anywhere in the source, a level indicator, an indicator on a `TAG`, result indicators (columns 71-76) on `CABxx`, two jumps back to one `TAG`, a jump into or out of a group, over an `ELSE`, `WHEN`, `BEGSR` or `ENDSR`, and crossing patterns. Sample `samples/FREE4JMP.rpgle`. Written from the design, not from a run.
+
+## RPG II and III: record types of the primary file and RT (FREE-49, RV-21, RV-52)
+
+Source: SC09-1818 (record identifying indicators and record identification codes, chapter 5; the RT indicator, chapter 13). Only the primary file of the cycle skeleton (FREE-36); a file read with `CHAIN` or `READ` keeps the R of RV-21.
+
+| RPG | Free-form |
+|---|---|
+| Several record lines of the primary file, each with its fields | one data structure `NAME_REC` with all fields by position (`dcl-subf ... pos(n)`); a field name used in a second record type stays R ("already defined") |
+| Record identifying indicator 01 to 99 (columns 19-20) | `*in01 = *on` in a `select` after `read`; the indicators of the other types are set off first |
+| Codes in columns 21-41: position, N, C, character (three per line, all required) | `%subst(IA_NEXT:pos:1) = 'x'` (`<>` with N), joined with `and`; an AND line adds `and`, an OR line adds `or` |
+| Codes Z (zone) and D (digit), numeric sequence entries, other indicators (L1, H1, U1 ...) | R: the whole record layout stays as comments |
+| Record that matches no type | `other;` with a comment: the RPG halt is not converted (A) |
+| Control level on a field of a record type | the field is compared only when `IA_NEXT` is of that type, with `IA_P_name` (declared `like(name)`), which keeps the value of the last record of that type |
+| `RT` as conditioning or resulting indicator (`SETON RT`) | `*inrt`; the cycle ends with `if *inrt; *inrt = *off; return; endif;` after `if *inlr; leave; endif;` (A) |
+
+Sample: `samples/FREECYT.rpg36`. Needs a compile and test on the IBM i.

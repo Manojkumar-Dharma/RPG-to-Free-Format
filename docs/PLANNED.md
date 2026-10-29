@@ -82,12 +82,13 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-46 | IACNVFREE | WORKSTN files, program described (RPG II, RPG III without E, RPG IV with F): `dcl-f NAME workstn(len)`, the record layout of the I specifications (`NAME_REC`) and exception records of an output file as for DISK files (RV-31) | Written | Not tested | `samples/FREEWKS2.rpg36`; needs a compile and test; keys, type U, heading, detail and total records, `EXFMT` and `READC` stay R |
 | FREE-47 | IACNVFREE | RPG IV exception records (`EXCEPT`) of program described DISK and WORKSTN files: the F specification is registered for the O specifications, `NAME_OUT` is declared, the statements come from `OutDiskStatements` as for RPG II and RPG III (RV-56, RV-62) | Written | Not tested | `samples/FREEWK4P.rpgle`; needs a compile and test; heading, detail and total records, output indicators on fields, edit codes stay R |
 | FREE-48 | IACNVFREE | Embedded SQL `WHENEVER ... GOTO` (RPG III and RPG IV): the `WHENEVER` is kept as a comment and an `if` that tests `SQLCODE` is written after every executable SQL statement that follows it; the RV-14 planner gives each test its target (RV-37 in `REVIEW-ITEMS.md`) | Written | Not tested | `samples/FREEWHN.sqlrpg`, `samples/FREE4WHN.sqlrpgle`; needs a compile and test; `CalcSqlJumpScan` (IAfreeCalc) makes one jump event per statement and condition, `Fx4SkipOpen` and `Fx4ScanJumps` (IAfreeFx4) for RPG IV; a jump back, a `WHENEVER` that is not `CONTINUE` or `GOTO label`, and a `/FREE` block or `CASxx` in the source stay R |
+| FREE-49 | IACNVFREE | The cycle skeleton with more than one record type in the primary file (RPG II and RPG III): record identifying indicators (columns 19-20, 01 to 99) and record identification codes C with N, AND/OR lines; the type is tested after `read` and sets the indicator; a control field is compared only for records of its own type; `RT` (return indicator) ends the program without LR (RV-21, RV-52) | Written | Not tested | `samples/FREECYT.rpg36`; needs a compile and test; Z and D codes, sequence checking and a record that matches no type (the RPG halt) stay R or A; a field name used in two record types stays R for the second; secondary files and matching records are the next step (FREE-50) |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-48 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-49 add to `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.

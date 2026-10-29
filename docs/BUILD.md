@@ -96,7 +96,7 @@ Uses the same service program IAcnvSrv. Only RPG36 source is converted so far; o
 RUNSQLSTM SRCSTMF('REPO/rules/IACNVRULES.sql') COMMIT(*NONE) NAMING(*SYS) DFTRDBCOL(MYLIB)
 ```
 
-The last statement lists the number of rows of each table (61 operation codes, 6 comparisons, 11 results, 159 indicators, 16 names, 7 built-in functions, 6 settings). Run it again after every change to a JSON file. `JSON_TABLE` needs a recent Db2 group PTF level on IBM i 7.3 (or 7.4 and later); if the statement is rejected, send the message back.
+The last statement lists the number of rows of each table (61 operation codes, 6 comparisons, 11 results, 160 indicators, 16 names, 7 built-in functions, 6 settings). Run it again after every change to a JSON file. `JSON_TABLE` needs a recent Db2 group PTF level on IBM i 7.3 (or 7.4 and later); if the statement is rejected, send the message back.
 
 Two more includes go into QCPYSRC, the same way as `IAcnvSrvP` (repeat the copy after every change):
 

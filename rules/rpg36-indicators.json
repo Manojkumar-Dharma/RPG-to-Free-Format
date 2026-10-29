@@ -1270,5 +1270,13 @@
   "cycle": "Y",
   "reason": "Matching record indicator: the RPG cycle is not supported in free-form",
   "source": "SC09-1818 chapter 13 and Table 20"
+ },
+ {
+  "name": "RT",
+  "class": "RETURN",
+  "freeForm": "*INRT",
+  "cycle": "Y",
+  "reason": "Return indicator: the RPG cycle is not supported in free-form",
+  "source": "SC09-1818 chapter 13 and Table 20"
  }
 ]

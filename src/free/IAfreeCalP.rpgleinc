@@ -185,6 +185,22 @@ dcl-pr CycleControl ind;
   o_level int(10);
 end-pr;
 
+// FREE-49: the record types of the primary file (record identifying indicator and
+// codes): their number (0 for a plain layout), the test of IA_NEXT and the indicator
+// of one type, and the record type of a control field.
+dcl-pr CycleTypeCount int(10);
+end-pr;
+
+dcl-pr CycleType ind;
+  i_index int(10) const;
+  o_cond varchar(200);
+  o_ind char(2);
+end-pr;
+
+dcl-pr CycleControlType int(10);
+  i_index int(10) const;
+end-pr;
+
 // The WORKSTN file of the source (RV-12): its name, '*MANY' for more than one, ''
 // for none. EXFMT and READC name a record format of it.
 dcl-pr WorkstnFile varchar(8);

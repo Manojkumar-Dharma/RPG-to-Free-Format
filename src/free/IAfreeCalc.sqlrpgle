@@ -90,6 +90,7 @@ dcl-s g_cycRec varchar(12) inz('');
 dcl-s g_cycMax int(10) inz(0);
 dcl-s g_cycHasTotals ind inz(*off);
 dcl-s g_cycPreMax int(10) inz(0);
+dcl-s g_cycUsesRt ind inz(*off);
 
 // GOTO, CABxx and TAG (RV-14): the calculation lines in order, with what the
 // planner decided for each of them (BuildJumpPlan). Kinds: O group (IF, SELEC),
@@ -308,6 +309,7 @@ dcl-proc CalcStart export;
   g_cycMax = 0;
   g_cycHasTotals = *off;
   g_cycPreMax = 0;
+  g_cycUsesRt = *off;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -572,8 +574,7 @@ dcl-proc LineTerms;
     if l_name <> '  ';
       if not RulIndicator(l_name:l_rule);
         o_reason = 'Indicator ' + %trim(l_name) + ' is not known';
-      elseif l_rule.cycle = 'Y'
-             and not (g_cycState <> ' ' and l_rule.class = 'CONTROLLEVEL');
+      elseif l_rule.cycle = 'Y' and not IndCycleOk(l_rule.class:*off);
         o_reason = %trim(l_rule.reason);
       else;
         l_term = %trim(l_rule.freeForm);
@@ -825,7 +826,7 @@ dcl-proc ResultStatement;
   if not RulIndicator(l_name:l_ind);
     return 'Indicator ' + %trim(l_name) + ' is not known';
   endif;
-  if l_ind.cycle = 'Y';
+  if l_ind.cycle = 'Y' and not IndCycleOk(l_ind.class:*on);
     return %trim(l_ind.reason);
   endif;
   // TESTN, TESTZ and TESTB give their own test (it depends on the field).
@@ -2840,7 +2841,8 @@ dcl-proc ConvertSetIndicators;
         l_name = i_c.result3;
     endsl;
     if l_name <> '  ';
-      if not RulIndicator(l_name:l_ind) or l_ind.cycle = 'Y';
+      if not RulIndicator(l_name:l_ind)
+         or (l_ind.cycle = 'Y' and not IndCycleOk(l_ind.class:*on));
         ReviewHere(i_c.line:i_c.lineNo:'Indicator ' + %trim(l_name)
                    + ' cannot be set in free-form');
         return;
@@ -3070,6 +3072,25 @@ dcl-proc StringOperand;
 end-proc;
 
 // ------------------------------------------------------------------
+// FREE-49: an indicator that belongs to the RPG cycle can be used once the cycle
+// skeleton is written: a control level (L1 to L9) as a conditioning indicator, the
+// return indicator RT as a conditioning or resulting indicator.
+dcl-proc IndCycleOk;
+  dcl-pi *n ind;
+    i_class varchar(12) const;
+    i_resulting ind const;
+  end-pi;
+
+  if g_cycState = ' ';
+    return *off;
+  endif;
+  if %trim(i_class) = 'RETURN';
+    return *on;
+  endif;
+  return not i_resulting and %trim(i_class) = 'CONTROLLEVEL';
+end-proc;
+
+// ------------------------------------------------------------------
 // The free-form name of a resulting indicator, or the reason it cannot be used.
 dcl-proc IndicatorName;
   dcl-pi *n varchar(150);
@@ -3083,7 +3104,7 @@ dcl-proc IndicatorName;
   if not RulIndicator(i_name:l_ind);
     return 'Indicator ' + %trim(i_name) + ' is not known';
   endif;
-  if l_ind.cycle = 'Y';
+  if l_ind.cycle = 'Y' and not IndCycleOk(l_ind.class:*on);
     return %trim(l_ind.reason);
   endif;
   o_free = %trim(l_ind.freeForm);
@@ -6401,6 +6422,10 @@ dcl-proc CycScan;
     if l_n > g_cycPreMax;
       g_cycPreMax = l_n;
     endif;
+    // FREE-49: RT as conditioning or resulting indicator.
+    if Fld(i_up:'IND' + %char(l_slot)) = 'RT' or Fld(i_up:'RES' + %char(l_slot)) = 'RT';
+      g_cycUsesRt = *on;
+    endif;
   endfor;
 end-proc;
 
@@ -6547,6 +6572,92 @@ dcl-proc CycBefore;
 end-proc;
 
 // ------------------------------------------------------------------
+// FREE-49: the record types of the primary file. The record just read (IA_NEXT)
+// decides the record type; the record identifying indicator of that type is set and
+// those of the other types are off. A record that matches no type halts the RPG
+// cycle; that is not converted (marked in the code).
+dcl-proc CycTypeTest;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_n int(10);
+  dcl-s l_k int(10);
+  dcl-s l_cond varchar(200);
+  dcl-s l_ind char(2);
+  dcl-s l_other ind inz(*off);
+
+  l_n = CycleTypeCount();
+  if l_n = 0;
+    return;
+  endif;
+  Emit('// record identifying codes: the record just read decides the record type '
+       + '(FREE-49)':g_lastLineNo);
+  for l_k = 1 to l_n;
+    if CycleType(l_k:l_cond:l_ind) and l_ind <> '  ';
+      Emit('*in' + l_ind + ' = *off;':g_lastLineNo);
+    endif;
+  endfor;
+  Emit('select;':g_lastLineNo);
+  g_depth += 1;
+  for l_k = 1 to l_n;
+    if CycleType(l_k:l_cond:l_ind);
+      if l_cond = '';
+        Emit('other;':g_lastLineNo);
+        l_other = *on;
+      else;
+        Emit('when ' + l_cond + ';':g_lastLineNo);
+      endif;
+      if l_ind <> '  ';
+        Emit('*in' + l_ind + ' = *on;':g_lastLineNo:1);
+      endif;
+    endif;
+  endfor;
+  if not l_other;
+    Emit('other;':g_lastLineNo);
+    Emit('// no record identification code matches: the RPG cycle halts here (not '
+         + 'converted)':g_lastLineNo:1);
+  endif;
+  g_depth -= 1;
+  Emit('endsl;':g_lastLineNo);
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-49: the control fields of a primary file with record types are compared with
+// the value of the last record of their own type (IA_P_name), because the fields
+// of the record of another type hold other bytes. Declares them and keeps them.
+dcl-proc CycKeepControl;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_count int(10);
+  dcl-s l_name varchar(6);
+  dcl-s l_level int(10);
+  dcl-s l_type int(10);
+  dcl-s l_cond varchar(200);
+  dcl-s l_ind char(2);
+  dcl-s l_file varchar(8);
+  dcl-s l_rec varchar(12);
+
+  if CycleTypeCount() = 0 or not CycleInfo(l_file:l_rec:l_count);
+    return;
+  endif;
+  for l_k = 1 to l_count;
+    if CycleControl(l_k:l_name:l_level);
+      l_type = CycleControlType(l_k);
+      DeclareHidden('IA_P_' + l_name:'like(' + l_name + ')');
+      if l_type > 0 and CycleType(l_type:l_cond:l_ind) and l_cond <> '';
+        Emit('if ' + l_cond + ';':g_lastLineNo);
+        Emit('IA_P_' + l_name + ' = IA_NEXT.' + l_name + ';':g_lastLineNo:1);
+        Emit('endif;':g_lastLineNo);
+      else;
+        Emit('IA_P_' + l_name + ' = IA_NEXT.' + l_name + ';':g_lastLineNo);
+      endif;
+    endif;
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc CycBreakTest;
   dcl-pi *n;
   end-pi;
@@ -6560,10 +6671,16 @@ dcl-proc CycBreakTest;
   dcl-s l_found ind;
   dcl-s l_file varchar(8);
   dcl-s l_rec varchar(12);
+  dcl-s l_type int(10);
+  dcl-s l_tcond varchar(200);
+  dcl-s l_tind char(2);
+  dcl-s l_typed ind;
+  dcl-s l_term varchar(190);
 
   if not CycleInfo(l_file:l_rec:l_count) or l_count = 0;
     return;
   endif;
+  l_typed = (CycleTypeCount() > 0);
   Emit('if IA_FIRST;':g_lastLineNo);
   g_depth += 1;
   Emit('// the first record: a control break of every control level':g_lastLineNo);
@@ -6578,11 +6695,31 @@ dcl-proc CycBreakTest;
     l_found = *off;
     for l_k = 1 to l_count;
       if CycleControl(l_k:l_name:l_level) and l_level = l_lvl;
-        l_found = *on;
-        if l_cond <> '';
-          l_cond += ' or ';
+        if l_typed;
+          // FREE-49: only a record of the type that has the field is compared,
+          // with the value of the last record of that type.
+          l_type = CycleControlType(l_k);
+          l_term = 'IA_NEXT.' + l_name + ' <> IA_P_' + l_name;
+          if l_type > 0 and CycleType(l_type:l_tcond:l_tind) and l_tcond <> '';
+            l_term = '(' + l_tcond + ') and ' + l_term;
+          endif;
+          if %len(l_term) > 176;
+            RptItem(C_STS_REVIEW:g_lastLineNo:'Control field ' + l_name
+                    :'The record identification codes are too long for the control '
+                     + 'break test');
+          else;
+            Emit('when ' + l_term + ';':g_lastLineNo);
+            g_depth += 1;
+            CycLevels(*on:l_lvl);
+            g_depth -= 1;
+          endif;
+        else;
+          l_found = *on;
+          if l_cond <> '';
+            l_cond += ' or ';
+          endif;
+          l_cond += 'IA_NEXT.' + l_name + ' <> ' + l_name;
         endif;
-        l_cond += 'IA_NEXT.' + l_name + ' <> ' + l_name;
       endif;
     endfor;
     if l_found;
@@ -6596,6 +6733,7 @@ dcl-proc CycBreakTest;
   Emit('endsl;':g_lastLineNo);
   g_depth -= 1;
   Emit('endif;':g_lastLineNo);
+  CycKeepControl();
 end-proc;
 
 // ------------------------------------------------------------------
@@ -6647,12 +6785,21 @@ dcl-proc CycOpen;
   Emit('if *inlr;':g_lastLineNo);
   Emit('leave;':g_lastLineNo:1);
   Emit('endif;':g_lastLineNo);
+  if g_cycUsesRt;
+    Emit('// RT (return indicator): back to the caller, LR stays off (FREE-49)'
+         :g_lastLineNo);
+    Emit('if *inrt;':g_lastLineNo);
+    Emit('*inrt = *off;':g_lastLineNo:1);
+    Emit('return;':g_lastLineNo:1);
+    Emit('endif;':g_lastLineNo);
+  endif;
   CycLevels(*off:g_cycMax);
   Emit('read ' + g_cycFile + ' IA_NEXT;':g_lastLineNo);
   Emit('if %eof(' + g_cycFile + ');':g_lastLineNo);
   Emit('*inlr = *on;':g_lastLineNo:1);
   Emit('leave;':g_lastLineNo:1);
   Emit('endif;':g_lastLineNo);
+  CycTypeTest();
   CycBreakTest();
   if g_cycHasTotals;
     Emit('if not IA_FIRST;':g_lastLineNo);

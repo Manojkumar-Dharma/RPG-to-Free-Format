@@ -71,6 +71,13 @@ dcl-s g_cycFile varchar(8) inz('');
 dcl-s g_cycCtlName varchar(6) dim(50);
 dcl-s g_cycCtlLevel int(10) dim(50);
 dcl-s g_cycCtlCount int(10) inz(0);
+// FREE-49: record types of the primary file (record identifying indicator and codes,
+// columns 15-41 of the I specification). The condition is written against IA_NEXT.
+dcl-s g_cycTypeCond varchar(200) dim(20);
+dcl-s g_cycTypeInd char(2) dim(20);
+dcl-s g_cycTypeCount int(10) inz(0);
+dcl-s g_cycTypeCur int(10) inz(0);
+dcl-s g_cycCtlType int(10) dim(50);
 dcl-s g_inPrimary ind inz(*off);
 // Names defined so far (files, data structures, fields) and the line of each.
 dcl-s g_nameList varchar(12) dim(C_MAXNAMES);
@@ -124,6 +131,8 @@ dcl-proc FreeConvert export;
   g_fileCount = 0;
   g_cycFile = '';
   g_cycCtlCount = 0;
+  g_cycTypeCount = 0;
+  g_cycTypeCur = 0;
   g_inPrimary = *off;
   g_renCount = 0;
   g_fmtCount = 0;
@@ -1972,6 +1981,9 @@ dcl-proc ConvertInput;
   dcl-s l_status char(1);
   dcl-s l_occurs varchar(4) inz('');
   dcl-s l_occursOk ind inz(*on);
+  dcl-s l_isCyc ind inz(*off);
+  dcl-s l_typed ind inz(*off);
+  dcl-s l_typeNo int(10) inz(0);
 
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
   // Columns 44-47: a whole number from 1 to 9999, or blank.
@@ -2003,23 +2015,6 @@ dcl-proc ConvertInput;
     return 0;
   endif;
 
-  // The block ends before the next record line. Comment and blank lines
-  // belong to it only when more field lines follow.
-  l_last = i_index;
-  l_next = i_index + 1;
-  dow l_next <= g_sourceCount;
-    l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_next));
-    if IsInputField(l_nextUp);
-      l_last = l_next;
-    elseif IsInputContinuation(l_nextUp);
-      l_multi = *on;
-      l_last = l_next;
-    elseif not IsCommentOrBlank(l_nextUp);
-      leave;
-    endif;
-    l_next += 1;
-  enddo;
-
   l_name = %trim(%subst(l_up:7:8));
   select;
     when %subst(l_up:19:2) = 'DS';
@@ -2029,15 +2024,38 @@ dcl-proc ConvertInput;
     other;
       l_kind = 'F';
   endsl;
+  // FREE-49: the record lines of the primary file of the cycle form one block (the
+  // record types), with their AND/OR lines and field lines.
+  l_isCyc = (l_kind = 'F' and g_cycFile <> '' and l_name = g_cycFile);
+
+  // The block ends before the next record line (of another file, or of a file
+  // that is not the primary file). Comment and blank lines belong to it only
+  // when more field lines follow.
+  l_last = i_index;
+  l_next = i_index + 1;
+  dow l_next <= g_sourceCount;
+    l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_next));
+    if IsInputField(l_nextUp);
+      l_last = l_next;
+    elseif IsInputContinuation(l_nextUp);
+      l_multi = *on;
+      l_last = l_next;
+    elseif l_isCyc and IsRecordLineOf(l_nextUp:l_name);
+      l_last = l_next;
+    elseif not IsCommentOrBlank(l_nextUp);
+      leave;
+    endif;
+    l_next += 1;
+  enddo;
 
   // ---- the record line ----
   select;
-    when l_multi;
+    when l_multi and not l_isCyc;
       l_reason = 'More than one record type (AND/OR lines) is not supported in '
                  + 'free-form';
     when l_kind = 'L';
       l_reason = 'Look-ahead fields are not supported in free-form';
-    when %trim(%subst(l_up:21:21)) <> '';
+    when %trim(%subst(l_up:21:21)) <> '' and not l_isCyc;
       l_reason = 'Record identification codes (more than one record type) are not '
                  + 'supported in free-form';
     when l_kind = 'D' and g_dialect = '3'
@@ -2071,7 +2089,7 @@ dcl-proc ConvertInput;
       elseif %trim(%subst(l_up:17:2)) <> '';
         l_reason = 'Number or option entries (columns 17-18) are not valid without '
                    + 'sequence checking';
-      elseif %trim(%subst(l_up:19:2)) <> '';
+      elseif %trim(%subst(l_up:19:2)) <> '' and not l_isCyc;
         l_reason = 'Record-identifying indicator ' + %trim(%subst(l_up:19:2))
                    + ' is not set by free-form I/O';
       else;
@@ -2092,9 +2110,13 @@ dcl-proc ConvertInput;
                      + 'one record type)';
         else;
           l_recLen = g_fileLens(l_file);
+          if l_isCyc;
+            l_reason = CycleTypeParse(i_index:l_last:l_name:l_recLen);
+          endif;
         endif;
       endif;
   endsl;
+  l_typed = (l_isCyc and l_reason = '' and g_cycTypeCount > 0);
 
   if l_reason <> '';
     ReviewBlock(i_index:l_last:l_reason);
@@ -2120,8 +2142,19 @@ dcl-proc ConvertInput;
   if l_kind = 'D' and %subst(l_up:18:1) = 'I';
     l_head = %subst(l_head:1:%len(l_head) - 1) + ' inz;';
   endif;
+  if l_typed;
+    l_note = l_note + '; record types of the primary file: the type is decided after READ in the '
+             + 'cycle skeleton (FREE-49); a field of another record type holds the bytes of the '
+             + 'record, not its old value; sequence checking and an unidentified record are not '
+             + 'emulated';
+    if %len(l_note) > 190;
+      l_note = %subst(l_note:1:190);
+    endif;
+    l_typeNo = 1;
+    g_cycTypeCur = 1;
+  endif;
   BlockAdd(l_head:i_lineNo);
-  g_inPrimary = (l_kind = 'F' and g_cycFile <> '' and l_name = g_cycFile);
+  g_inPrimary = l_isCyc;
 
   for l_k = i_index + 1 to l_last;
     l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
@@ -2131,6 +2164,19 @@ dcl-proc ConvertInput;
       else;
         BlockAdd('':g_sourceLineNos(l_k));
       endif;
+    elseif l_typed and IsRecordLineOf(l_nextUp:l_name);
+      l_typeNo += 1;
+      g_cycTypeCur = l_typeNo;
+      BlockAdd('// record type ' + %char(l_typeNo) + ' of file ' + l_name
+               + ' (tested after READ in the cycle)':g_sourceLineNos(l_k));
+      RptItem(C_STS_ASSUMPTION:g_sourceLineNos(l_k)
+              :%trimr(%subst(g_sourceLines(l_k):6:69))
+              :'Record type ' + %char(l_typeNo) + ': identification codes and indicator '
+               + 'are written in the cycle skeleton (FREE-49)');
+    elseif l_typed and IsInputContinuation(l_nextUp);
+      BlockAdd('// ' + %trimr(%subst(g_sourceLines(l_k):6:69)):g_sourceLineNos(l_k));
+      RptItem(C_STS_CONVERTED:g_sourceLineNos(l_k)
+              :%trimr(%subst(g_sourceLines(l_k):6:69)):'');
     elseif ConvertInputField(g_sourceLines(l_k):l_recLen:l_stmt:l_fieldReason);
       DefineName(%trim(%subst(l_nextUp:53:6)):g_sourceLineNos(l_k));
       l_fields += 1;
@@ -2146,10 +2192,12 @@ dcl-proc ConvertInput;
   endfor;
 
   g_inPrimary = *off;
+  g_cycTypeCur = 0;
 
   // No subfield could be converted: the whole block stays as comments. The
   // field lines were reported with their own reasons.
   if l_fields = 0;
+    g_cycTypeCount = 0;
     for l_k = i_index to l_last;
       l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
       if IsCommentOrBlank(l_nextUp);
@@ -2319,6 +2367,7 @@ dcl-proc ConvertInputField;
     g_cycCtlCount += 1;
     g_cycCtlName(g_cycCtlCount) = l_name;
     g_cycCtlLevel(g_cycCtlCount) = %int(%subst(l_up:60:1));
+    g_cycCtlType(g_cycCtlCount) = g_cycTypeCur;
   endif;
   // The length and type are needed by MOVE and MOVEL.
   select;
@@ -2394,6 +2443,238 @@ dcl-proc IsInputContinuation;
     return *off;
   endif;
   return %subst(i_up:14:2) = 'OR' or %subst(i_up:14:3) = 'AND';
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-49: a record line of file i_name: form type I, the file name in columns 7-14,
+// not a field line, an AND/OR line, a data structure or a look-ahead line.
+dcl-proc IsRecordLineOf;
+  dcl-pi *n ind;
+    i_up char(100) const;
+    i_name varchar(8) const;
+  end-pi;
+
+  if %subst(i_up:6:1) <> 'I' or %subst(i_up:7:1) = '*';
+    return *off;
+  endif;
+  if IsInputField(i_up) or IsInputContinuation(i_up);
+    return *off;
+  endif;
+  if %subst(i_up:19:2) = 'DS' or %subst(i_up:19:2) = '**';
+    return *off;
+  endif;
+  return %trim(%subst(i_up:7:8)) = i_name;
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-49: the record types of the primary file (record identifying indicator in
+// columns 19-20, record identification codes in columns 21-41, AND/OR lines).
+// Fills g_cycTypeCond and g_cycTypeInd and returns '' when every record line and
+// AND/OR line of the block can be written as a test of IA_NEXT; otherwise the
+// reason, and the whole block stays R. A single record line with no indicator
+// and no codes is the plain layout of FREE-36 (no record type).
+dcl-proc CycleTypeParse;
+  dcl-pi *n varchar(190);
+    i_first int(10) const;
+    i_last int(10) const;
+    i_name varchar(8) const;
+    i_recLen int(10) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_up char(100);
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_piece varchar(200);
+  dcl-s l_cur varchar(200) inz('');
+  dcl-s l_alts varchar(400) inz('');
+  dcl-s l_total varchar(400) inz('');
+  dcl-s l_ind char(2);
+  dcl-s l_n int(10) inz(0);
+
+  g_cycTypeCount = 0;
+  for l_k = i_first to i_last;
+    l_up = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
+    select;
+      when IsRecordLineOf(l_up:i_name);
+        l_n += 1;
+        if l_n > 20;
+          l_reason = 'More than 20 record types in the primary file';
+        else;
+          l_reason = CycleRecordLine(l_up:g_sourceLines(l_k):i_recLen:l_ind:l_piece);
+        endif;
+        if l_reason = '';
+          g_cycTypeInd(l_n) = l_ind;
+          l_cur = l_piece;
+          l_alts = '';
+          g_cycTypeCond(l_n) = l_cur;
+        endif;
+      when IsInputContinuation(l_up);
+        if %trim(%subst(l_up:17:4)) <> '';
+          l_reason = 'Entries in columns 17-20 of an AND/OR line are not valid';
+        elseif %trim(%subst(l_up:21:21)) = '';
+          l_reason = 'An AND/OR line without record identification codes';
+        else;
+          l_reason = CycleCodes(l_up:g_sourceLines(l_k):i_recLen:l_piece);
+        endif;
+        if l_reason = '' and l_cur = '';
+          l_reason = 'An AND/OR line after a record line without identification codes';
+        endif;
+        if l_reason = '';
+          if %subst(l_up:14:3) = 'AND';
+            l_cur = l_cur + ' and ' + l_piece;
+          else;
+            if l_alts = '';
+              l_alts = '(' + l_cur + ')';
+            else;
+              l_alts = l_alts + ' or (' + l_cur + ')';
+            endif;
+            l_cur = l_piece;
+          endif;
+          if l_alts = '';
+            l_total = l_cur;
+          else;
+            l_total = l_alts + ' or (' + l_cur + ')';
+          endif;
+          if %len(l_total) > 170;
+            l_reason = 'The record identification codes of a record type are too long';
+          else;
+            g_cycTypeCond(l_n) = l_total;
+          endif;
+        endif;
+    endsl;
+    if l_reason <> '';
+      leave;
+    endif;
+  endfor;
+
+  if l_reason = '' and l_n > 1;
+    for l_k = 1 to l_n;
+      if g_cycTypeCond(l_k) = '';
+        l_reason = 'More than one record type, but record type ' + %char(l_k)
+                   + ' has no record identification codes';
+      endif;
+    endfor;
+  endif;
+  if l_reason <> '';
+    g_cycTypeCount = 0;
+    return l_reason;
+  endif;
+  // One record line without indicator and codes: the plain layout.
+  if l_n = 1 and g_cycTypeCond(1) = '' and g_cycTypeInd(1) = '  ';
+    return '';
+  endif;
+  g_cycTypeCount = l_n;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-49: one record line of a record type: sequence name (columns 15-16),
+// indicator (19-20) and codes (21-41). o_ind is the indicator ('  ' for none),
+// o_cond the test of IA_NEXT ('' when the line has no codes).
+dcl-proc CycleRecordLine;
+  dcl-pi *n varchar(190);
+    i_up char(100) const;
+    i_line char(100) const;
+    i_recLen int(10) const;
+    o_ind char(2);
+    o_cond varchar(200);
+  end-pi;
+
+  o_ind = '  ';
+  o_cond = '';
+  if %subst(i_up:15:2) <> '  ' and %check(C_UPPER:%subst(i_up:15:2)) > 0;
+    return 'Sequence checking (columns 15-16) is not supported in free-form';
+  endif;
+  if %trim(%subst(i_up:17:2)) <> '';
+    return 'Number or option entries (columns 17-18) are not valid without sequence '
+           + 'checking';
+  endif;
+  if %subst(i_up:42:1) <> ' ' or %trim(%subst(i_up:43:28)) <> '';
+    return 'Field entries on the record line are not valid';
+  endif;
+  if %trim(%subst(i_up:19:2)) <> '';
+    if %check(C_DIGITS:%subst(i_up:19:2)) > 0 or %subst(i_up:19:2) = '00';
+      return 'Record-identifying indicator ' + %trim(%subst(i_up:19:2))
+             + ' is converted only for 01 to 99';
+    endif;
+    o_ind = %subst(i_up:19:2);
+  endif;
+  if %trim(%subst(i_up:21:21)) = '';
+    return '';
+  endif;
+  return CycleCodes(i_up:i_line:i_recLen:o_cond);
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-49: the three record identification codes of columns 21-41 (position,
+// N, C, character; columns 21-27, 28-34 and 35-41) as one test of IA_NEXT; the
+// codes of one line are all required. Only the code C (character) is converted:
+// Z (zone) and D (digit) stay R.
+dcl-proc CycleCodes;
+  dcl-pi *n varchar(190);
+    i_up char(100) const;
+    i_line char(100) const;
+    i_recLen int(10) const;
+    o_cond varchar(200);
+  end-pi;
+
+  dcl-s l_g int(10);
+  dcl-s l_from int(10);
+  dcl-s l_pos varchar(4);
+  dcl-s l_not char(1);
+  dcl-s l_code char(1);
+  dcl-s l_chr char(1);
+  dcl-s l_lit varchar(2);
+  dcl-s l_term varchar(60);
+  dcl-s l_text varchar(200) inz('');
+
+  o_cond = '';
+  for l_g = 0 to 2;
+    l_from = 21 + 7 * l_g;
+    l_pos = %trim(%subst(i_up:l_from:4));
+    l_not = %subst(i_up:l_from + 4:1);
+    l_code = %subst(i_up:l_from + 5:1);
+    l_chr = %subst(i_line:l_from + 6:1);
+    if l_pos = '' and l_not = ' ' and l_code = ' ' and l_chr = ' ';
+      iter;
+    endif;
+    if l_pos = '' or %check(C_DIGITS:l_pos) > 0;
+      return 'Record identification position (columns ' + %char(l_from) + '-'
+             + %char(l_from + 3) + ') is not valid';
+    endif;
+    if %dec(l_pos:5:0) < 1 or %dec(l_pos:5:0) > i_recLen;
+      return 'Record identification position ' + l_pos + ' is outside the record';
+    endif;
+    if l_not <> ' ' and l_not <> 'N';
+      return 'The Not entry of a record identification code must be blank or N';
+    endif;
+    if l_code = 'Z' or l_code = 'D';
+      return 'Zone and digit record identification codes (Z and D) are not converted';
+    endif;
+    if l_code <> 'C';
+      return 'The record identification code must be C (character)';
+    endif;
+    l_lit = l_chr;
+    if l_chr = '''';
+      l_lit = '''''';
+    endif;
+    l_term = '%subst(IA_NEXT:' + %char(%dec(l_pos:5:0)) + ':1)';
+    if l_not = 'N';
+      l_term = l_term + ' <> ';
+    else;
+      l_term = l_term + ' = ';
+    endif;
+    l_term = l_term + '''' + l_lit + '''';
+    if l_text <> '';
+      l_text = l_text + ' and ';
+    endif;
+    l_text = l_text + l_term;
+  endfor;
+  if l_text = '';
+    return 'The record identification codes are blank';
+  endif;
+  o_cond = l_text;
+  return '';
 end-proc;
 
 // ------------------------------------------------------------------
@@ -2544,6 +2825,47 @@ dcl-proc CycleControl export;
   o_name = g_cycCtlName(i_index);
   o_level = g_cycCtlLevel(i_index);
   return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-49: the record types of the primary file (0 when the layout is plain).
+dcl-proc CycleTypeCount export;
+  dcl-pi *n int(10);
+  end-pi;
+
+  return g_cycTypeCount;
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-49: record type i_index: the test of IA_NEXT and the record identifying
+// indicator ('  ' for none).
+dcl-proc CycleType export;
+  dcl-pi *n ind;
+    i_index int(10) const;
+    o_cond varchar(200);
+    o_ind char(2);
+  end-pi;
+
+  if i_index < 1 or i_index > g_cycTypeCount;
+    return *off;
+  endif;
+  o_cond = g_cycTypeCond(i_index);
+  o_ind = g_cycTypeInd(i_index);
+  return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-49: the record type (1 to n) of control field i_index, 0 when the layout is
+// plain.
+dcl-proc CycleControlType export;
+  dcl-pi *n int(10);
+    i_index int(10) const;
+  end-pi;
+
+  if i_index < 1 or i_index > g_cycCtlCount;
+    return 0;
+  endif;
+  return g_cycCtlType(i_index);
 end-proc;
 
 // ------------------------------------------------------------------

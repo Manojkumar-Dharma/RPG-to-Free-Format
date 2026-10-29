@@ -1,0 +1,16 @@
+      * RPG II record types of the primary file (FREE-49): header, detail, trailer
+     H
+     FORDERS  IP         80            DISK
+     IORDERS  AA  01   1 CH
+     I                                        2   40CUSTNOL1
+     I                                        5  24 CNAME
+     IORDERS  BB  02   1 CD
+     I                                        2   40DCUST
+     I                                        5  102AMT
+     IORDERS  CC  03   1 CT   2NCX
+     I                                        5  102TOTAL
+      * detail calculations: only for a detail record (indicator 02)
+     C   02                ADD  AMT       CTOT    92
+      * total calculations: a break of L1; RT ends the program on a trailer record
+     CL1                   Z-ADD0         CTOT
+     C   03                SETON                     RT
