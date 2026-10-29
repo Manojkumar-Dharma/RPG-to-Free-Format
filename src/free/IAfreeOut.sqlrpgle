@@ -122,7 +122,7 @@ end-proc;
 // ------------------------------------------------------------------
 // A valid indicator for an output condition (SC09-1817 chapter 10): 01-99,
 // KA-KN, KP-KY, H1-H9, U1-U8, OA-OG, OV. L1-L9, LR, MR, RT and 1P belong to the
-// RPG cycle.
+// RPG cycle (RT: see CycleTerm).
 dcl-proc IsOutIndicator;
   dcl-pi *n ind;
     i_ind varchar(2) const;
@@ -155,8 +155,10 @@ end-proc;
 // The output indicators of columns 23-31 (three of N + two characters) as a
 // free-form condition. o_reason is set for an indicator that cannot be used.
 // The indicators of the RPG cycle on the record line of a heading, detail or total
-// record (RV-60): L1-L9 and LR as *INLn, 1P (heading and detail only) as IA_FIRST,
-// the first record of the cycle skeleton. '' for anything else.
+// record (RV-60): L1-L9 and LR as *INLn, RT as *INRT (FREE-50: the cycle skeleton
+// tests it after LR, as step 11 of the cycle does), 1P (heading and detail only) as
+// IA_FIRST, the first record of the cycle skeleton. '' for anything else (MR stays R
+// until the skeleton sets it).
 dcl-proc CycleTerm;
   dcl-pi *n varchar(10);
     i_ind varchar(2) const;
@@ -168,6 +170,9 @@ dcl-proc CycleTerm;
   endif;
   if i_ind = 'LR';
     return '*inlr';
+  endif;
+  if i_ind = 'RT';
+    return '*inrt';
   endif;
   if %subst(i_ind:1:1) = 'L' and %check('123456789':%subst(i_ind:2:1)) = 0;
     return '*inl' + %subst(i_ind:2:1);

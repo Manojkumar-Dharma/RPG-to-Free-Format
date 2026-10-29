@@ -1127,6 +1127,6 @@ Source: SC09-1818 (record identifying indicators and record identification codes
 | Codes Z (zone) and D (digit), numeric sequence entries, other indicators (L1, H1, U1 ...) | R: the whole record layout stays as comments |
 | Record that matches no type | `other;` with a comment: the RPG halt is not converted (A) |
 | Control level on a field of a record type | the field is compared only when `IA_NEXT` is of that type, with `IA_P_name` (declared `like(name)`), which keeps the value of the last record of that type |
-| `RT` as conditioning or resulting indicator (`SETON RT`) | `*inrt`; the cycle ends with `if *inrt; *inrt = *off; return; endif;` after `if *inlr; leave; endif;` (A) |
+| `RT` as conditioning or resulting indicator (`SETON RT`), or as an output indicator on H, D and T records | `*inrt`; the cycle ends with `if *inrt; *inrt = *off; return; endif;` after `if *inlr; leave; endif;` (A) |
 
 Sample: `samples/FREECYT.rpg36`. Needs a compile and test on the IBM i.
