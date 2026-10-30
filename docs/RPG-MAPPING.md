@@ -215,7 +215,7 @@ The reasons are worded slightly differently in the report; the statements and st
 
 ## Rule tables (rules/*.json, Db2 tables IACNVxxx)
 
-What an operation code, an indicator or a special name becomes is data, not code. The JSON files in `rules/` are the source of truth; `rules/IACNVRULES.sql` creates the Db2 tables and loads them with `JSON_TABLE` (run it again after every change); IACNVFREE reads the tables once at the start (module IAfreeRul). A missing or empty table ends the run with message IAC0104.
+What an operation code, an indicator or a special name becomes is data, not code. The JSON files in `rules/` are the source of truth; `rules/IACNVRULES.sql` creates the Db2 tables and loads them with `JSON_TABLE` (run it again after every change); `rules/IACNVRULES_INSERT.sql` does the same with plain `INSERT` statements for systems without `JSON_TABLE`, generated from the JSON files by `tools/GenRulesInsert.py` (run the script after every change to a JSON file); IACNVFREE reads the tables once at the start (module IAfreeRul). A missing or empty table ends the run with message IAC0104.
 
 | File | Table | Holds |
 |---|---|---|

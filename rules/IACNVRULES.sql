@@ -13,6 +13,9 @@
 -- Needs JSON_TABLE (Db2 for i, IBM i 7.3 with a recent Db2 PTF group level,
 -- or 7.4 or later; the minimum level has not been checked on a system) and
 -- GET_CLOB_FROM_FILE. The JSON files must be UTF-8 (CCSID 1208) text.
+-- Without JSON_TABLE: run IACNVRULES_INSERT.sql instead (generated from this
+-- file and the JSON files by tools/GenRulesInsert.py; run the script after
+-- every change to a JSON file or to this file).
 
 CREATE OR REPLACE VARIABLE IARULESDIR VARCHAR(512) DEFAULT '';
 SET IARULESDIR = '/home/REPO/rules/';

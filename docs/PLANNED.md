@@ -91,12 +91,13 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
 | FREE-56 | IACNVFREE, IAcnvSrv | Cleanups of the 2026-10-27 audit (`ASSUMPTIONS.md`): `SORTA` and `XFOOT` reported C when the array is defined in the member (A otherwise); `TIME` C for a 6-digit result with 0 decimals (R otherwise, as before); the rows `GOTO`, `TAG`, `CAB`, `EXFMT` and `READC` of `opcodes.json` show A instead of R (converted patterns, converted with a WORKSTN file; the code decides, `EXFMT` and `READC` without a WORKSTN file stay R); the A reasons have one fixed text per cause (no names or labels in them) and `IAcnvRpt` prints the A reasons counted by cause before the totals | Written | Not tested | `ConvertTemplate`, `CalcLine` in `IAfreeCalc`; `CountCauses`, `PrintCauses` in `IAcnvRpt` (a cause is a reason split at ` | `, IACNVFREE only); `SORTA` and `XFOOT` of a table (`TABxx`) stay A |
 | FREE-57 | IACNVFREE | RPG II/III printer output: `PAGE1` to `PAGE7` as `PAGE` (`PAGNBR EDTCDE(Z)`), clearer R reasons for data formats P, B, L, R (RV-61) | Written | Not tested | `samples/FREEEDT.rpg36` has a `PAGE1` line; needs a compile and test and a check of two `PAGNBR` fields in one `CRTPRTF`|
 | FREE-58 | IACNVFREE | RPG II/III output: assignments before the `write` (`OutExceptBefore`, `OutCycleBefore`) for `UDAY`, `UMONTH`, `UYEAR`, array elements `ARR,3` and `*PLACE`; packed and binary (`P`, `B`) fields of DISK records through work fields (`CalcDeclare`) (RV-61) | Written | Not tested | `samples/FREEPLC.rpg36`, `samples/FREEDPB.rpg36`; needs a compile and test (the array `WORK` must be known to the converter, `CRTPRTF` of the copies, bytes of the packed and binary fields); RPG IV array elements stay R |
+| FREE-59 | IACNVFREE | `rules/IACNVRULES_INSERT.sql`: the rule tables loaded with plain `INSERT ... VALUES`, for IBM i systems without `JSON_TABLE`; generated from the JSON files and `IACNVRULES.sql` by `tools/GenRulesInsert.py` (`--check` finds an out-of-date file) | Written | Not tested | Checked off the system: loaded into SQLite and all 8 tables compared row by row with the JSON files. Needs a run with `RUNSQLSTM` on an IBM i without `JSON_TABLE` (check the 8 row counts at the end) |
 
 ## Notes
 
 - OCL-01 to OCL-07 and OCL-09 to OCL-11 add to `docs/OCL-MAPPING.md`; DSP-01 to DSP-06 add to
   `docs/DSPF-MAPPING.md`.
-- FREE-01 to FREE-56 add to `docs/RPG-MAPPING.md`.
+- FREE-01 to FREE-56 add to `docs/RPG-MAPPING.md`; FREE-59 is described in `docs/BUILD.md` and the Rule tables section of `docs/RPG-MAPPING.md`.
 - IACNVFREE reuses the shared parameter set and the IAcnvSrv service program.
 - Anything that cannot be converted should be reported for review, not
   dropped silently.
@@ -113,7 +114,7 @@ To pick work: Code status `Planned` and no blocker in Notes. To test: Code statu
   `RulLayout`. New C-spec code must read fields with `Fld(line:'NAME')` in
   `IAfreeCalc`, never by fixed column. H, F, I, E, L and O are still read by
   fixed columns in `IAfreeCvt`; moving them onto `IACNVLAY` is part of FREE-10.
-- After changing a JSON file in `rules/`, re-run `rules/IACNVRULES.sql`.
+- After changing a JSON file in `rules/`, re-run `rules/IACNVRULES.sql`, and run `python3 tools/GenRulesInsert.py` so that `rules/IACNVRULES_INSERT.sql` (FREE-59) follows; commit both.
 - Comments in the converted source use `RulDialectLabel()` (`// RPG III: ...`).
 - Open decisions and gaps: `SQLRPG` embedded SQL is converted (FREE-11, written in
   `CalcSqlLine` of `IAfreeCalc`, needs a compile and test); string
