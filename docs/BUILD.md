@@ -96,7 +96,7 @@ Uses the same service program IAcnvSrv. Only RPG36 source is converted so far; o
 RUNSQLSTM SRCSTMF('REPO/rules/IACNVRULES.sql') COMMIT(*NONE) NAMING(*SYS) DFTRDBCOL(MYLIB)
 ```
 
-The last statement lists the number of rows of each table (102 operation codes, 90 layout fields, 6 comparisons, 11 results, 160 indicators, 16 names, 19 built-in functions, 6 settings). Run it again after every change to a JSON file. `JSON_TABLE` needs a recent Db2 group PTF level on IBM i 7.3 (or 7.4 and later); if the statement is rejected, send the message back.
+The last statement creates the view `IACNVCNT` (`RUNSQLSTM` does not accept a plain `SELECT`). After the run, query it, for example in STRSQL or ACS Run SQL Scripts: `SELECT * FROM IACNVCNT` lists the number of rows of each table (102 operation codes, 90 layout fields, 6 comparisons, 11 results, 160 indicators, 16 names, 19 built-in functions, 6 settings). Run it again after every change to a JSON file. `JSON_TABLE` needs a recent Db2 group PTF level on IBM i 7.3 (or 7.4 and later); if the statement is rejected, send the message back.
 
 **No `JSON_TABLE` on your system?** Use `rules/IACNVRULES_INSERT.sql` instead. It creates the same tables and loads the same rows with plain `INSERT ... VALUES` statements, needs no path change and does not read the JSON files:
 
@@ -104,7 +104,7 @@ The last statement lists the number of rows of each table (102 operation codes, 
 RUNSQLSTM SRCSTMF('REPO/rules/IACNVRULES_INSERT.sql') COMMIT(*NONE) NAMING(*SYS) DFTRDBCOL(MYLIB)
 ```
 
-The row counts at the end are the same. No line is longer than 80 columns (long texts are split into pieces joined with `CONCAT`). The file is generated: after changing a JSON file (or `IACNVRULES.sql`) run `python3 tools/GenRulesInsert.py` on a PC and commit the result with the change; `python3 tools/GenRulesInsert.py --check` fails when the file is out of date. Use one of the two files for a library, not both.
+The view `IACNVCNT` and its row counts are the same. No line is longer than 80 columns (long texts are split into pieces joined with `CONCAT`). The file is generated: after changing a JSON file (or `IACNVRULES.sql`) run `python3 tools/GenRulesInsert.py` on a PC and commit the result with the change; `python3 tools/GenRulesInsert.py --check` fails when the file is out of date. Use one of the two files for a library, not both.
 
 Two more includes go into QCPYSRC, the same way as `IAcnvSrvP` (repeat the copy after every change):
 

@@ -903,8 +903,11 @@ INSERT INTO IACNVCFG (CFGKEY, CFGVALUE, DESCRIPTION) VALUES
    CONCAT 'primary file',
    'Reason reported with the first converted detail calculation');
 
--- Check: the counts of the rows loaded.
-SELECT 'IACNVOPC' AS TABLE_NAME, COUNT(*) AS ROWS FROM IACNVOPC
+-- Check: the counts of the rows loaded. RUNSQLSTM does not accept a plain
+-- SELECT, so the counts are a view. Query it after the run, for example in
+-- STRSQL or ACS Run SQL Scripts:  SELECT * FROM IACNVCNT
+CREATE OR REPLACE VIEW IACNVCNT (TABLE_NAME, ROW_COUNT) AS
+SELECT 'IACNVOPC', COUNT(*) FROM IACNVOPC
 UNION ALL SELECT 'IACNVLAY', COUNT(*) FROM IACNVLAY
 UNION ALL SELECT 'IACNVCMP', COUNT(*) FROM IACNVCMP
 UNION ALL SELECT 'IACNVRES', COUNT(*) FROM IACNVRES
