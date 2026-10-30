@@ -1,0 +1,19 @@
+      * RPG II cycle: detail and total records of a DISK file (FREE-54)
+     H
+     FSALES   IP         80            DISK
+     FORDHIST O          40            DISK
+     ISALES   AA
+     I                                        1   30REGIONL2
+     I                                        4   60CUST  L1
+     I                                        7  122AMT
+      * detail calculations: every record
+     C                     ADD  AMT       CTOT    92
+      * total calculations: a break of L1
+     CL1                   Z-ADD0         CTOT
+      * a detail record for every record read, a total record at a break of L1
+     OORDHIST D
+     O                         CUST       3
+     O                         AMT        9
+     OORDHIST T        L1
+     O                         CUST       3
+     O                         CTOT      12

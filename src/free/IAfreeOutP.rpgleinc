@@ -90,6 +90,25 @@ dcl-pr OutCycleAfter varchar(120);
   i_number int(10) const;
 end-pr;
 
+// FREE-54: heading, detail and total records of a program described DISK file in the
+// cycle skeleton: the kind, the file of the record data structure and the statements.
+dcl-pr OutCycleDisk ind;
+  i_part char(1) const;
+  i_number int(10) const;
+end-pr;
+
+dcl-pr OutCycleFile varchar(8);
+  i_part char(1) const;
+  i_number int(10) const;
+end-pr;
+
+dcl-pr OutCycleStatements int(10);
+  i_part char(1) const;
+  i_number int(10) const;
+  o_stmts varchar(250) dim(40);
+  o_reason varchar(190);
+end-pr;
+
 // Builds the DDS source after the whole source is converted (the field types
 // are known then). Returns the number of DDS lines.
 dcl-pr OutFinish int(10);

@@ -692,9 +692,10 @@ dcl-proc OutBuild;
         l_diskWhy = 'File ' + l_file + ' has no record length';
       else;
         select;
-          when l_type <> 'E';
-            l_diskWhy = 'Heading, detail and total records of a DISK file are not '
-                        + 'converted: only exception records (E)';
+          when l_type <> 'E' and not l_cycle;
+            l_diskWhy = 'Heading, detail and total records of a DISK file are written '
+                        + 'by the RPG cycle skeleton (one program described primary '
+                        + 'file): not converted without it, only exception records (E)';
           when l_ad = '' and l_ftype = 'O';
             l_act = 'W';
           when l_ad = '' and l_ftype = 'U' and l_recDs = '';
@@ -976,6 +977,65 @@ dcl-proc OutCycleFormat export;
     return '';
   endif;
   return g_gFmt(l_g);
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-54: *on when the nth heading, detail or total record of the part is a record
+// of a program described DISK file (statements, no DDS format).
+dcl-proc OutCycleDisk export;
+  dcl-pi *n ind;
+    i_part char(1) const;
+    i_number int(10) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  l_g = OutCycleGroup(i_part:i_number);
+  if l_g = 0;
+    return *off;
+  endif;
+  return g_gDisk(l_g);
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-54: the file whose record data structure (FILE_OUT) the nth DISK record of
+// the part uses; '' for an update, which uses FILE_REC of the I specifications.
+dcl-proc OutCycleFile export;
+  dcl-pi *n varchar(8);
+    i_part char(1) const;
+    i_number int(10) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  l_g = OutCycleGroup(i_part:i_number);
+  if l_g = 0 or not g_gDisk(l_g) or g_gAct(l_g) = 'U';
+    return '';
+  endif;
+  return g_gFile(l_g);
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-54: the statements of the nth DISK record of the part (as OutDiskStatements
+// for an EXCPT). Returns the number of statements, 0 with the reason when the
+// record cannot be written.
+dcl-proc OutCycleStatements export;
+  dcl-pi *n int(10);
+    i_part char(1) const;
+    i_number int(10) const;
+    o_stmts varchar(250) dim(40);
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  o_reason = '';
+  l_g = OutCycleGroup(i_part:i_number);
+  if l_g = 0 or not g_gDisk(l_g);
+    o_reason = 'No heading, detail or total record of a DISK file with this number';
+    return 0;
+  endif;
+  return DiskBuild(l_g:o_stmts:o_reason);
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1778,7 +1838,7 @@ dcl-proc DiskFinish;
           + l_suffix
           + ' (fields placed by '
           + '%SUBST at their end positions, numeric fields as zoned digits '
-          + 'with %EDITC code X); not tested');
+          + 'with %EDITC code X)' + CycleNote(g_gType(i_g)) + '; not tested');
   for l_j = g_gStart(i_g) + 1 to g_gEnd(i_g);
     RptItem(C_STS_CONVERTED:SrcLineNo(l_j):%trimr(%subst(SrcLine(l_j):6:75)):'');
   endfor;

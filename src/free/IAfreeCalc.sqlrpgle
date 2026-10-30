@@ -6512,9 +6512,30 @@ dcl-proc CycOutput;
   dcl-s l_cond varchar(200);
   dcl-s l_format varchar(10);
   dcl-s l_after varchar(120);
+  dcl-s l_j int(10);
+  dcl-s l_n int(10);
+  dcl-s l_reason varchar(190);
+  dcl-s l_stmts varchar(250) dim(40);
 
   l_count = OutCycleCount(i_part);
   for l_k = 1 to l_count;
+    // FREE-54: a record of a program described DISK file is written with the
+    // statements of IAfreeOut (FILE_OUT = *blanks, %subst assignments, write).
+    if OutCycleDisk(i_part:l_k);
+      l_n = OutCycleStatements(i_part:l_k:l_stmts:l_reason);
+      if l_n = 0;
+        Emit('// output record of a DISK file not converted: ' + l_reason
+             :g_lastLineNo);
+        RptItem(C_STS_REVIEW:g_lastLineNo:'Cycle skeleton':'Output record of a DISK '
+                + 'file is not written: ' + l_reason);
+      else;
+        CalcRecordDs(OutCycleFile(i_part:l_k));
+        for l_j = 1 to l_n;
+          Emit(l_stmts(l_j) + ';':g_lastLineNo);
+        endfor;
+      endif;
+      iter;
+    endif;
     l_cond = OutCycleCond(i_part:l_k);
     l_format = OutCycleFormat(i_part:l_k);
     l_after = OutCycleAfter(i_part:l_k);
