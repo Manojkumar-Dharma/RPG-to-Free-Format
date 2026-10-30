@@ -88,7 +88,7 @@ FREE-06 (module `IAfreeOut`): the R items of the output specifications.
 |----|------|------------|-------------|-------------|
 | RV-40 | OCL statements reported R (`PROMPT`, `HELP`, the `?F'S,..'?` field name, the DATAF1 date form) | see OCL-07, OCL-09 in `PLANNED.md`; samples `samples/PROMPTS.ocl` (PROMPT and HELP forms) and `samples/FSIZEDAT.ocl` (`?F'S,..'?`, DATAF1 with a date); DATAF1 date form written in FREE-51; `PROMPT` and `HELP` stay R by design (see OCL-07); the field name of `?F'S,..'?` still has to be checked on a system | In progress | Not tested |
 | RV-41 | DSPF layout against a real member | Hand-written member `samples/ORDENTRY.dspf36` (order entry, 3 formats); a real QS36SRC member is still wanted: DSP-05 | Planned | Not started |
-| RV-42 | Subfile candidates | Hand-written member `samples/ORDLIST.dspf36` (a list of 10 rows, one with a gap, one with 2 rows); a real member converted to a subfile was received 2026-10-30 (`samples/STIPFM.dspf36`, `STIPFM.dspf`, `STIP01FM.dspf`, see `DSPF-MAPPING.md`): DSP-06; detection of candidates written in FREE-52 (report only, R) | Written in part | Not tested |
+| RV-42 | Subfile candidates | Hand-written member `samples/ORDLIST.dspf36` (a list of 10 rows, one with a gap, one with 2 rows); a real member converted to a subfile was received 2026-10-30 (`samples/STIPFM.dspf36`, `STIPFM.dspf`, `STIP01FM.dspf`, see `DSPF-MAPPING.md`): DSP-06; detection of candidates written in FREE-52 (R); FREE-66 writes a generated SFL/SFLCTL version as comment lines (decided 2026-10-31; names generated, parameter member for the program's names still open) | Written in part | Not tested |
 
 ## Order of work
 

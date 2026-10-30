@@ -263,13 +263,21 @@ Note the letters W and E: they are not DDS edit codes (W and E are RPG codes onl
 
 ## Subfile candidates (DSP-06, RV-42, FREE-52)
 
-Several D records on consecutive display lines with the same fields at the same positions are what a program that was changed to use a subfile starts from. The converter does not make `SFL` and `SFLCTL`: that waits for a real example that shows how the program was changed (the program must write the subfile records and set the relative record number). It only reports the candidate, and the format is converted as written.
+Several D records on consecutive display lines with the same fields at the same positions are what a program that was changed to use a subfile starts from. The converter does not make `SFL` and `SFLCTL`: that waits for a real example that shows how the program was changed (the program must write the subfile records and set the relative record number). It reports the candidate, converts the format as written, and (FREE-66, decided 2026-10-31) writes a subfile version of the format after it as comment lines (below).
 
 Rule (`CheckSubfileRows` in `IAdspCvt`), for the D records of one format:
 
 - A record counts when it is a field: input (column 26 `Y`) or output other than `N` and blank. A constant is a label and does not count. A constant is the same as in `ConvertFieldDefinition`: no input, and output `N`, or output `Y` with constant text (columns 57-79) that is not a message (column 56 `M`). Real members write the border characters as output `Y` with text; before the 2026-10-30 fix those were counted as fields and `STIPFM.dspf36` reported `CHOIX1` lines 16 to 19 and `CHOIX` lines 6 to 12 as candidates (borders only).
 - The fields of one display line (column 19-20) make its signature: column, length, output entry, input entry and data type of each field, in the order of the records. Names, line number and constant text are not part of it.
 - `C_SFLMIN` (4) or more consecutive display lines with the same signature are reported once, on the first record of the first line, status R: "Display lines a to b repeat the same fields at the same positions: a subfile candidate".
+
+Subfile version (`WriteSubfileVersion`, first candidate of a format only): after the plain format, comment lines (`A*`, the DDS text keeps its columns, so removing the `*` in column 7 activates the line):
+
+- record `<first 7 characters of the format>SFL` (`SFL`): the fields and constants of the first row line as the plain conversion wrote them, the fields renamed `SFL01`, `SFL02` and so on (the two definitions of a field with an output indicator keep one name);
+- record `<...>CTL` (`SFLCTL(<...>SFL)`): `SFLSIZ` and `SFLPAG` of the number of rows, `OVERLAY`, `SFLCLR` on 31, `SFLDSPCTL` on N31, `SFLDSP` on 32, then the other lines of the format outside the rows;
+- the keywords of the format itself (S record: function keys, `ALTNAME`, help and the like) are not copied; if the record names are already formats of the member, nothing is written (A).
+
+Reported as A with its causes: the generated names and the types of the plain conversion (rename to the fields of the program), the assumed indicators 31 and 32 and `SFLSIZ` = `SFLPAG` = rows, and the program that has to be changed to write the subfile (STIP01FM shows what that change looks like). Written from the design and not from a run: compare the output for `SELECT` of `STIPFM.dspf36` with `STIP01FM.dspf`.
 
 `samples/ORDLIST.dspf36`: `LISTA` has 10 identical rows (lines 6 to 15, reported), `LISTB` has 3 rows then a gap and 2 rows with another column (not reported), `LISTC` has 2 rows (not reported). That sample is written by hand. The real example is below. Written from the design and not from a run.
 
@@ -290,4 +298,4 @@ What the pair `STIPFM.dspf` and `STIP01FM.dspf` shows (read from the files):
 - The row fields got names (`SXSEL`, `SMOT`, `SLGART`, `SUSI`, `SCX`, `SSEQP`, `SSEQO`, `SDATIP`) instead of `FL0014` and so on, and three of them are numeric with an edit code (`SLGART` 4,2 `EDTCDE(4)`, `SSEQP` 4,1 `EDTCDE(4)`, `SSEQO` 3,0 `EDTCDE(M)`); in the plain conversion they are character fields of 5, 5 and 4. Names and types come from the program that fills the subfile, not from the display file member.
 - The function keys became `CFnn(nn 'text')` with response indicators; the record keywords `PRINT(*PGM)`, `INVITE`, `SLNO(01)`, `CLRL(*ALL)`, `ALWROL`, `HLPRTN`, `HOME` and `HELP` are not in the subfile version, and the file keywords are `DSPSIZ(*DS3)`, `INDARA` and `PRINT`.
 
-Open for DSP-06 (decisions for the user, nothing written): which rule makes `SFL` and `SFLCTL` from a candidate, where the field names and types come from (the program, a parameter, or a generated name with a report line), and whether the converted file must keep the old format name for the program.
+Decided 2026-10-31 for DSP-06: the plain format stays as written and is reported; a generated subfile version follows as comment lines (not a replacement, so a program that still writes the plain format keeps working); the names are generated and reported, not read from a parameter. Still open: a parameter member with the program's field names and types (`SXSEL`, `SLGART` 4,2 `EDTCDE(4)` ...), and the conversion of the keywords of the format into the control record.

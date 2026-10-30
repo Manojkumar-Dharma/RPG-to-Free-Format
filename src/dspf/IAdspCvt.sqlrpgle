@@ -23,6 +23,9 @@ dcl-s g_sourceLineNos int(10) dim(C_MAXSRC);
 dcl-s g_sourceCount int(10);
 dcl-s g_outputLines varchar(80) dim(C_MAXOUT);
 dcl-s g_outputCount int(10);
+// Output lines written for each source record (DSP-06, RV-42): first and last, 0 = none.
+dcl-s g_srcOutFirst int(10) dim(C_MAXSRC);
+dcl-s g_srcOutLast int(10) dim(C_MAXSRC);
 dcl-s g_overflow ind;
 
 dcl-s g_formatOpen ind;
@@ -47,6 +50,8 @@ dcl-s g_keywordCount int(10);
 // Subfile candidates (DSP-06): display lines in a row that make one, highest line checked.
 dcl-c C_SFLMIN 4;
 dcl-c C_MAXDSPLINE 27;
+dcl-c C_SFLIND_CLR '31';           // SFLCLR, SFLDSPCTL (N31) of the generated subfile
+dcl-c C_SFLIND_DSP '32';           // SFLDSP of the generated subfile
 
 // Format names of the whole source, for help formats that are defined later.
 dcl-c C_MAXFMT 300;
@@ -1573,6 +1578,7 @@ dcl-proc CheckSubfileRows;
   dcl-s l_start int(10);
   dcl-s l_out varchar(3);
   dcl-s l_inp char(1);
+  dcl-s l_written ind inz(*off);
 
   for l_k = 1 to C_MAXDSPLINE;
     l_sig(l_k) = '';
@@ -1624,6 +1630,10 @@ dcl-proc CheckSubfileRows;
     else;
       if l_run >= C_SFLMIN;
         ReportSubfileRun(l_rec(l_start):l_start:l_start + l_run - 1);
+        if not l_written;
+          l_written = *on;
+          WriteSubfileVersion(i_first:i_last:l_start:l_run:l_rec(l_start));
+        endif;
       endif;
       l_run = 1;
       l_start = l_k;
@@ -1645,17 +1655,217 @@ dcl-proc ReportSubfileRun;
   RptItem(C_STS_REVIEW:g_sourceLineNos(i_index):%trimr(g_sourceLines(i_index))
           :'Display lines ' + %char(i_firstLine) + ' to ' + %char(i_lastLine)
            + ' repeat the same fields at the same positions: a subfile candidate. '
-           + 'The format is converted as written; SFL and SFLCTL are not made');
+           + 'The format is converted as written; a subfile version of the format '
+           + '(first candidate) follows as comment lines');
+end-proc;
+
+// ------------------------------------------------------------------
+// One DDS comment line: A in column 6, * in column 7, text from column 8.
+dcl-proc AddDdsComment;
+  dcl-pi *n;
+    i_text varchar(72) const;
+  end-pi;
+
+  dcl-s l_record char(80) inz(*blanks);
+
+  %subst(l_record:6:1) = 'A';
+  %subst(l_record:7:1) = '*';
+  if %len(i_text) > 0;
+    %subst(l_record:8:%len(i_text)) = i_text;
+  endif;
+  AddOutputLine(l_record);
+end-proc;
+
+// ------------------------------------------------------------------
+// Turns the output lines i_from to i_to into comment lines: column 7 becomes *. The
+// text keeps its columns, so removing the * brings back the DDS line.
+dcl-proc CommentOutLines;
+  dcl-pi *n;
+    i_from int(10) const;
+    i_to int(10) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_record char(80);
+
+  for l_k = i_from to %min(i_to:g_outputCount);
+    l_record = g_outputLines(l_k);
+    %subst(l_record:7:1) = '*';
+    g_outputLines(l_k) = %trimr(l_record);
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+// Four digits with leading zeros for SFLSIZ and SFLPAG.
+dcl-proc Digits4;
+  dcl-pi *n varchar(4);
+    i_value int(10) const;
+  end-pi;
+
+  dcl-s l_text varchar(10);
+
+  l_text = %trim(%char(i_value));
+  if %len(l_text) >= 4;
+    return %subst(l_text:%len(l_text) - 3:4);
+  endif;
+  return %subst('0000':1:4 - %len(l_text)) + l_text;
+end-proc;
+
+// ------------------------------------------------------------------
+// DSP-06, RV-42: after a format with a subfile candidate, the subfile version of it
+// as comment lines (decided 2026-10-31: report plus generated SFL and SFLCTL):
+//   - record <base>SFL (SFL): the fields and constants of the first row line, the
+//     fields named SFL01, SFL02 ... (the program's own names are not in the display
+//     member), with the DDS lines of the plain conversion otherwise;
+//   - record <base>CTL (SFLCTL(<base>SFL)): SFLSIZ and SFLPAG of the number of rows,
+//     OVERLAY, SFLCLR (31), SFLDSPCTL (N31), SFLDSP (32), and the other lines of the
+//     format outside the rows.
+// The format's own keywords (function keys and the like) are not copied. Nothing is
+// active: the lines are comments (remove the * in column 7 to use them).
+dcl-proc WriteSubfileVersion;
+  dcl-pi *n;
+    i_first int(10) const;
+    i_last int(10) const;
+    i_startLine int(10) const;
+    i_rows int(10) const;
+    i_index int(10) const;
+  end-pi;
+
+  dcl-s l_base varchar(7);
+  dcl-s l_sflName varchar(10);
+  dcl-s l_ctlName varchar(10);
+  dcl-s l_k int(10);
+  dcl-s l_o int(10);
+  dcl-s l_from int(10);
+  dcl-s l_line int(10);
+  dcl-s l_record char(80);
+  dcl-s l_outRec char(80);
+  dcl-s l_name varchar(10);
+  dcl-s l_orig varchar(10) dim(100);
+  dcl-s l_gen varchar(10) dim(100);
+  dcl-s l_nGen int(10) inz(0);
+  dcl-s l_x int(10);
+  dcl-s l_found ind;
+  dcl-s l_dds varchar(10);
+  dcl-s l_clash ind inz(*off);
+  dcl-s l_lastLine int(10);
+
+  if i_index < 1;
+    return;
+  endif;
+  l_dds = FindFormatDdsName(ColumnText(g_sourceLines(i_first):7:14));
+  if l_dds = '';
+    return;
+  endif;
+  l_base = %subst(l_dds:1:%min(7:%len(l_dds)));
+  l_sflName = l_base + 'SFL';
+  l_ctlName = l_base + 'CTL';
+  for l_k = 1 to g_srcFormatCount;
+    if g_ddsFormatNames(l_k) = l_sflName or g_ddsFormatNames(l_k) = l_ctlName;
+      l_clash = *on;
+    endif;
+  endfor;
+  if l_clash;
+    RptItem(C_STS_ASSUMPTION:g_sourceLineNos(i_index):%trimr(g_sourceLines(i_index))
+            :'Subfile version not written: the record names ' + l_sflName + ' and '
+             + l_ctlName + ' are already formats of this member');
+    return;
+  endif;
+  l_lastLine = i_startLine + i_rows - 1;
+
+  AddDdsComment('Generated, not active (DSP-06): subfile version of ' + l_dds);
+  AddDdsComment('Remove the * in column 7 of the DDS lines below to use it; the');
+  AddDdsComment('program must write the subfile records and use EXFMT ' + l_ctlName);
+  l_from = g_outputCount + 1;
+  AddOutputLine(BuildDdsLine('':*off:'R':l_sflName:0:' ':-1:' ':0:0:'SFL'));
+
+  // The fields and constants of the first row line, in source order.
+  for l_k = i_first + 1 to i_last;
+    l_record = g_sourceLines(l_k);
+    if %xlate(C_LOWER:C_UPPER:%subst(l_record:6:1)) <> 'D'
+       or %subst(l_record:7:1) = '*' or g_srcOutFirst(l_k) = 0;
+      iter;
+    endif;
+    if ToNumber(ColumnText(l_record:19:20)) <> i_startLine;
+      iter;
+    endif;
+    for l_o = g_srcOutFirst(l_k) to g_srcOutLast(l_k);
+      l_outRec = g_outputLines(l_o);
+      l_name = %trim(%subst(l_outRec:19:10));
+      if l_name <> '' and %subst(l_outRec:17:1) = ' ';
+        // The two definitions of a field with an output indicator share the name.
+        l_found = *off;
+        for l_x = 1 to l_nGen;
+          if l_orig(l_x) = l_name;
+            l_found = *on;
+            leave;
+          endif;
+        endfor;
+        if not l_found and l_nGen < 99;
+          l_nGen += 1;
+          l_orig(l_nGen) = l_name;
+          l_gen(l_nGen) = 'SFL' + %subst(%trim(%char(100 + l_nGen)):2:2);
+          l_x = l_nGen;
+        endif;
+        if l_found or l_x <= 99;
+          %subst(l_outRec:19:10) = l_gen(l_x);
+        endif;
+      endif;
+      AddOutputLine(l_outRec);
+    endfor;
+  endfor;
+  CommentOutLines(l_from:g_outputCount);
+
+  l_from = g_outputCount + 1;
+  AddOutputLine(BuildDdsLine('':*off:'R':l_ctlName:0:' ':-1:' ':0:0
+                  :'SFLCTL(' + l_sflName + ')'));
+  AddKeywordLine('':'SFLSIZ(' + Digits4(i_rows) + ')');
+  AddKeywordLine('':'SFLPAG(' + Digits4(i_rows) + ')');
+  AddKeywordLine('':'OVERLAY');
+  AddKeywordLine(C_SFLIND_CLR:'SFLCLR');
+  AddCondKeywordLine(C_SFLIND_CLR:*on:'SFLDSPCTL');
+  AddKeywordLine(C_SFLIND_DSP:'SFLDSP');
+  // The other lines of the format (headings, messages, key text), outside the rows.
+  for l_k = i_first + 1 to i_last;
+    l_record = g_sourceLines(l_k);
+    if %xlate(C_LOWER:C_UPPER:%subst(l_record:6:1)) <> 'D'
+       or %subst(l_record:7:1) = '*' or g_srcOutFirst(l_k) = 0;
+      iter;
+    endif;
+    l_line = ToNumber(ColumnText(l_record:19:20));
+    if l_line >= i_startLine and l_line <= l_lastLine;
+      iter;
+    endif;
+    for l_o = g_srcOutFirst(l_k) to g_srcOutLast(l_k);
+      AddOutputLine(g_outputLines(l_o));
+    endfor;
+  endfor;
+  CommentOutLines(l_from:g_outputCount);
+  AddDdsComment('End of the generated subfile version of ' + l_dds + '.');
+
+  RptItem(C_STS_ASSUMPTION:g_sourceLineNos(i_index):%trimr(g_sourceLines(i_index))
+          :'Subfile version of ' + l_dds + ' written as comment lines (records '
+           + l_sflName + ' and ' + l_ctlName + ') | Names SFL01 to SFLnn and the '
+           + 'types of the plain conversion are generated: rename to the fields '
+           + 'of the program | Indicators ' + C_SFLIND_CLR + ' (SFLCLR, '
+           + 'SFLDSPCTL) and ' + C_SFLIND_DSP + ' (SFLDSP), SFLSIZ = SFLPAG = '
+           + %char(i_rows) + ' are assumed | Keywords of the format itself are '
+           + 'not copied; the program has to be changed to write the subfile');
 end-proc;
 
 // ------------------------------------------------------------------
 dcl-proc ConvertDsp36;
   dcl-s l_index int(10);
   dcl-s l_fmtFirst int(10) inz(0);
+  dcl-s l_dIndex int(10);
   dcl-s l_record char(80);
   dcl-s l_recordType char(1);
   dcl-s l_outputRecord char(80);
 
+  for l_index = 1 to g_sourceCount;
+    g_srcOutFirst(l_index) = 0;
+    g_srcOutLast(l_index) = 0;
+  endfor;
   g_formatOpen = *off;
   g_formatCount = 0;
   g_override = *off;
@@ -1700,7 +1910,10 @@ dcl-proc ConvertDsp36;
           RptItem(C_STS_REVIEW:g_sourceLineNos(l_index):%trimr(l_record)
                   :'D specification before the first S specification');
         else;
+          g_srcOutFirst(l_index) = g_outputCount + 1;
+          l_dIndex = l_index;
           ConvertFieldDefinition(l_index);
+          g_srcOutLast(l_dIndex) = g_outputCount;
         endif;
       other;
         l_outputRecord = l_record;

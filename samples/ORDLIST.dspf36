@@ -1,9 +1,10 @@
 00010 * ORDLIST - subfile candidates for DSP-06, RV-42 (hand written)
 00020 * LISTA: 10 continuous rows (lines 6 to 15), same fields and columns.
-00030 *   Expected: reported as a subfile candidate, output unchanged.
+00030 *   Expected: reported as a subfile candidate, output unchanged, then the
+00035 *   subfile version as comments: LISTASFL (SFL, fields SFL01..) and LISTACTL.
 00040 * LISTB: rows with a gap and a changed column: not a candidate.
 00050 * LISTC: only 2 repeated rows (the threshold is 4): not a candidate.
-00060 * Not a real subfile member: no SFL or SFLCTL is made from it.
+00060 * Hand written, not a real subfile member.
 00070 * === LISTA: a list of 10 identical rows ===
 00080SLISTA      1   N
 00090D          12 130N                                 ORDER LIST
