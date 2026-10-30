@@ -61,8 +61,10 @@ dcl-s g_fConst varchar(30) dim(C_MAXFLD);
 dcl-s g_fCond varchar(30) dim(C_MAXFLD);
 dcl-s g_fReason varchar(120) dim(C_MAXFLD);
 dcl-s g_fBlank ind dim(C_MAXFLD);           // blank after (column 39)
-dcl-s g_fSpecial char(1) dim(C_MAXFLD);     // P PAGE, J UDATE, S *DATE, D UDAY/UMONTH/UYEAR, E array element
-dcl-s g_fAlias varchar(10) dim(C_MAXFLD);   // DDS name of a field that is assigned before the write (RV-61)
+// g_fSpecial: P PAGE, J UDATE, S *DATE, D UDAY/UMONTH/UYEAR, E array element
+dcl-s g_fSpecial char(1) dim(C_MAXFLD);
+// g_fAlias: DDS name of a field that is assigned before the write (RV-61)
+dcl-s g_fAlias varchar(10) dim(C_MAXFLD);
 dcl-s g_fSrc varchar(40) dim(C_MAXFLD);     // the value of that field: 'IA_E1 = ARR(3)'
 dcl-s g_fFmt char(1) dim(C_MAXFLD);         // data format (column 44)
 dcl-s g_aliasNo int(10) inz(0);
@@ -2103,7 +2105,9 @@ dcl-proc DiskFinish;
           :'Record of a DISK file written by the EXCPT with a data structure'
           + ' (fields placed by '
           + '%SUBST at their end positions, numeric fields as zoned digits '
-          + 'with %EDITC code X; data format P and B through a work field)' + CycleNote(g_gType(i_g)) + '; not tested');
+          + 'with %EDITC code X; data format P and B through a work field)'
+          + CycleNote(g_gType(i_g))
+          + '; not tested');
   for l_j = g_gStart(i_g) + 1 to g_gEnd(i_g);
     RptItem(C_STS_CONVERTED:SrcLineNo(l_j):%trimr(%subst(SrcLine(l_j):6:75)):'');
   endfor;

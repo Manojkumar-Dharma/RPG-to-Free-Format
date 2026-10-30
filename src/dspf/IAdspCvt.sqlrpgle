@@ -44,6 +44,10 @@ dcl-s g_keywordIndicators varchar(2) dim(C_MAXKW);
 dcl-s g_keywordTexts varchar(80) dim(C_MAXKW);
 dcl-s g_keywordCount int(10);
 
+// Subfile candidates (DSP-06): display lines in a row that make one, highest line checked.
+dcl-c C_SFLMIN 4;
+dcl-c C_MAXDSPLINE 27;
+
 // Format names of the whole source, for help formats that are defined later.
 dcl-c C_MAXFMT 300;
 dcl-s g_srcFormatNames varchar(10) dim(C_MAXFMT);
@@ -1549,9 +1553,6 @@ end-proc;
 // data type; names, text and line number do not count) on C_SFLMIN or more
 // consecutive display lines are reported once as R. The output is not changed:
 // SFL and SFLCTL are only made when a real example shows how the program was changed.
-dcl-c C_SFLMIN 4;
-dcl-c C_MAXDSPLINE 27;
-
 dcl-proc CheckSubfileRows;
   dcl-pi *n;
     i_first int(10) const;

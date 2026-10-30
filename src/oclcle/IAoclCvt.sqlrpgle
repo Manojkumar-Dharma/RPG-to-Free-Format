@@ -22,7 +22,8 @@ dcl-c C_DQUOTE '''''';          // two apostrophes (an apostrophe inside text)
 dcl-c C_MAXPARMITEMS 41;           // 40 call parameters plus one to detect more
 dcl-c C_CALLPARMLEN 10;            // length every converted program declares
 dcl-c C_ALLSCOPE '*LIBL';          // where DATAF1-'name,ALL' looks for files
-dcl-c C_SESSDATE 'MDY';          // session date format of DATAF1-'name,date': MDY, DMY or YMD (assumed)
+// Session date format of DATAF1-'name,date': MDY, DMY or YMD (assumed)
+dcl-c C_SESSDATE 'MDY';
 dcl-c C_FDINITFLD 'PHRCDC';   // DSPFD initial records (unverified)
 dcl-c C_MARKLIB 'QGPL';          // library of the ACTIVE- marker data areas
 dcl-c C_MSGPREFIX 'USR';         // message id prefix of CRTS36MSGF (assumed)
