@@ -184,6 +184,10 @@ end-pr;
 // record layout data structure and the number of control fields; *off when the
 // cycle skeleton cannot be written (FREE-36). CycleControl gives the field name and
 // the control level (1 to 9) of one control field.
+// RV-60: no primary file, with heading, detail or total records (IAfreeCvt).
+dcl-pr CycleNoPrimary ind;
+end-pr;
+
 dcl-pr CycleInfo ind;
   o_file varchar(8);
   o_recDs varchar(12);

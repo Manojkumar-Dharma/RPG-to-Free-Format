@@ -1,0 +1,12 @@
+      * RPG cycle without a primary file (RV-60): it repeats until the program sets LR on
+     H
+     FREPORT  O         132     OA     PRINTER
+     C                     ADD  1         COUNT   30
+     C           COUNT     COMP 3                    20
+     C   20                SETON                     LR
+     OREPORT  H  1     1P
+     O                                   20 'Counter report'
+     OREPORT  D  1
+     O                         COUNT     10
+     OREPORT  T  2     LR
+     O                                   20 'End of report'

@@ -2981,6 +2981,51 @@ dcl-proc CycleFileOk;
 end-proc;
 
 // ------------------------------------------------------------------
+// RV-60: a program with no primary, secondary, record address or table file and with
+// heading, detail or total output records (O types H, D, T): the RPG cycle runs
+// without a read (step 8 of the cycle: no primary file goes to step 18) until the
+// program sets LR on. The designation is column 16 (RPG II/III) or 18 (RPG IV), the
+// record type of an O specification column 15 or 17.
+dcl-proc CycleNoPrimary export;
+  dcl-pi *n ind;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_up char(100);
+  dcl-s l_desig char(1);
+  dcl-s l_type char(1);
+  dcl-s l_out ind inz(*off);
+
+  for l_k = 1 to g_sourceCount;
+    l_up = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
+    if %subst(l_up:7:1) = '*' or %subst(l_up:7:1) = '/';
+      iter;
+    endif;
+    select;
+      when %subst(l_up:6:1) = 'F';
+        if g_dialect = '4';
+          l_desig = %subst(l_up:18:1);
+        else;
+          l_desig = %subst(l_up:16:1);
+        endif;
+        if l_desig = 'P' or l_desig = 'S' or l_desig = 'R' or l_desig = 'T';
+          return *off;
+        endif;
+      when %subst(l_up:6:1) = 'O' and %trim(%subst(l_up:7:8)) <> '';
+        if g_dialect = '4';
+          l_type = %subst(l_up:17:1);
+        else;
+          l_type = %subst(l_up:15:1);
+        endif;
+        if l_type = 'H' or l_type = 'D' or l_type = 'T';
+          l_out = *on;
+        endif;
+    endsl;
+  endfor;
+  return l_out;
+end-proc;
+
+// ------------------------------------------------------------------
 // FREE-60: the RPG IV F specification of a primary file: the checks of the cycle
 // skeleton (FREE-36), the registration of the file and its control fields.
 dcl-proc CvtCycleFileOk export;

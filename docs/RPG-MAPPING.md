@@ -1155,6 +1155,21 @@ Source: SC09-1818 (record identifying indicators and record identification codes
 
 Sample: `samples/FREECYT.rpg36`. Needs a compile and test on the IBM i.
 
+## A program without a primary file (FREE-63, RV-60)
+
+Source: SC09-1818 chapter 5, steps 7, 8, 18 and the rule that the program must set LR on when it has no primary file. A program with **no** file designated P, S, R or T (column 16, RPG IV column 18) and with heading, detail or total records (O types H, D, T) gets the cycle skeleton without the read: the loop repeats until the program sets LR on.
+
+| RPG | Free-form |
+|---|---|
+| step 1: heading and detail output (`1P` is `IA_FIRST`) | start of the loop, as in FREE-37 |
+| LR on | `leave` |
+| steps 7-8: no primary file goes to step 18, no read, no end of file, no control break | omitted; the control level and `1P` indicators are still set off at the start of each cycle |
+| step 18: total time is bypassed on the first cycle | `if not IA_FIRST; exsr IA_TOTALS; endif;` |
+| detail calculations (steps 25-26) | in the loop after `IA_FIRST = *off` |
+| the last cycle with LR on (steps 27, 19-20) | `*inlr = *on`, all control levels on, `exsr IA_TOTALS` |
+
+A program without a primary file **and without** H, D, T records is still converted as straight-line code (as before): it needs no skeleton. A program with a secondary, record address or table file but no primary file stays as it was (the first secondary file would become the primary file: FREE-55). The report notes the assumption. Sample `samples/FREENOP.rpg36`: `COUNT` is added to in each cycle and LR is set on at 3; expected: the heading (`1P`) and detail at the start of each cycle, `IA_TOTALS` with the LR total record after the loop. Written from the manual and not from a run.
+
 ## RPG IV: the cycle skeleton (FREE-60, RV-20, RV-56)
 
 The skeleton of FREE-36 is written for RPG IV when the source has one program described DISK input file with designation P (column 18) and the record layout of that file in the I specifications.

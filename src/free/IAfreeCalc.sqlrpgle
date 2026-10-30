@@ -91,6 +91,7 @@ dcl-s g_cycMax int(10) inz(0);
 dcl-s g_cycHasTotals ind inz(*off);
 dcl-s g_cycPreMax int(10) inz(0);
 dcl-s g_cycUsesRt ind inz(*off);
+dcl-s g_cycNoPrim ind inz(*off);          // RV-60: the cycle without a primary file
 
 // GOTO, CABxx and TAG (RV-14): the calculation lines in order, with what the
 // planner decided for each of them (BuildJumpPlan). Kinds: O group (IF, SELEC),
@@ -310,6 +311,7 @@ dcl-proc CalcStart export;
   g_cycHasTotals = *off;
   g_cycPreMax = 0;
   g_cycUsesRt = *off;
+  g_cycNoPrim = *off;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -6571,6 +6573,16 @@ dcl-proc CycInit;
 
   g_cycChecked = *on;
   if not CycleInfo(g_cycFile:g_cycRec:l_count);
+    // RV-60: no primary file at all, with heading, detail or total records: one
+    // cycle after the other without a read, until the program sets LR on.
+    if g_cycFile = '' and CycleNoPrimary();
+      g_cycNoPrim = *on;
+      g_cycMax = g_cycPreMax;
+      g_cycState = 'P';
+      if OutCycleCount('T') > 0;
+        g_cycHasTotals = *on;
+      endif;
+    endif;
     return;
   endif;
   g_cycMax = g_cycPreMax;
@@ -6892,13 +6904,18 @@ dcl-proc CycOpen;
     g_declAt = OutCount();
   endif;
   DeclareHidden('IA_FIRST':'ind inz(*on)');
-  if g_protoLineCount < C_MAXPLINE;
+  if not g_cycNoPrim and g_protoLineCount < C_MAXPLINE;
     g_protoLineCount += 1;
     g_protoLine(g_protoLineCount) = 'dcl-ds IA_NEXT likeds(' + g_cycRec + ');';
   endif;
   g_cycleNoted = *on;
-  Emit('// RPG cycle skeleton (IACNVFREE): the program cycle of file ' + g_cycFile
-       + ' (check)':g_lastLineNo);
+  if g_cycNoPrim;
+    Emit('// RPG cycle skeleton (IACNVFREE): the program cycle without a primary '
+         + 'file, it repeats until the program sets LR on (check)':g_lastLineNo);
+  else;
+    Emit('// RPG cycle skeleton (IACNVFREE): the program cycle of file ' + g_cycFile
+         + ' (check)':g_lastLineNo);
+  endif;
   Emit('dow *on;':g_lastLineNo);
   g_depth += 1;
   if OutCycleCount('S') = 0;
@@ -6921,26 +6938,38 @@ dcl-proc CycOpen;
     Emit('endif;':g_lastLineNo);
   endif;
   CycLevels(*off:g_cycMax);
-  Emit('read ' + g_cycFile + ' IA_NEXT;':g_lastLineNo);
-  Emit('if %eof(' + g_cycFile + ');':g_lastLineNo);
-  Emit('*inlr = *on;':g_lastLineNo:1);
-  Emit('leave;':g_lastLineNo:1);
-  Emit('endif;':g_lastLineNo);
-  CycTypeTest();
-  CycBreakTest();
+  if not g_cycNoPrim;
+    Emit('read ' + g_cycFile + ' IA_NEXT;':g_lastLineNo);
+    Emit('if %eof(' + g_cycFile + ');':g_lastLineNo);
+    Emit('*inlr = *on;':g_lastLineNo:1);
+    Emit('leave;':g_lastLineNo:1);
+    Emit('endif;':g_lastLineNo);
+    CycTypeTest();
+    CycBreakTest();
+  endif;
   if g_cycHasTotals;
     Emit('if not IA_FIRST;':g_lastLineNo);
     Emit('exsr IA_TOTALS;':g_lastLineNo:1);
     Emit('endif;':g_lastLineNo);
   endif;
-  Emit(g_cycRec + ' = IA_NEXT;':g_lastLineNo);
+  if not g_cycNoPrim;
+    Emit(g_cycRec + ' = IA_NEXT;':g_lastLineNo);
+  endif;
   Emit('IA_FIRST = *off;':g_lastLineNo);
   g_cycState = 'D';
-  RptItem(C_STS_ASSUMPTION:g_lastLineNo:'RPG cycle'
-          :'Cycle skeleton written for the primary file: read, control '
-           + 'break, total calculations and detail calculations; heading, detail '
-           + 'and total records of a converted printer file are written in it '
-           + '(RV-60)');
+  if g_cycNoPrim;
+    RptItem(C_STS_ASSUMPTION:g_lastLineNo:'RPG cycle'
+            :'Cycle skeleton written without a primary file (RV-60): the '
+             + 'detail calculations repeat until the program sets LR on; '
+             + 'heading and detail records are written at the start of each '
+             + 'cycle, total records at the end');
+  else;
+    RptItem(C_STS_ASSUMPTION:g_lastLineNo:'RPG cycle'
+            :'Cycle skeleton written for the primary file: read, control '
+             + 'break, total calculations and detail calculations; heading, '
+             + 'detail and total records of a converted printer file are '
+             + 'written in it (RV-60)');
+  endif;
 end-proc;
 
 // ------------------------------------------------------------------
