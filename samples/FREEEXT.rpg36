@@ -1,0 +1,11 @@
+      * Output specifications of an externally described printer file (RV-56)
+     H
+     FREPORT  O   E                    PRINTER
+     C                     EXCPTHEAD
+     C                     EXCPTDETAIL
+     C                     SETON                     LR
+     OHEADREC E 1              HEAD
+     O                         TITLE
+     O                         RUNDAT
+     ODETREC  E 1              DETAIL
+     O                         *ALL

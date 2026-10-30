@@ -937,6 +937,24 @@ New parameters `DDSTGT` (file, library and member), `DDSTYPE` (default `PRTF`) a
 
 Written from the design, not from a run.
 
+## Output specifications of externally described files (FREE-67, RV-56)
+
+Source: SC09-2508 (ILE RPG reference), output specifications for externally described files: the record line names a **record format** (not the file), the field lines name the fields to place in the record (or `*ALL`), output indicators on the record and on the fields, blank after (`B`); end position, edit code and constants come from the DDS. The DDS is not read, so the file of a record format is not known to the converter.
+
+A record name that is no file of the program, in a program that has externally described DISK or PRINTER files, is a record format:
+
+| O specification | Free-form |
+|---|---|
+| output file or combined file, blank or `ADD` in columns 16-18 | `write FMT;` |
+| update file, blank | `update FMT;` for `*ALL`, otherwise `update FMT %fields(A:B);` (the fields named, `%FIELDS` of the RPG IV reference) |
+| `DEL` | `delete FMT;` (no field lines) |
+| record indicators | `if cond; ... endif;` as for other records |
+| blank after on a field | `clear FIELD;` after the write |
+| `E` records | EXCPT, also in the cycle skeleton; `H`, `D`, `T` only with the skeleton (FREE-37, FREE-60, FREE-63) |
+| fields with output indicators, end position, edit code, constant on a field line, `*ALL` with other fields, no field line, `ADD`/`DEL` mixed with fields, more than one externally described file and no `ADD`/`DEL` (the file of the format is unknown), an input file without `ADD` | R, with the reason |
+
+The report notes the assumption: `write FMT` writes **all** the program fields of the format; the RPG rule that the fields not named are zeros or blanks (add) is not reproduced because the DDS is not read. `update` with `%fields` keeps the fields not named, as RPG does. RPG IV files with format `E` on DISK or PRINTER are registered as externally described for this (FREE-67). Sample `samples/FREEEXT.rpg36` (a printer file `REPORT`: `HEADREC` with the fields `TITLE`, `RUNDAT`, and `DETREC` with `*ALL`; expected `write HEADREC`, `write DETREC`). Written from the manual and not from a run.
+
 ## Heading, detail and total records in the cycle skeleton (FREE-37, RV-60)
 
 Source: SC09-1817 (output indicators, the 1P indicator, the program cycle). The record formats are made like the exception records (printer DDS, see above); the cycle skeleton of FREE-36 writes them. Without the skeleton the records stay R.

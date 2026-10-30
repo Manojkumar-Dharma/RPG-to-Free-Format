@@ -51,6 +51,7 @@ dcl-s g_gFields int(10) dim(C_MAXGRP);
 dcl-s g_gDisk ind dim(C_MAXGRP);             // record of a program described DISK file (RV-62)
 dcl-s g_gAct char(1) dim(C_MAXGRP);          // disk: W write (blank or ADD), D delete (DEL)
 dcl-s g_gRecLen int(10) dim(C_MAXGRP);       // disk: record length
+dcl-s g_gExt ind dim(C_MAXGRP);            // record format of an externally described file (RV-56)
 dcl-s g_gPlace int(10) dim(C_MAXGRP);        // fields before the first *PLACE (RV-61)
 dcl-s g_gCount int(10) inz(0);
 // Output fields and constants.
@@ -527,6 +528,10 @@ dcl-proc OutBuild;
   dcl-s l_recLen int(10);
   dcl-s l_out ind;
   dcl-s l_upd ind;
+  dcl-s l_ext ind;
+  dcl-s l_nExt int(10);
+  dcl-s l_extName varchar(8);
+  dcl-s l_extType char(1);
 
   if g_built;
     return;
@@ -570,6 +575,34 @@ dcl-proc OutBuild;
       g_fFmt(g_fCount) = l_fmt;
       l_cond = IndicatorCond(l_line:l_reason:' ');
       g_fCond(g_fCount) = l_cond;
+      if g_gExt(l_g);
+        // RV-56: a field line of an externally described record: the field name
+        // (or *ALL), output indicators of the field, blank after.
+        select;
+          when g_fReason(g_fCount) <> '';
+          when l_reason <> '';
+            g_fReason(g_fCount) = l_reason;
+          when l_cond <> '';
+            g_fReason(g_fCount) = 'A field with output indicators in an externally '
+                                  + 'described record is not converted (only the '
+                                  + 'fields whose indicators are on are written)';
+          when g_fName(g_fCount) = '';
+            g_fReason(g_fCount) = 'A field line of an externally described record '
+                                  + 'needs a field name or *ALL';
+          when l_end <> '' or g_fEdit(g_fCount) <> ' ' or g_fConst(g_fCount) <> ''
+               or l_fmt <> ' ';
+            g_fReason(g_fCount) = 'An externally described record has only the field '
+                                  + 'name, output indicators and blank after: end '
+                                  + 'position, edit code and constant come from the DDS';
+          when %subst(l_line:39:1) <> ' ' and Up(%subst(l_line:39:1)) <> 'B';
+            g_fReason(g_fCount) = 'Blank after (column 39) is not valid';
+        endsl;
+        g_fBlank(g_fCount) = (g_fReason(g_fCount) = ''
+                              and Up(%subst(l_line:39:1)) = 'B');
+        g_gFields(l_g) += 1;
+        g_gEnd(l_g) = l_index;
+        iter;
+      endif;
       l_relative = (%subst(l_end:1:1) = '+');
       l_digits = l_end;
       if l_relative;
@@ -728,6 +761,7 @@ dcl-proc OutBuild;
     g_gCond(l_g) = IndicatorCond(l_line:l_reason:l_type);
     g_gKeys(l_g) = '';
     g_gDisk(l_g) = *off;
+    g_gExt(l_g) = *off;
     g_gAct(l_g) = ' ';
     g_gRecLen(l_g) = 0;
     g_gPlace(l_g) = 0;
@@ -735,6 +769,8 @@ dcl-proc OutBuild;
     // A program described DISK file (RV-62): exception records only; blank or ADD
     // writes the record, DEL deletes the record read.
     l_disk = *off;
+    l_ext = *off;
+    l_nExt = 0;
     l_diskWhy = '';
     l_act = ' ';
     l_recLen = 0;
@@ -743,11 +779,45 @@ dcl-proc OutBuild;
     if l_file <> '' and %len(l_file) <= 8;
       if FileInfo(l_file:l_device:l_ftype:l_recDs:l_keyed) and l_device = 'D';
         l_disk = *on;
+      elseif not FileInfo(l_file:l_device:l_ftype:l_recDs:l_keyed);
+        // A name that is no file of the program, in a program with externally
+        // described files: the record format of such a file (RV-56). The DDS is
+        // not read, so the file of the format is not known.
+        l_nExt = ExternalFileInfo(l_extName:l_extType);
+        if l_nExt > 0;
+          l_disk = *on;
+          l_ext = *on;
+        endif;
       endif;
     endif;
     if l_disk;
       l_ad = Up(Cols(l_line:16:18));
-      if not FileOutInfo(l_file:l_recLen:l_out:l_upd);
+      if l_ext;
+        l_ftype = l_extType;
+        select;
+          when l_type <> 'E' and not l_cycle;
+            l_diskWhy = 'Heading, detail and total records of an externally described '
+                        + 'file are written by the RPG cycle skeleton: not converted '
+                        + 'without it, only exception records (E)';
+          when l_ad = 'ADD';
+            l_act = 'W';
+          when l_ad = 'DEL';
+            l_act = 'D';
+          when l_ad <> '';
+            l_diskWhy = 'Entry ' + l_ad + ' in columns 16-18 is not converted';
+          when l_nExt > 1;
+            l_diskWhy = 'Record format ' + l_file + ' belongs to one of ' + %char(l_nExt)
+                        + ' externally described files (the DDS is not read): write '
+                        + 'ADD or DEL in columns 16-18 or leave one file';
+          when l_ftype = 'O' or l_ftype = 'C';
+            l_act = 'W';
+          when l_ftype = 'U';
+            l_act = 'U';
+          other;
+            l_diskWhy = 'Record format ' + l_file + ' of the input file ' + l_extName
+                        + ' needs ADD (columns 16-18)';
+        endsl;
+      elseif not FileOutInfo(l_file:l_recLen:l_out:l_upd);
         l_diskWhy = 'File ' + l_file + ' has no record length';
       else;
         select;
@@ -797,6 +867,7 @@ dcl-proc OutBuild;
         g_gReason(l_g) = 'The file name of the output record is missing or too long';
       when l_disk;
         g_gDisk(l_g) = *on;
+        g_gExt(l_g) = l_ext;
         g_gAct(l_g) = l_act;
         g_gRecLen(l_g) = l_recLen;
       when not FileInfo(l_file:l_device:l_ftype:l_recDs:l_keyed)
@@ -1951,6 +2022,9 @@ dcl-proc DiskBuild;
   dcl-s l_digitAt int(10);
 
   o_reason = '';
+  if g_gExt(i_g);
+    return ExtBuild(i_g:o_stmts:o_reason);
+  endif;
   l_ds = g_gFile(i_g) + '_OUT';
   if g_gAct(i_g) = 'U';
     l_ds = g_gFile(i_g) + '_REC';
@@ -2111,6 +2185,83 @@ dcl-proc DiskBuild;
 end-proc;
 
 // ------------------------------------------------------------------
+// RV-56: the record format of an externally described file, written by its name:
+// 'write FMT' (output, ADD), 'update FMT' or 'update FMT %fields(A:B)' (the fields
+// named; *ALL for all), 'delete FMT' (DEL). The fields of the program are the fields
+// of the format, so no record data structure is needed.
+dcl-proc ExtBuild;
+  dcl-pi *n int(10);
+    i_g int(10) const;
+    o_stmts varchar(250) dim(40);
+    o_reason varchar(190);
+  end-pi;
+
+  dcl-s l_f int(10);
+  dcl-s l_count int(10) inz(0);
+  dcl-s l_list varchar(200) inz('');
+  dcl-s l_all ind inz(*off);
+  dcl-s l_after varchar(120);
+  dcl-s l_cond varchar(200);
+
+  o_reason = '';
+  for l_f = g_gFirst(i_g) to g_gFirst(i_g) + g_gFields(i_g) - 1;
+    if g_fReason(l_f) <> '';
+      o_reason = g_fReason(l_f);
+      return 0;
+    endif;
+    if g_fName(l_f) = '*ALL';
+      l_all = *on;
+    else;
+      if l_list <> '';
+        l_list += ':';
+      endif;
+      l_list += g_fName(l_f);
+    endif;
+  endfor;
+  select;
+    when g_gAct(i_g) = 'D' and g_gFields(i_g) > 0;
+      o_reason = 'A DEL record has fields: not converted';
+    when g_gAct(i_g) <> 'D' and g_gFields(i_g) = 0;
+      o_reason = 'The record has no field line: the fields written are the ones '
+                 + 'named (or *ALL)';
+    when l_all and g_gFields(i_g) > 1;
+      o_reason = '*ALL cannot be used with other field lines';
+    when %len(l_list) > 190;
+      o_reason = 'The field list is too long for one statement';
+  endsl;
+  if o_reason <> '';
+    return 0;
+  endif;
+
+  l_cond = g_gCond(i_g);
+  if l_cond <> '';
+    l_count += 1;
+    o_stmts(l_count) = 'if ' + l_cond;
+  endif;
+  l_count += 1;
+  select;
+    when g_gAct(i_g) = 'D';
+      o_stmts(l_count) = 'delete ' + g_gFile(i_g);
+    when g_gAct(i_g) = 'U' and not l_all;
+      o_stmts(l_count) = 'update ' + g_gFile(i_g) + ' %fields(' + l_list + ')';
+    when g_gAct(i_g) = 'U';
+      o_stmts(l_count) = 'update ' + g_gFile(i_g);
+    other;
+      o_stmts(l_count) = 'write ' + g_gFile(i_g);
+  endsl;
+  l_after = GroupAfter(i_g);
+  if l_after <> '';
+    l_count += 1;
+    o_stmts(l_count) = l_after;
+  endif;
+  if l_cond <> '';
+    l_count += 1;
+    o_stmts(l_count) = 'endif';
+  endif;
+  return l_count;
+end-proc;
+
+// ------------------------------------------------------------------
 // The report of a DISK record at the end of the conversion (RV-62).
 dcl-proc DiskFinish;
   dcl-pi *n;
@@ -2133,6 +2284,7 @@ dcl-proc DiskFinish;
             + 'separately');
     return;
   endif;
+<<<<<<< HEAD
   // A separate sign is a cause of its own: the manual does not give the character
   // of a plus sign or say that the end position counts the sign.
   for l_j = g_gFirst(i_g) to g_gFirst(i_g) + g_gFields(i_g) - 1;
@@ -2142,6 +2294,17 @@ dcl-proc DiskFinish;
                + 'by the RPG program';
     endif;
   endfor;
+=======
+  if g_gExt(i_g);
+    RptItem(C_STS_ASSUMPTION:SrcLineNo(g_gStart(i_g)):%trimr(%subst(
+            SrcLine(g_gStart(i_g)):6:75))
+            :'Record format ' + g_gFile(i_g) + ' of an externally described file '
+            + 'written by its name (RV-56): the DDS is not read, so the fields '
+            + 'written are the program fields of the format, not only the ones '
+            + 'named (the others are not set to zeros or blanks)'
+            + CycleNote(g_gType(i_g)) + '; not tested');
+  else;
+>>>>>>> 9c5983b (FREE-64: O specifications of externally described files by record format name (write/update %fields/delete), RV-56; sample FREEEXT.rpg36; docs)
   RptItem(C_STS_ASSUMPTION:SrcLineNo(g_gStart(i_g)):%trimr(%subst(
           SrcLine(g_gStart(i_g)):6:75))
           :'Record of a DISK file written by the EXCPT with a data structure'
@@ -2149,7 +2312,12 @@ dcl-proc DiskFinish;
           + '%SUBST at their end positions, numeric fields as zoned digits '
           + 'with %EDITC code X; data format P and B through a work field)'
           + CycleNote(g_gType(i_g))
+<<<<<<< HEAD
           + '; not tested' + l_sign);
+=======
+          + '; not tested');
+  endif;
+>>>>>>> 9c5983b (FREE-64: O specifications of externally described files by record format name (write/update %fields/delete), RV-56; sample FREEEXT.rpg36; docs)
   for l_j = g_gStart(i_g) + 1 to g_gEnd(i_g);
     RptItem(C_STS_CONVERTED:SrcLineNo(l_j):%trimr(%subst(SrcLine(l_j):6:75)):'');
   endfor;

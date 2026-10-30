@@ -163,6 +163,12 @@ dcl-pr FormatFile varchar(8);
 end-pr;
 
 // A file declared by a converted F specification (see IAfreeCvt FileInfo).
+// RV-56: the externally described files (IAfreeCvt).
+dcl-pr ExternalFileInfo int(10);
+  o_name varchar(8);
+  o_type char(1);
+end-pr;
+
 dcl-pr FileInfo ind;
   i_name varchar(8) const;
   o_device char(1);

@@ -3194,6 +3194,33 @@ end-proc;
 // converted F specification: device (D disk, X externally described disk, P
 // printer), type, the name of its record layout data structure ('' when it has
 // none) and whether it is keyed. Returns *off for a file that is not declared.
+// RV-56: the externally described files of the program (device X): how many there are,
+// the name and the type of the first. The O specification of such a file names a
+// record format, not the file, and the DDS is not read.
+dcl-proc ExternalFileInfo export;
+  dcl-pi *n int(10);
+    o_name varchar(8);
+    o_type char(1);
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_n int(10) inz(0);
+
+  o_name = '';
+  o_type = ' ';
+  for l_k = 1 to g_fileCount;
+    if g_fileDevices(l_k) = 'X';
+      l_n += 1;
+      if l_n = 1;
+        o_name = g_fileNames(l_k);
+        o_type = g_fileTypes(l_k);
+      endif;
+    endif;
+  endfor;
+  return l_n;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc FileInfo export;
   dcl-pi *n ind;
     i_name varchar(8) const;

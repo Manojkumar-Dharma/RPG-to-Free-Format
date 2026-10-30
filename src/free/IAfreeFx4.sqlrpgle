@@ -856,6 +856,12 @@ dcl-proc ConvertF;
   // NAME_OUT is declared below (FREE-47, RV-56, RV-62).
   l_progDisk = not l_isLike and l_fmt = 'F' and %len(l_name) <= 8 and l_addrType = ''
                and (l_device = 'DISK' or l_device = 'WORKSTN');
+  // An externally described DISK or PRINTER file (RV-56): known as device X, so that an
+  // output specification can name a record format of it.
+  if not l_isLike and l_fmt = 'E' and %len(l_name) <= 8
+     and (l_device = 'DISK' or l_device = 'PRINTER');
+    CvtRegisterFile(l_name:0:'X':l_type:i_lineNo:*off);
+  endif;
   if l_progDisk;
     CvtRegisterFile(l_name:%int(l_recLen):'D':l_type:i_lineNo:*off);
     CvtSetFileOutput(l_name:(l_type = 'O' or l_add = 'A'));
