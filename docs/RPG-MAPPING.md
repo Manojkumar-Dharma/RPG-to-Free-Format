@@ -675,8 +675,8 @@ Decision (user, 2026-10-25): the output of a PRINTER file is made as an external
 | Heading, detail and total records (types H, D, T) with the cycle skeleton (FREE-36) | a record format `HEAD01`, `DETAIL01`, `TOTAL01` (next free number); H and D are written at step 1 of the cycle, T at the end of `IA_TOTALS` (see below) | A |
 | Heading, detail and total records without the cycle skeleton | whole record as comments | R |
 | `MR`, `RT` output indicators; ADD, DEL, fetch overflow, release (16-18) | comments | R |
-| Edit codes, edit words, blank after, relative end positions, `PAGE`, `UDATE`, `*DATE` | see the section below (FREE-38) | A |
-| Data format P, B, L, R (44), `PAGE1`-`PAGE7`, `UDAY`, `UMONTH`, `UYEAR`, `*PLACE`, array elements, edit codes 5-9 | comments | R |
+| Edit codes, edit words, blank after, relative end positions, `PAGE`, `PAGE1`-`PAGE7`, `UDATE`, `*DATE` | see the section below (FREE-38, FREE-57) | A |
+| Data format P, B, L, R (44), `UDAY`, `UMONTH`, `UYEAR`, `*PLACE`, array elements, edit codes 5-9 | comments, with the reason of the section below | R |
 | A field without a known length (not defined by I, E or a result field) | the record format is not generated | R (the `write` has to be fixed by hand) |
 | A second printer file, a file that is not a converted PRINTER file | comments | R |
 
@@ -977,13 +977,27 @@ width = digits + 1 for a decimal point (decimals > 0) + commas + sign (+ 1 for a
 | edit word (a quoted constant with a field name) | `EDTWRD('...')`, the width is the length of the word; longer than one DDS line: R |
 | blank after (`B`, column 39) | `clear FIELD` after the `write` of the record, inside its condition |
 | relative end position (`+  5`) | the end position of the field before in the same record plus the number |
-| `PAGE` | field of 4 digits with `PAGNBR EDTCDE(Z)`, no usage |
+| `PAGE`, `PAGE1` to `PAGE7` | field of 4 digits with `PAGNBR EDTCDE(Z)`, no usage (FREE-57: `PAGE1` to `PAGE7` as `PAGE`) |
 | `UDATE`, `*DATE` | field of 6 digits with `DATE(*JOB)` or `DATE(*SYS)` (name `SYSDATE`), no usage; edit codes as above |
 | edit code on a character field, codes 5-9, `Y` on other fields | R |
 
 Fields must be in ascending order of their positions (the edited start is compared with the end of the field before). Written from the manual and not from a run: check the first `CRTPRTF`, in particular the usage of `PAGNBR` and `DATE` fields and the position of edited fields.
 
-Sample `samples/FREEEDT.rpg36`. Expected, with `AMT` 9 digits and 2 decimals (`1`: width 12, start 3; `J`: width 13, start 16; `Z`: width 9, start 32), `CNT` 5 digits with code `3` (width 5, start 46) and blank after (`write LINE; clear CNT;`), the edit word (11 positions, start 50), `PAGE` (start 67), `UDATE` with `Y` (width 8, start 73) and the last field relative (+ 15, end 95).
+Stays R after FREE-57 (RV-61), with the reason written in the report:
+
+| Item | Reason |
+|---|---|
+| Data format `P`, `B` (44) on a printer file | SC09-1818: packed and binary fields cannot be printed, only written to disk or ICF output |
+| Data format `P`, `B` on a DISK record | needs a packed or binary subfield in the record data structure `FILE_OUT` (2 or 4 bytes for binary, digits/2 + 1 for packed); the declaration is written in `IAfreeCalc` and `IAfreeFx4`, so it is a separate change: decision pending |
+| Data format `L`, `R` | not valid in SC09-1818 (blank, `P` and `B` only) |
+| `UDAY`, `UMONTH`, `UYEAR` | DDS has no keyword for a single part of the date: needs a field with an assignment before the `write` (`OUDAY = UDAY;`), and the converter has no statement before the `write` yet |
+| Array elements (`ARR,3`, `ARR(I)`) | the same: a DDS field name cannot be an array element, so a work field and an assignment before the `write` |
+| `*PLACE` | repeats a group of fields: DDS field names are unique in a record format, so the repeat needs copies of the fields and assignments before the `write` |
+| Edit codes 5-9 | user-defined edit codes depend on the system (SC09-1818) |
+
+The three items with an assignment before the `write` share one missing piece: a `before` hook next to `OutExceptAfter` and `OutCycleAfter`, called by `IAfreeCalc` (lines 3216 and 6559) and by the cycle skeleton.
+
+Sample `samples/FREEEDT.rpg36`. Expected, with `AMT` 9 digits and 2 decimals (`1`: width 12, start 3; `J`: width 13, start 16; `Z`: width 9, start 32), `CNT` 5 digits with code `3` (width 5, start 46) and blank after (`write LINE; clear CNT;`), the edit word (11 positions, start 50), `PAGE` (start 67), `PAGE1` (start 107, end 110, FREE-57), `UDATE` with `Y` (width 8, start 73) and the last field relative (+ 15, end 95).
 
 ## Output records of DISK files (FREE-39, RV-62)
 

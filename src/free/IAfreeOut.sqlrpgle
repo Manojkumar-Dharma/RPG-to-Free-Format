@@ -557,7 +557,11 @@ dcl-proc OutBuild;
         l_digits = %trim(%subst(l_end:2));
       endif;
       select;
-        when g_fName(g_fCount) = 'PAGE';
+        when g_fName(g_fCount) = 'PAGE'
+             or (%len(g_fName(g_fCount)) = 5
+                 and %subst(g_fName(g_fCount):1:4) = 'PAGE'
+                 and %scan(%subst(g_fName(g_fCount):5:1):'1234567') > 0);
+          // PAGE and PAGE1 to PAGE7 (RV-61): page numbers, one for each kind of page.
           g_fSpecial(g_fCount) = 'P';
         when g_fName(g_fCount) = 'UDATE';
           g_fSpecial(g_fCount) = 'J';
@@ -575,8 +579,16 @@ dcl-proc OutBuild;
           g_fReason(g_fCount) = 'A relative end position needs an end position '
                                 + 'before it in the same record';
         when l_fmt <> ' ';
-          g_fReason(g_fCount) = 'Data format ' + l_fmt + ' (column 44) is not '
-                                + 'converted';
+          if l_fmt = 'P' or l_fmt = 'B';
+            g_fReason(g_fCount) = 'Data format ' + l_fmt + ' (column 44): packed '
+                                  + 'and binary fields cannot be printed, only '
+                                  + 'written to disk or ICF (SC09-1818); a DISK '
+                                  + 'record needs a packed or binary subfield in '
+                                  + 'the record data structure: not converted';
+          else;
+            g_fReason(g_fCount) = 'Data format ' + l_fmt + ' (column 44) is not '
+                                  + 'valid: the manual allows blank, P and B';
+          endif;
         when Up(%subst(l_line:39:1)) <> ' ' and Up(%subst(l_line:39:1)) <> 'B';
           g_fReason(g_fCount) = 'Entry ' + %subst(l_line:39:1) + ' in column 39 '
                                 + 'is not valid';
