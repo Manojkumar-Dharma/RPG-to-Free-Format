@@ -1,0 +1,821 @@
+0000 A*0IGC 0DS4  V7R3M0                    910710
+0000 A                                      DSPSIZ(*DS3 *DS4)
+0000 A                                      USRDSPMGT CHGINPDFT INDARA
+0001 A          R CHOIX1
+0001 A                                      DSPMOD(*DS3)
+0001 A                                      PRINT(*PGM)
+0001 A                                      INVITE
+0001 A                                      SLNO(01)
+0001 A                                      CLRL(*ALL)
+0001 A                                      ALWROL
+0001 A                                      CF03 CF21
+0001 A                                      ROLLUP ROLLDOWN CLEAR HLPRTN HOME
+0001 A                                      HELP
+0002 A            FA0001         1   I 02002DFT('1')
+0002 A                                      DSPATR(PR ND MDT)
+0004 A                                 03017'                                  -
+0004 A                                                      '
+0004 A                                      DSPATR(UL)
+0005 A                                 04016'¦'
+0006 A                                 04067'¦'
+0007 A                                 05016'¦'
+0008 A                                 05028'        INVENTAIRE     '
+0008 A                                      DSPATR(RI UL)
+0009 A                                 05055'SUITE'
+0009 A                                      DSPATR(HI BL)
+0010 A                                 05067'¦'
+0011 A                                 06016'¦'
+0012 A                                 06067'¦'
+0013 A                                 07016'¦'
+0014 A                                 07067'¦'
+0015 A                                 08016'¦'
+0017 A                                 08020'Des Produits ont déjà été cochés d-
+0017 A                                      ans  '
+0018 A                                 08067'¦'
+0019 A                                 09016'¦'
+0021 A                                 09020'la liste manuelle                 -
+0021 A                                           '
+0022 A                                 09067'¦'
+0023 A                                 10016'¦'
+0024 A                                 10067'¦'
+0025 A                                 11016'¦'
+0026 A                                 11020' Faites:'
+0027 A                                 11067'¦'
+0028 A                                 12016'¦'
+0029 A                                 12067'¦'
+0030 A                                 13016'¦'
+0031 A                                 13025'F21'
+0031 A                                      DSPATR(HI)
+0032 A                                 13033'pour annuler tout.'
+0033 A                                 13067'¦'
+0034 A                                 14016'¦'
+0035 A                                 14067'¦'
+0036 A                                 15016'¦'
+0037 A                                 15021'ou'
+0038 A                                 15025'ENTREE'
+0038 A                                      DSPATR(HI)
+0040 A                                 15033'pour continuer l''inventaire'
+0041 A                                 15067'¦'
+0042 A                                 16016'¦'
+0043 A                                 16067'¦'
+0044 A                                 17016'¦'
+0045 A                                 17067'¦'
+0046 A                                 18016'¦'
+0047 A                                 18067'¦'
+0048 A                                 19016'¦'
+0049 A                                 19067'¦'
+0050 A                                 20016'¦'
+0051 A                                 20037'F3-Abandon'
+0052 A                                 20067'¦'
+0054 A                                 21017'                                  -
+0054 A                                                      '
+0054 A                                      DSPATR(UL)
+0055 A          R CHOIX
+0055 A                                      DSPMOD(*DS3)
+0055 A                                      PRINT(*PGM)
+0055 A                                      INVITE
+0055 A                                      SLNO(01)
+0055 A                                      CLRL(*ALL)
+0055 A  64                                  ALARM
+0055 A                                      ALWROL
+0055 A                                      CF03
+0055 A                                      ROLLUP ROLLDOWN CLEAR HLPRTN HOME
+0055 A                                      HELP
+0057 A                                 03017'                                  -
+0057 A                                                      '
+0057 A                                      DSPATR(UL)
+0058 A                                 04016'¦'
+0059 A                                 04067'¦'
+0060 A                                 05016'¦'
+0061 A                                 05028'        INVENTAIRE     '
+0061 A                                      DSPATR(RI UL)
+0062 A                                 05067'¦'
+0063 A                                 06016'¦'
+0064 A                                 06067'¦'
+0065 A                                 07016'¦'
+0066 A                                 07067'¦'
+0067 A                                 08016'¦'
+0068 A                                 08067'¦'
+0069 A                                 09016'¦'
+0070 A                                 09067'¦'
+0071 A                                 10016'¦'
+0072 A                                 10067'¦'
+0073 A                                 11016'¦'
+0074 A                                 11067'¦'
+0075 A                                 12016'¦'
+0076 A                                 12067'¦'
+0077 A                                 13016'¦'
+0079 A                                 13018'Vous allez cocher des produits sur-
+0079 A                                       une liste    '
+0080 A                                 13067'¦'
+0081 A                                 14016'¦'
+0082 A                                 14067'¦'
+0083 A                                 15016'¦'
+0085 A                                 15018'de mots directeurs                -
+0085 A                                                    '
+0086 A                                 15067'¦'
+0087 A                                 16016'¦'
+0088 A                                 16067'¦'
+0089 A                                 17016'¦'
+0091 A                                 17018'affichés à partir de ---->'
+0092 A            FA0013        20   B 17046DSPATR(HI UL MDT)
+0093 A                                 17067'¦'
+0094 A                                 18016'¦'
+0095 A                                 18067'¦'
+0096 A                                 19016'¦'
+0097 A                                 19067'¦'
+0098 A                                 20016'¦'
+0099 A                                 20042'Entrée pour continuer'
+0100 A                                 20067'¦'
+0102 A                                 21017'                                  -
+0102 A                                                      '
+0102 A                                      DSPATR(UL)
+0104 A                                 24003'                       F3-Abandon -
+0104 A                                                                         -
+0104 A                                              '
+0105 A          R SAISIE
+0105 A                                      DSPMOD(*DS3)
+0105 A                                      PRINT(*PGM)
+0105 A                                      INVITE
+0105 A                                      SLNO(01)
+0105 A                                      CLRL(*NO)
+0105 A                                      ALWROL
+0105 A                                      CF02 CF05
+0105 A                                      ROLLUP ROLLDOWN CLEAR HLPRTN HOME
+0105 A                                      HELP
+0106 A            ENR            1   I 01003DFT('s')
+0106 A                                      DSPATR(PR ND MDT)
+0108 A                                 01026'INVENTAIRE : Saisie des quantités'
+0108 A                                      DSPATR(RI UL)
+0109 A                                 01069'Le'
+0110 A            DAT            8   O 01072DSPATR(HI)
+0112 A                                 03002'         Désignation        lng |f-
+0112 A                                      a/af| cx     Stock   |      DI     -
+0112 A                                               '
+0112 A                                      DSPATR(UL)
+0113 A            TA$1          41   O 04002
+0113 A  61                                  DSPATR(RI)
+0114 A                                 04044' '
+0114 A                                      DSPATR(RI)
+0115 A            TB$1          34   O 04046DSPATR(HI)
+0116 A            TA$2          41   O 05002
+0116 A  62                                  DSPATR(RI)
+0117 A                                 05044' '
+0117 A                                      DSPATR(RI)
+0118 A            TB$2          34   O 05046DSPATR(HI)
+0119 A            TA$3          41   O 06002
+0119 A  63                                  DSPATR(RI)
+0120 A                                 06044' '
+0120 A                                      DSPATR(RI)
+0121 A            TB$3          34   O 06046DSPATR(HI)
+0122 A            TA$4          41   O 07002
+0122 A  64                                  DSPATR(RI)
+0123 A                                 07044' '
+0123 A                                      DSPATR(RI)
+0124 A            TB$4          34   O 07046DSPATR(HI)
+0125 A            TA$5          41   O 08002
+0125 A  65                                  DSPATR(RI)
+0126 A                                 08044' '
+0126 A                                      DSPATR(RI)
+0127 A            TB$5          34   O 08046DSPATR(HI)
+0128 A            TA$6          41   O 09002
+0128 A  66                                  DSPATR(RI)
+0129 A                                 09044' '
+0129 A                                      DSPATR(RI)
+0130 A            TB$6          34   O 09046DSPATR(HI)
+0131 A            TA$7          41   O 10002
+0131 A  67                                  DSPATR(RI)
+0132 A                                 10044' '
+0132 A                                      DSPATR(RI)
+0133 A            TB$7          34   O 10046DSPATR(HI)
+0134 A            TA$8          41   O 11002
+0134 A  68                                  DSPATR(RI)
+0135 A                                 11044' '
+0135 A                                      DSPATR(RI)
+0136 A            TB$8          34   O 11046DSPATR(HI)
+0137 A            TA$9          41   O 12002
+0137 A  69                                  DSPATR(RI)
+0138 A                                 12044' '
+0138 A                                      DSPATR(RI)
+0139 A            TB$9          34   O 12046DSPATR(HI)
+0140 A            TA$10         41   O 13002
+0140 A  70                                  DSPATR(RI)
+0141 A                                 13044' '
+0141 A                                      DSPATR(RI)
+0142 A            TB$10         34   O 13046DSPATR(HI)
+0143 A            TA$11         41   O 14002
+0143 A  71                                  DSPATR(RI)
+0144 A                                 14044' '
+0144 A                                      DSPATR(RI)
+0145 A            TB$11         34   O 14046DSPATR(HI)
+0146 A            TA$12         41   O 15002
+0146 A  72                                  DSPATR(RI)
+0147 A                                 15044' '
+0147 A                                      DSPATR(RI)
+0148 A            TB$12         34   O 15046DSPATR(HI)
+0149 A            TA$13         41   O 16002
+0149 A  73                                  DSPATR(RI)
+0150 A                                 16044' '
+0150 A                                      DSPATR(RI)
+0151 A            TB$13         34   O 16046DSPATR(HI)
+0153 A                                 17002'                                  -
+0153 A                                                                         -
+0153 A                                               '
+0153 A                                      DSPATR(UL)
+0155 A                                 18001'                                  -
+0155 A                                                 '
+0156 A                                 18047'pal'
+0156 A  37                                  DSPATR(ND)
+0158 A                                 18051' vrac                        '
+0159 A            SAI1          41   O 19002DSPATR(HI)
+0160 A                                 19044' '
+0160 A                                      DSPATR(RI)
+0161 A            PAL1           4   B 19046CHECK(RB)
+0161 A                                      DSPATR(HI MDT)
+0161 A  37                                  DSPATR(PR ND)
+0161 A  50                                  DSPATR(RI)
+0161 A N37                                  DSPATR(CS)
+0162 A            VRAC1          9D  B 19051CHECK(RB)
+0162 A                                      DSPATR(CS HI MDT)
+0162 A  37                                  DSPATR(PC)
+0162 A  51                                  DSPATR(RI)
+0163 A                                 19061'('
+0163 A  30                                  DSPATR(ND)
+0164 A            NBDEC          1   O 19063
+0165 A                                 19065'décimales)'
+0165 A  30                                  DSPATR(ND)
+0166 A                                 19076'     '
+0167 A                                 20002'N°:'
+0168 A            ART            7   O 20006DSPATR(HI)
+0169 A                                 20014'           '
+0170 A            QTPAL          5   O 20026DSPATR(HI)
+0170 A  37                                  DSPATR(ND)
+0171 A                                 20032'qté/pal '
+0171 A  37                                  DSPATR(ND)
+0172 A                                 20041'  '
+0173 A                                 20044' '
+0173 A                                      DSPATR(RI)
+0174 A            PAL2           4   B 20046CHECK(RB)
+0174 A                                      DSPATR(HI MDT)
+0174 A  37                                  DSPATR(PR ND)
+0174 A  52                                  DSPATR(RI)
+0174 A N37                                  DSPATR(CS)
+0175 A            VRAC2          9D  B 20051CHECK(RB)
+0175 A                                      DSPATR(CS HI MDT)
+0175 A  37                                  DSPATR(PC)
+0175 A  53                                  DSPATR(RI)
+0176 A                                 20061'                   '
+0180 A                                 21001'                                  -
+0180 A                                                                         -
+0180 A                                                                         -
+0180 A                                                                         -
+0180 A                                                                         -
+0180 A                                                    '
+0182 A            MES           50   O 23030
+0182 A N99                                  DFTVAL('                           -
+0182 A                                                             ')
+0182 A                                      DSPATR(BL)
+0184 A                                 24002'                         F2-Fin   -
+0184 A                                      F5-Suivant                         -
+0184 A                                               '
+0185 A          R SELECT
+0185 A                                      DSPMOD(*DS3)
+0185 A                                      PRINT(*PGM)
+0185 A                                      INVITE
+0185 A                                      SLNO(01)
+0185 A                                      CLRL(*ALL)
+0185 A                                      ALWROL
+0185 A                                      CF01 CF03 CF05 CF09 CF10
+0185 A                                      ROLLUP ROLLDOWN CLEAR HLPRTN HOME
+0185 A                                      HELP
+0186 A            CE             1   I 01005DFT('1')
+0186 A                                      DSPATR(PR ND MDT)
+0188 A                                 01024' INVENTAIRE : Sélection des produi-
+0188 A                                      ts '
+0188 A                                      DSPATR(RI UL)
+0190 A                                 03002'x | Mot directeur               ln-
+0190 A                                      g   | fa/af | cx| séqper|séqord| De-
+0190 A                                      rnierIP|'
+0191 A            X1             1   B 04002DSPATR(CS HI MDT)
+0192 A            FL0014        27   O 04006
+0193 A            FL0015         5   O 04034
+0194 A                                 04040'|'
+0194 A                                      DSPATR(HI)
+0195 A            FL0017         5   O 04042
+0196 A                                 04048'|'
+0196 A                                      DSPATR(HI)
+0197 A            FL0019         1   O 04050DSPATR(CS)
+0198 A                                 04052'|'
+0198 A                                      DSPATR(HI)
+0199 A            FL0021         5   O 04054DSPATR(CS)
+0200 A                                 04060'|'
+0200 A                                      DSPATR(HI)
+0201 A            FL0023         4   O 04062DSPATR(CS)
+0202 A                                 04067'|'
+0202 A                                      DSPATR(HI)
+0203 A            FA0001         8   O 04069
+0204 A            FL0025         1   B 05002DSPATR(CS HI MDT)
+0205 A            FL0027        27   O 05006
+0206 A            FL0028         5   O 05034
+0207 A                                 05040'|'
+0207 A                                      DSPATR(HI)
+0208 A            FL0030         5   O 05042
+0209 A                                 05048'|'
+0209 A                                      DSPATR(HI)
+0210 A            FL0032         1   O 05050DSPATR(CS)
+0211 A                                 05052'|'
+0211 A                                      DSPATR(HI)
+0212 A            FL0034         5   O 05054DSPATR(CS)
+0213 A                                 05060'|'
+0213 A                                      DSPATR(HI)
+0214 A            FL0036         4   O 05062DSPATR(CS)
+0215 A                                 05067'|'
+0215 A                                      DSPATR(HI)
+0216 A            FA0002         8   O 05069
+0217 A            FL0038         1   B 06002DSPATR(CS HI MDT)
+0218 A            FL0040        27   O 06006
+0219 A            FL0041         5   O 06034
+0220 A                                 06040'|'
+0220 A                                      DSPATR(HI)
+0221 A            FL0043         5   O 06042
+0222 A                                 06048'|'
+0222 A                                      DSPATR(HI)
+0223 A            FL0045         1   O 06050DSPATR(CS)
+0224 A                                 06052'|'
+0224 A                                      DSPATR(HI)
+0225 A            FL0047         5   O 06054DSPATR(CS)
+0226 A                                 06060'|'
+0226 A                                      DSPATR(HI)
+0227 A            FL0049         4   O 06062DSPATR(CS)
+0228 A                                 06067'|'
+0228 A                                      DSPATR(HI)
+0229 A            FA0003         8   O 06069
+0230 A            FL0051         1   B 07002DSPATR(CS HI MDT)
+0231 A            FL0053        27   O 07006
+0232 A            FL0054         5   O 07034
+0233 A                                 07040'|'
+0233 A                                      DSPATR(HI)
+0234 A            FL0056         5   O 07042
+0235 A                                 07048'|'
+0235 A                                      DSPATR(HI)
+0236 A            FL0058         1   O 07050DSPATR(CS)
+0237 A                                 07052'|'
+0237 A                                      DSPATR(HI)
+0238 A            FL0060         5   O 07054DSPATR(CS)
+0239 A                                 07060'|'
+0239 A                                      DSPATR(HI)
+0240 A            FL0062         4   O 07062DSPATR(CS)
+0241 A                                 07067'|'
+0241 A                                      DSPATR(HI)
+0242 A            FA0004         8   O 07069
+0243 A            FL0064         1   B 08002DSPATR(CS HI MDT)
+0244 A            FL0066        27   O 08006
+0245 A            FL0067         5   O 08034
+0246 A                                 08040'|'
+0246 A                                      DSPATR(HI)
+0247 A            FL0069         5   O 08042
+0248 A                                 08048'|'
+0248 A                                      DSPATR(HI)
+0249 A            FL0071         1   O 08050DSPATR(CS)
+0250 A                                 08052'|'
+0250 A                                      DSPATR(HI)
+0251 A            FL0073         5   O 08054DSPATR(CS)
+0252 A                                 08060'|'
+0252 A                                      DSPATR(HI)
+0253 A            FL0075         4   O 08062DSPATR(CS)
+0254 A                                 08067'|'
+0254 A                                      DSPATR(HI)
+0255 A            FA0005         8   O 08069
+0256 A            FL0077         1   B 09002DSPATR(CS HI MDT)
+0257 A            FL0079        27   O 09006
+0258 A            FL0080         5   O 09034
+0259 A                                 09040'|'
+0259 A                                      DSPATR(HI)
+0260 A            FL0082         5   O 09042
+0261 A                                 09048'|'
+0261 A                                      DSPATR(HI)
+0262 A            FL0084         1   O 09050DSPATR(CS)
+0263 A                                 09052'|'
+0263 A                                      DSPATR(HI)
+0264 A            FL0086         5   O 09054DSPATR(CS)
+0265 A                                 09060'|'
+0265 A                                      DSPATR(HI)
+0266 A            FL0088         4   O 09062DSPATR(CS)
+0267 A                                 09067'|'
+0267 A                                      DSPATR(HI)
+0268 A            FA0006         8   O 09069
+0269 A            FL0090         1   B 10002DSPATR(CS HI MDT)
+0270 A            FL0092        27   O 10006
+0271 A            FL0093         5   O 10034
+0272 A                                 10040'|'
+0272 A                                      DSPATR(HI)
+0273 A            FL0095         5   O 10042
+0274 A                                 10048'|'
+0274 A                                      DSPATR(HI)
+0275 A            FL0097         1   O 10050DSPATR(CS)
+0276 A                                 10052'|'
+0276 A                                      DSPATR(HI)
+0277 A            FL0099         5   O 10054DSPATR(CS)
+0278 A                                 10060'|'
+0278 A                                      DSPATR(HI)
+0279 A            FL0101         4   O 10062DSPATR(CS)
+0280 A                                 10067'|'
+0280 A                                      DSPATR(HI)
+0281 A            FA0007         8   O 10069
+0282 A            FL0103         1   B 11002DSPATR(CS HI MDT)
+0283 A            FL0105        27   O 11006
+0284 A            FL0106         5   O 11034
+0285 A                                 11040'|'
+0285 A                                      DSPATR(HI)
+0286 A            FL0108         5   O 11042
+0287 A                                 11048'|'
+0287 A                                      DSPATR(HI)
+0288 A            FL0110         1   O 11050DSPATR(CS)
+0289 A                                 11052'|'
+0289 A                                      DSPATR(HI)
+0290 A            FL0112         5   O 11054DSPATR(CS)
+0291 A                                 11060'|'
+0291 A                                      DSPATR(HI)
+0292 A            FL0114         4   O 11062DSPATR(CS)
+0293 A                                 11067'|'
+0293 A                                      DSPATR(HI)
+0294 A            FA0008         8   O 11069
+0295 A            FL0116         1   B 12002DSPATR(CS HI MDT)
+0296 A            FL0118        27   O 12006
+0297 A            FL0119         5   O 12034
+0298 A                                 12040'|'
+0298 A                                      DSPATR(HI)
+0299 A            FL0121         5   O 12042
+0300 A                                 12048'|'
+0300 A                                      DSPATR(HI)
+0301 A            FL0123         1   O 12050DSPATR(CS)
+0302 A                                 12052'|'
+0302 A                                      DSPATR(HI)
+0303 A            FL0125         5   O 12054DSPATR(CS)
+0304 A                                 12060'|'
+0304 A                                      DSPATR(HI)
+0305 A            FL0127         4   O 12062DSPATR(CS)
+0306 A                                 12067'|'
+0306 A                                      DSPATR(HI)
+0307 A            FA0009         8   O 12069
+0308 A            FL0129         1   B 13002DSPATR(CS HI MDT)
+0309 A            FL0131        27   O 13006
+0310 A            FL0132         5   O 13034
+0311 A                                 13040'|'
+0311 A                                      DSPATR(HI)
+0312 A            FL0134         5   O 13042
+0313 A                                 13048'|'
+0313 A                                      DSPATR(HI)
+0314 A            FL0136         1   O 13050DSPATR(CS)
+0315 A                                 13052'|'
+0315 A                                      DSPATR(HI)
+0316 A            FL0138         5   O 13054DSPATR(CS)
+0317 A                                 13060'|'
+0317 A                                      DSPATR(HI)
+0318 A            FL0140         4   O 13062DSPATR(CS)
+0319 A                                 13067'|'
+0319 A                                      DSPATR(HI)
+0320 A            FA0010         8   O 13069
+0321 A            FL0142         1   B 14002DSPATR(CS HI MDT)
+0322 A            FL0144        27   O 14006
+0323 A            FL0145         5   O 14034
+0324 A                                 14040'|'
+0324 A                                      DSPATR(HI)
+0325 A            FL0147         5   O 14042
+0326 A                                 14048'|'
+0326 A                                      DSPATR(HI)
+0327 A            FL0149         1   O 14050DSPATR(CS)
+0328 A                                 14052'|'
+0328 A                                      DSPATR(HI)
+0329 A            FL0151         5   O 14054DSPATR(CS)
+0330 A                                 14060'|'
+0330 A                                      DSPATR(HI)
+0331 A            FL0153         4   O 14062DSPATR(CS)
+0332 A                                 14067'|'
+0332 A                                      DSPATR(HI)
+0333 A            FA0011         8   O 14069
+0334 A            FL0155         1   B 15002DSPATR(CS HI MDT)
+0335 A            FL0157        27   O 15006
+0336 A            FL0158         5   O 15034
+0337 A                                 15040'|'
+0337 A                                      DSPATR(HI)
+0338 A            FL0160         5   O 15042
+0339 A                                 15048'|'
+0339 A                                      DSPATR(HI)
+0340 A            FL0162         1   O 15050DSPATR(CS)
+0341 A                                 15052'|'
+0341 A                                      DSPATR(HI)
+0342 A            FL0164         5   O 15054DSPATR(CS)
+0343 A                                 15060'|'
+0343 A                                      DSPATR(HI)
+0344 A            FL0166         4   O 15062DSPATR(CS)
+0345 A                                 15067'|'
+0345 A                                      DSPATR(HI)
+0346 A            FA0012         8   O 15069
+0347 A            FL0168         1   B 16002DSPATR(CS HI MDT)
+0348 A            FL0170        27   O 16006
+0349 A            FL0171         5   O 16034
+0350 A                                 16040'|'
+0350 A                                      DSPATR(HI)
+0351 A            FL0173         5   O 16042
+0352 A                                 16048'|'
+0352 A                                      DSPATR(HI)
+0353 A            FL0175         1   O 16050DSPATR(CS)
+0354 A                                 16052'|'
+0354 A                                      DSPATR(HI)
+0355 A            FL0177         5   O 16054DSPATR(CS)
+0356 A                                 16060'|'
+0356 A                                      DSPATR(HI)
+0357 A            FL0179         4   O 16062DSPATR(CS)
+0358 A                                 16067'|'
+0358 A                                      DSPATR(HI)
+0359 A            FA0013         8   O 16069
+0360 A            FL0181         1   B 17002DSPATR(CS HI MDT)
+0361 A            FL0183        27   O 17006
+0362 A            FL0184         5   O 17034
+0363 A                                 17040'|'
+0363 A                                      DSPATR(HI)
+0364 A            FL0186         5   O 17042
+0365 A                                 17048'|'
+0365 A                                      DSPATR(HI)
+0366 A            FL0188         1   O 17050DSPATR(CS)
+0367 A                                 17052'|'
+0367 A                                      DSPATR(HI)
+0368 A            FL0190         5   O 17054DSPATR(CS)
+0369 A                                 17060'|'
+0369 A                                      DSPATR(HI)
+0370 A            FL0192         4   O 17062DSPATR(CS)
+0371 A                                 17067'|'
+0371 A                                      DSPATR(HI)
+0372 A            FA0014         8   O 17069
+0373 A            FL0194         1   B 18002DSPATR(CS HI MDT)
+0374 A            FL0196        27   O 18006
+0375 A            FL0197         5   O 18034
+0376 A                                 18040'|'
+0376 A                                      DSPATR(HI)
+0377 A            FL0199         5   O 18042
+0378 A                                 18048'|'
+0378 A                                      DSPATR(HI)
+0379 A            FL0201         1   O 18050DSPATR(CS)
+0380 A                                 18052'|'
+0380 A                                      DSPATR(HI)
+0381 A            FL0203         5   O 18054DSPATR(CS)
+0382 A                                 18060'|'
+0382 A                                      DSPATR(HI)
+0383 A            FL0205         4   O 18062DSPATR(CS)
+0384 A                                 18067'|'
+0384 A                                      DSPATR(HI)
+0385 A            FA0015         8   O 18069
+0386 A            FL0207         1   B 19002DSPATR(CS HI MDT)
+0387 A            FL0209        27   O 19006
+0388 A            FL0210         5   O 19034
+0389 A                                 19040'|'
+0389 A                                      DSPATR(HI)
+0390 A            FL0212         5   O 19042
+0391 A                                 19048'|'
+0391 A                                      DSPATR(HI)
+0392 A            FL0214         1   O 19050DSPATR(CS)
+0393 A                                 19052'|'
+0393 A                                      DSPATR(HI)
+0394 A            FL0216         5   O 19054DSPATR(CS)
+0395 A                                 19060'|'
+0395 A                                      DSPATR(HI)
+0396 A            FL0218         4   O 19062DSPATR(CS)
+0397 A                                 19067'|'
+0397 A                                      DSPATR(HI)
+0398 A            FA0016         8   O 19069
+0399 A            FL0220         1   B 20002DSPATR(CS HI MDT)
+0400 A            FL0222        27   O 20006
+0401 A            FL0223         5   O 20034
+0402 A                                 20040'|'
+0402 A                                      DSPATR(HI)
+0403 A            FL0225         5   O 20042
+0404 A                                 20048'|'
+0404 A                                      DSPATR(HI)
+0405 A            FL0227         1   O 20050DSPATR(CS)
+0406 A                                 20052'|'
+0406 A                                      DSPATR(HI)
+0407 A            FL0229         5   O 20054DSPATR(CS)
+0408 A                                 20060'|'
+0408 A                                      DSPATR(HI)
+0409 A            FL0231         4   O 20062DSPATR(CS)
+0410 A                                 20067'|'
+0410 A                                      DSPATR(HI)
+0411 A            FA0017         8   O 20069
+0412 A            FL0233         1   B 21002DSPATR(CS HI MDT)
+0413 A            FL0235        27   O 21006
+0414 A            FL0236         5   O 21034
+0415 A                                 21040'|'
+0415 A                                      DSPATR(HI)
+0416 A            FL0238         5   O 21042
+0417 A                                 21048'|'
+0417 A                                      DSPATR(HI)
+0418 A            FL0240         1   O 21050DSPATR(CS)
+0419 A                                 21052'|'
+0419 A                                      DSPATR(HI)
+0420 A            FL0242         5   O 21054DSPATR(CS)
+0421 A                                 21060'|'
+0421 A                                      DSPATR(HI)
+0422 A            FL0244         4   O 21062DSPATR(CS)
+0423 A                                 21067'|'
+0423 A                                      DSPATR(HI)
+0424 A            FA0018         8   O 21069
+0425 A                                 22006'Afficher à partir de:'
+0426 A            FL0247        27   B 22028DSPATR(CS HI MDT)
+0428 A            MES           50   O 23005
+0428 A N99                                  DFTVAL('                           -
+0428 A                                                             ')
+0428 A                                      DSPATR(BL)
+0429 A                                 23058'(X=Produits choisis)'
+0431 A                                 24001' F1-Continuer  F3-Abandon  F5-Stop-
+0431 A                                      per pour compter                 F9-
+0431 A                                      /F10-Ar/Av'
+0432 A          R ECRDI
+0432 A                                      DSPMOD(*DS3)
+0432 A                                      PRINT(*PGM)
+0432 A                                      INVITE
+0432 A                                      SLNO(01)
+0432 A                                      CLRL(*NO)
+0432 A                                      ALWROL
+0432 A                                      CF03
+0432 A                                      ROLLUP ROLLDOWN CLEAR HLPRTN HOME
+0432 A                                      HELP
+0433 A                                 18062'1/Erreur comptage  '
+0434 A                                 19062'2/Utilisat° interne'
+0435 A                                 20062'3/Autre longueur   '
+0436 A                                 21002'  '
+0437 A            ENR            1   I 21005DFT('d')
+0437 A                                      DSPATR(PR ND MDT)
+0438 A                                 21007' '
+0440 A                                 21009'  D I: Une différence est détectée-
+0440 A                                       de ...'
+0440 A                                      DSPATR(HI BL)
+0441 A            QTDI           9   O 21051DSPATR(CS HI)
+0443 A                                 21061' 4/Transfert stock                -
+0443 A                                                               '
+0444 A                                 22041'Motif ...'
+0445 A            MOTIF          1   B 22051DSPATR(CS HI MDT)
+0445 A  51                                  DSPATR(RI PC)
+0447 A                                 22053'         5/ (libellé saisi )'
+0449 A                                 23002'                                  -
+0449 A                                        '
+0450 A                                 23039'Libellé ...'
+0451 A            FA0002        30   B 23051CHECK(LC)
+0451 A                                      DSPATR(HI MDT)
+0451 A  52                                  DSPATR(RI PC)
+0453 A                                 24002'F3-Retour  Entrée-Continuer'
+0455 A            MES           50   O 24030
+0455 A N99                                  DFTVAL('                           -
+0455 A                                                             ')
+0455 A                                      DSPATR(BL)
+0456 A          R SORTIE
+0456 A                                      DSPMOD(*DS3)
+0456 A                                      PRINT(*PGM)
+0456 A                                      INVITE
+0456 A                                      SLNO(18)
+0456 A                                      CLRL(*NO)
+0456 A                                      OVERLAY
+0456 A                                      ALWROL
+0456 A                                      CF01 CF02 CF03 CF04 CF05 CF06 CF07
+0456 A                                      CF08 CF09 CF10 CF11 CF12 CF13 CF14
+0456 A                                      CF15 CF16 CF17 CF18 CF19 CF20 CF21
+0456 A                                      CF22 CF23 CF24
+0456 A                                      ROLLUP ROLLDOWN CLEAR HLPRTN HOME
+0456 A                                      HELP
+0457 A            FL0001         1   I 01003DFT('f')
+0457 A                                      DSPATR(PR ND MDT)
+0458 A                                 01005'   '
+0460 A                                 01009'                                  -
+0460 A                                                                         -
+0460 A                                                          '
+0462 A                                 02019'L''inventaire des produits choisis-
+0462 A                                       est terminé.'
+0462 A                                      DSPATR(HI)
+0465 A                                 02066'                                  -
+0465 A                                                                         -
+0465 A                                                                         -
+0465 A                                              '
+0467 A                                 04019'Appuyez sur une touche quelconque -
+0467 A                                      pour sortir.'
+0467 A                                      DSPATR(HI)
+0470 A                                 04066'                                  -
+0470 A                                                                         -
+0470 A                                                                         -
+0470 A                                                            '
+0471 A                                 06033'                     '
+0471 A                                      DSPATR(HI UL)
+0474 A                                 06055'                                  -
+0474 A                                                                         -
+0474 A                                                                       '
+0475 A            FA0001         1   I 07078CHECK(ER)
+0475 A                                      DSPATR(ND MDT)
+0476 A          R CHOIX2
+0476 A                                      DSPMOD(*DS3)
+0476 A                                      PRINT(*PGM)
+0476 A                                      INVITE
+0476 A                                      SLNO(01)
+0476 A                                      CLRL(*ALL)
+0476 A  64                                  ALARM
+0476 A                                      ALWROL
+0476 A                                      CF03
+0476 A                                      ROLLUP ROLLDOWN CLEAR HLPRTN HOME
+0476 A                                      HELP
+0477 A            ENR            1   I 02003DFT('1')
+0477 A                                      DSPATR(PR ND MDT)
+0479 A                                 03017'                                  -
+0479 A                                                      '
+0479 A                                      DSPATR(UL)
+0480 A                                 04016'¦'
+0481 A                                 04028'        INVENTAIRE     '
+0481 A                                      DSPATR(RI UL)
+0482 A                                 04067'¦'
+0483 A                                 05016'¦'
+0484 A                                 05067'¦'
+0485 A                                 06016'¦'
+0487 A                                 06018'Des liste d''IP existent          -
+0487 A                                                     '
+0488 A                                 06067'¦'
+0489 A                                 07016'¦'
+0490 A                                 07018' Faites un choix '
+0492 A                                 07038'(1 seule réponse possible)  '
+0493 A                                 07067'¦'
+0494 A                                 08016'¦'
+0495 A                                 08067'¦'
+0496 A                                 09016'¦'
+0497 A            Z1             1   B 09018DSPATR(HI MDT)
+0497 A  60                                  DSPATR(PR ND)
+0497 A N60                                  DSPATR(CS)
+0498 A            FA0029        39   O 09021DSPATR(HI)
+0499 A                                 09067'¦'
+0500 A                                 10016'¦'
+0501 A            Z2             1   B 10018DSPATR(HI MDT)
+0501 A  61                                  DSPATR(PR ND)
+0501 A N61                                  DSPATR(CS)
+0502 A            FA0030        39   O 10021
+0503 A                                 10067'¦'
+0504 A                                 11016'¦'
+0505 A            Z3             1   B 11018DSPATR(HI MDT)
+0505 A  62                                  DSPATR(PR ND)
+0505 A N62                                  DSPATR(CS)
+0506 A            FA0031        39   O 11021DSPATR(HI)
+0507 A                                 11067'¦'
+0508 A                                 12016'¦'
+0509 A            Z4             1   B 12018DSPATR(HI MDT)
+0509 A  63                                  DSPATR(PR ND)
+0509 A N63                                  DSPATR(CS)
+0510 A            FA0032        39   O 12021
+0511 A                                 12067'¦'
+0512 A                                 13016'¦'
+0513 A            Z5             1   B 13018DSPATR(HI MDT)
+0513 A  64                                  DSPATR(PR ND)
+0513 A N64                                  DSPATR(CS)
+0514 A            FA0033        39   O 13021DSPATR(HI)
+0515 A                                 13067'¦'
+0516 A                                 14016'¦'
+0517 A            Z6             1   B 14018DSPATR(HI MDT)
+0517 A  65                                  DSPATR(PR ND)
+0517 A N65                                  DSPATR(CS)
+0518 A            FA0034        39   O 14021
+0519 A                                 14067'¦'
+0520 A                                 15016'¦'
+0521 A            Z7             1   B 15018DSPATR(HI MDT)
+0521 A  66                                  DSPATR(PR ND)
+0521 A N66                                  DSPATR(CS)
+0522 A            FA0035        39   O 15021DSPATR(HI)
+0523 A                                 15067'¦'
+0524 A                                 16016'¦'
+0525 A            Z8             1   B 16018DSPATR(HI MDT)
+0525 A  67                                  DSPATR(PR ND)
+0525 A N67                                  DSPATR(CS)
+0526 A            FA0036        39   O 16021
+0527 A                                 16067'¦'
+0528 A                                 17016'¦'
+0529 A            Z9             1   B 17018DSPATR(HI MDT)
+0529 A  68                                  DSPATR(PR ND)
+0529 A N68                                  DSPATR(CS)
+0530 A            FA0037        39   O 17021DSPATR(HI)
+0531 A                                 17067'¦'
+0532 A                                 18016'¦'
+0533 A            Z10            1   B 18018DSPATR(HI MDT)
+0533 A  69                                  DSPATR(PR ND)
+0533 A N69                                  DSPATR(CS)
+0534 A            FA0038        39   O 18021
+0535 A                                 18067'¦'
+0536 A                                 19016'¦'
+0537 A                                 19067'¦'
+0538 A                                 20016'¦'
+0539 A            Z11            1   B 20018DSPATR(CS HI MDT)
+0539 A  50                                  DSPATR(RI PC)
+0541 A                                 20021'(P)asser outre et travailler manue-
+0541 A                                      llement.'
+0541 A                                      DSPATR(HI)
+0542 A                                 20067'¦'
+0543 A                                 21016'¦'
+0544 A                                 21067'¦'
+0546 A                                 22017'                                  -
+0546 A                                                      '
+0546 A                                      DSPATR(UL)
+0547 A            FA0001        50   O 23019DSPATR(HI BL)
+0549 A                                 24003'                       F3-Abandon -
+0549 A                                                 Entrée-continuer        -
+0549 A                                              '

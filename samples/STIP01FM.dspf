@@ -1,0 +1,64 @@
+     A*=================================================================
+     A* STIP01FM - Ecran de selection des produits a compter (IP)
+     A* Remplace le format SELECT du fichier S/36 STIPFM (programme-
+     A* decrit, 1300 octets, KFMTS) par un sous-fichier page a page.
+     A* Meme implantation ecran : 18 lignes, colonnes identiques.
+     A* Genere par iA by programmers.io - a compiler avec :
+     A*   CRTDSPF FILE(STIP01FM) SRCMBR(STIP01FM)
+     A*=================================================================
+     A                                      DSPSIZ(*DS3)
+     A                                      INDARA
+     A                                      PRINT
+     A                                      CF01(01 'Continuer')
+     A                                      CF03(03 'Abandon')
+     A                                      CF05(05 'Stopper pour compter')
+     A                                      CF09(09 'Page precedente')
+     A                                      CF10(10 'Page suivante')
+     A*--- Sous-fichier : une ligne produit ------------------------------
+     A          R SELSFL                    SFL
+     A            SXSEL          1A  B  4  2DSPATR(CS HI MDT)
+     A            SMOT          27A  O  4  6
+     A            SLGART         4  2O  4 34EDTCDE(4)
+     A                                  4 40'|'
+     A                                      DSPATR(HI)
+     A            SUSI           5A  O  4 42
+     A                                  4 48'|'
+     A                                      DSPATR(HI)
+     A            SCX            1A  O  4 50DSPATR(CS)
+     A                                  4 52'|'
+     A                                      DSPATR(HI)
+     A            SSEQP          4  1O  4 54EDTCDE(4)
+     A                                  4 60'|'
+     A                                      DSPATR(HI)
+     A            SSEQO          3  0O  4 62EDTCDE(M)
+     A                                  4 67'|'
+     A                                      DSPATR(HI)
+     A            SDATIP         8A  O  4 69
+     A*--- Controle du sous-fichier --------------------------------------
+     A          R SELCTL                    SFLCTL(SELSFL)
+     A                                      SFLSIZ(0018)
+     A                                      SFLPAG(0018)
+     A                                      OVERLAY
+     A  31                                  SFLCLR
+     A N31                                  SFLDSPCTL
+     A  32                                  SFLDSP
+     A                                      ROLLUP(10 'Page suivante')
+     A                                      ROLLDOWN(09 'Page precedente')
+     A                                 22  6'Afficher à partir de:'
+     A            DEB           27A  B 22 28DSPATR(CS HI MDT)
+     A          R STIP0H
+     A                                      OVERLAY
+     A                                  1 24' INVENTAIRE : Sélection des produi-
+     A                                      ts '
+     A                                      DSPATR(RI UL)
+     A                                  3  2'x | Mot directeur               ln-
+     A                                      g   | fa/af | cx| séqper|séqord| De-
+     A                                      rnierIP|'
+     A          R STIP0F
+     A                                      OVERLAY
+     A  99        MES           50A  O 23  5DSPATR(BL)
+     A                                 23 58'(X=Produits choisis)'
+     A                                 24  1' F1-Continuer  F3-Abandon  F5-Stop-
+     A                                      per pour compter                 F9-
+     A                                      /F10-Ar/Av'
+

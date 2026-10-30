@@ -271,4 +271,23 @@ Rule (`CheckSubfileRows` in `IAdspCvt`), for the D records of one format:
 - The fields of one display line (column 19-20) make its signature: column, length, output entry, input entry and data type of each field, in the order of the records. Names, line number and constant text are not part of it.
 - `C_SFLMIN` (4) or more consecutive display lines with the same signature are reported once, on the first record of the first line, status R: "Display lines a to b repeat the same fields at the same positions: a subfile candidate".
 
-`samples/ORDLIST.dspf36`: `LISTA` has 10 identical rows (lines 6 to 15, reported), `LISTB` has 3 rows then a gap and 2 rows with another column (not reported), `LISTC` has 2 rows (not reported). The sample is written by hand; a member that was converted to a subfile is still wanted. Written from the design and not from a run.
+`samples/ORDLIST.dspf36`: `LISTA` has 10 identical rows (lines 6 to 15, reported), `LISTB` has 3 rows then a gap and 2 rows with another column (not reported), `LISTC` has 2 rows (not reported). That sample is written by hand. The real example is below. Written from the design and not from a run.
+
+### Real example: STIPFM (received 2026-10-30)
+
+Three files in `samples/`, from the user, for future reference (no converter code uses them yet):
+
+| File | What it is |
+|---|---|
+| `STIPFM.dspf36` | The S/36 display format member (formats `CHOIX1`, `CHOIX`, `SAISIE`, `SELECT`, `ECRDI`, `SORTIE`, `CHOIX2`) |
+| `STIPFM.dspf` | The same member converted to DDS without any subfile: every format is a plain display format |
+| `STIP01FM.dspf` | The `SELECT` format after the program was changed to a subfile (a page at a time). Its header says it replaces the `SELECT` format of `STIPFM` (program described, 1300 bytes) and keeps the same screen layout: 18 lines, same columns |
+
+What the pair `STIPFM.dspf` and `STIP01FM.dspf` shows (read from the files):
+
+- The candidate is real: in `SELECT` the display lines 4 to 21 are 18 rows with the same fields at the same positions (a one-character selection field, 27, 5, 5, 1, 5, 4 and 8 character fields and five `|` constants). `CheckSubfileRows` should report these lines (not run on this member yet).
+- The one format `SELECT` became four records: `SELSFL` (`SFL`: one row, on line 4), `SELCTL` (`SFLCTL(SELSFL)` with `SFLSIZ(0018)`, `SFLPAG(0018)`, `OVERLAY`, `SFLCLR` on indicator 31, `SFLDSPCTL` on N31, `SFLDSP` on 32, `ROLLUP(10)`, `ROLLDOWN(09)`, and the `Afficher à partir de:` label with its input field `DEB`), `STIP0H` (the title on line 1 and the column heading on line 3) and `STIP0F` (the message field `MES` on indicator 99, the `(X=Produits choisis)` text and the function key line 24).
+- The row fields got names (`SXSEL`, `SMOT`, `SLGART`, `SUSI`, `SCX`, `SSEQP`, `SSEQO`, `SDATIP`) instead of `FL0014` and so on, and three of them are numeric with an edit code (`SLGART` 4,2 `EDTCDE(4)`, `SSEQP` 4,1 `EDTCDE(4)`, `SSEQO` 3,0 `EDTCDE(M)`); in the plain conversion they are character fields of 5, 5 and 4. Names and types come from the program that fills the subfile, not from the display file member.
+- The function keys became `CFnn(nn 'text')` with response indicators; the record keywords `PRINT(*PGM)`, `INVITE`, `SLNO(01)`, `CLRL(*ALL)`, `ALWROL`, `HLPRTN`, `HOME` and `HELP` are not in the subfile version, and the file keywords are `DSPSIZ(*DS3)`, `INDARA` and `PRINT`.
+
+Open for DSP-06 (decisions for the user, nothing written): which rule makes `SFL` and `SFLCTL` from a candidate, where the field names and types come from (the program, a parameter, or a generated name with a report line), and whether the converted file must keep the old format name for the program.
