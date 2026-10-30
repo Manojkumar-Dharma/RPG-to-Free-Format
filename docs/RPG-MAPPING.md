@@ -676,7 +676,7 @@ Decision (user, 2026-10-25): the output of a PRINTER file is made as an external
 | Heading, detail and total records without the cycle skeleton | whole record as comments | R |
 | `MR`, `RT` output indicators; ADD, DEL, fetch overflow, release (16-18) | comments | R |
 | Edit codes, edit words, blank after, relative end positions, `PAGE`, `PAGE1`-`PAGE7`, `UDATE`, `*DATE` | see the section below (FREE-38, FREE-57) | A |
-| `UDAY`, `UMONTH`, `UYEAR`, array elements `ARR,3`, `*PLACE` | assignments before the `write` (FREE-58, section below) | A |
+| `UDAY`, `UMONTH`, `UYEAR`, array elements `ARR,3`, `*PLACE` | assignments before the `write` (FREE-58, section below; RPG IV EXCEPT: FREE-61) | A |
 | Data format L, R (44) on a printer file, P and B on a printer file, edit codes 5-9 | comments, with the reason of the section below | R |
 | A field without a known length (not defined by I, E or a result field) | the record format is not generated | R (the `write` has to be fixed by hand) |
 | A second printer file, a file that is not a converted PRINTER file | comments | R |

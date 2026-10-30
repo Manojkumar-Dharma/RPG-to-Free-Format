@@ -2297,7 +2297,8 @@ dcl-proc ExceptStmt;
   dcl-s l_k int(10);
   dcl-s l_cond varchar(200);
   dcl-s l_after varchar(120);
-  dcl-s l_one varchar(300);
+  dcl-s l_before varchar(250);
+  dcl-s l_one varchar(500);
   dcl-s l_text varchar(500) inz('');
   dcl-s l_n int(10);
   dcl-s l_j int(10);
@@ -2332,7 +2333,13 @@ dcl-proc ExceptStmt;
     else;
       l_cond = OutExceptCond(l_name:l_k);
       l_after = OutExceptAfter(l_name:l_k);
+      // FREE-58: the assignments of the fields that have a DDS name of their own
+      // (array elements, UDAY, UMONTH, UYEAR, *PLACE) come before the write.
+      l_before = OutExceptBefore(l_name:l_k);
       l_one = 'write ' + OutExceptFormat(l_name:l_k);
+      if l_before <> '';
+        l_one = l_before + '; ' + l_one;
+      endif;
       if l_after <> '';
         l_one += '; ' + l_after;
       endif;
