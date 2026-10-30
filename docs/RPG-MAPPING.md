@@ -676,7 +676,8 @@ Decision (user, 2026-10-25): the output of a PRINTER file is made as an external
 | Heading, detail and total records without the cycle skeleton | whole record as comments | R |
 | `MR`, `RT` output indicators; ADD, DEL, fetch overflow, release (16-18) | comments | R |
 | Edit codes, edit words, blank after, relative end positions, `PAGE`, `PAGE1`-`PAGE7`, `UDATE`, `*DATE` | see the section below (FREE-38, FREE-57) | A |
-| Data format P, B, L, R (44), `UDAY`, `UMONTH`, `UYEAR`, `*PLACE`, array elements, edit codes 5-9 | comments, with the reason of the section below | R |
+| `UDAY`, `UMONTH`, `UYEAR`, array elements `ARR,3`, `*PLACE` | assignments before the `write` (FREE-58, section below) | A |
+| Data format L, R (44) on a printer file, P and B on a printer file, edit codes 5-9 | comments, with the reason of the section below | R |
 | A field without a known length (not defined by I, E or a result field) | the record format is not generated | R (the `write` has to be fixed by hand) |
 | A second printer file, a file that is not a converted PRINTER file | comments | R |
 
@@ -983,19 +984,27 @@ width = digits + 1 for a decimal point (decimals > 0) + commas + sign (+ 1 for a
 
 Fields must be in ascending order of their positions (the edited start is compared with the end of the field before). Written from the manual and not from a run: check the first `CRTPRTF`, in particular the usage of `PAGNBR` and `DATE` fields and the position of edited fields.
 
-Stays R after FREE-57 (RV-61), with the reason written in the report:
+Written in FREE-58 (RV-61), from SC09-1818 chapter 25 (special words, `*PLACE`, column 44). The DDS has no keyword for these, so the field gets its own DDS name (`IA_` and a number) and the program assigns it **before the `write`**, inside the same condition: `IA_E1 = WORK(3); write LINE;`.
+
+| Source | DDS field and statement before the `write` |
+|---|---|
+| `UDAY`, `UMONTH`, `UYEAR` | 2 digits, zoned, name `IA_UDAY`, `IA_UMONTH`, `IA_UYEAR`; `IA_UDAY = UDAY;` (edit codes as for other numeric fields; blank after is R) |
+| array element `ARR,3` or `ARR,I` (RPG II/III) | type and length of the array element (`CalcFieldInfo` of the array name, so the array must be known), name `IA_En`; `IA_E1 = ARR(3);` (blank after is R) |
+| `*PLACE` with end position E (1 to 256, no other entry on the line, no indicators) | every field and constant before the first `*PLACE` of the record is repeated as a copy (`IA_Pn = FIELD;`), moved by E less the end of the last field before it (Table 18 and Figure 228: fields at 10, 20, 30 and `*PLACE` 60 give copies at 40, 50, 60); several `*PLACE` lines repeat the same group; fields after a `*PLACE` are not repeated; `PAGE`, `UDATE` and `*DATE` in the group make the record R |
+| more assignments than fit one 250-character statement | the record format is R: split the record |
+
+Packed and binary output on a DISK record (data format `P`, `B`; FREE-58): a work field in a data structure of its own is declared with the other declarations (`dcl-ds IA_P12D; IA_P12 packed(7:0); end-ds;`, binary `int(5)` for 1 to 4 digits and `int(10)` for 5 to 9) and moved into the record: `IA_P12 = AMT; %subst(ORDHIST_OUT:9:4) = IA_P12D;`. The field takes digits/2 + 1 bytes (packed), 2 or 4 bytes (binary), ending at the end position. Binary with decimal positions or more than 9 digits stays R.
+
+Stays R, with the reason in the report:
 
 | Item | Reason |
 |---|---|
-| Data format `P`, `B` (44) on a printer file | SC09-1818: packed and binary fields cannot be printed, only written to disk or ICF output |
-| Data format `P`, `B` on a DISK record | needs a packed or binary subfield in the record data structure `FILE_OUT` (2 or 4 bytes for binary, digits/2 + 1 for packed); the declaration is written in `IAfreeCalc` and `IAfreeFx4`, so it is a separate change: decision pending |
+| Data format `P`, `B` on a printer file | SC09-1818: packed and binary fields cannot be printed, only written to disk or ICF output |
 | Data format `L`, `R` | not valid in SC09-1818 (blank, `P` and `B` only) |
-| `UDAY`, `UMONTH`, `UYEAR` | DDS has no keyword for a single part of the date: needs a field with an assignment before the `write` (`OUDAY = UDAY;`), and the converter has no statement before the `write` yet |
-| Array elements (`ARR,3`, `ARR(I)`) | the same: a DDS field name cannot be an array element, so a work field and an assignment before the `write` |
-| `*PLACE` | repeats a group of fields: DDS field names are unique in a record format, so the repeat needs copies of the fields and assignments before the `write` |
 | Edit codes 5-9 | user-defined edit codes depend on the system (SC09-1818) |
+| `PAGE8` and the like, other names starting with `*`, array elements in RPG IV (`ARR(3)`) | not covered |
 
-The three items with an assignment before the `write` share one missing piece: a `before` hook next to `OutExceptAfter` and `OutCycleAfter`, called by `IAfreeCalc` (lines 3216 and 6559) and by the cycle skeleton.
+Samples: `samples/FREEPLC.rpg36` (expected: `IA_UDAY` at 1-2, `IA_UMONTH` at 4-5, `IA_E1` from `WORK(3)` at 8-12, `AMT` with edit code 1 at 15-20, copies ending at 22, 25, 32, 40 and again at 42, 45, 52, 60; `IA_UDAY = UDAY; IA_UMONTH = UMONTH; IA_E1 = WORK(3); IA_P2 = UDAY; ... write LINE;`) and `samples/FREEDPB.rpg36` (`AMT` 7 digits packed at 9-12, `QTY` 3 digits binary at 13-14). Written from the manual and not from a run: check that the array `WORK` is known to the converter, that `CRTPRTF` accepts the copies, and the packed and binary bytes in the record.
 
 Sample `samples/FREEEDT.rpg36`. Expected, with `AMT` 9 digits and 2 decimals (`1`: width 12, start 3; `J`: width 13, start 16; `Z`: width 9, start 32), `CNT` 5 digits with code `3` (width 5, start 46) and blank after (`write LINE; clear CNT;`), the edit word (11 positions, start 50), `PAGE` (start 67), `PAGE1` (start 107, end 110, FREE-57), `UDATE` with `Y` (width 8, start 73) and the last field relative (+ 15, end 95).
 

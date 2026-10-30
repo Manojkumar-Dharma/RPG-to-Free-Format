@@ -23,6 +23,10 @@ dcl-c C_MAXFLD 2500;
 dcl-c C_MAXDDS 4000;
 dcl-c C_MAXPRT 9;
 
+dcl-pr CalcDeclare;
+  i_text varchar(100) const;
+end-pr;
+
 dcl-pr CalcFieldInfo ind;
   i_name varchar(10) const;
   o_kind char(1);
@@ -47,6 +51,7 @@ dcl-s g_gFields int(10) dim(C_MAXGRP);
 dcl-s g_gDisk ind dim(C_MAXGRP);             // record of a program described DISK file (RV-62)
 dcl-s g_gAct char(1) dim(C_MAXGRP);          // disk: W write (blank or ADD), D delete (DEL)
 dcl-s g_gRecLen int(10) dim(C_MAXGRP);       // disk: record length
+dcl-s g_gPlace int(10) dim(C_MAXGRP);        // fields before the first *PLACE (RV-61)
 dcl-s g_gCount int(10) inz(0);
 // Output fields and constants.
 dcl-s g_fName varchar(14) dim(C_MAXFLD);
@@ -56,7 +61,11 @@ dcl-s g_fConst varchar(30) dim(C_MAXFLD);
 dcl-s g_fCond varchar(30) dim(C_MAXFLD);
 dcl-s g_fReason varchar(120) dim(C_MAXFLD);
 dcl-s g_fBlank ind dim(C_MAXFLD);           // blank after (column 39)
-dcl-s g_fSpecial char(1) dim(C_MAXFLD);     // P PAGE, J UDATE, S *DATE
+dcl-s g_fSpecial char(1) dim(C_MAXFLD);     // P PAGE, J UDATE, S *DATE, D UDAY/UMONTH/UYEAR, E array element
+dcl-s g_fAlias varchar(10) dim(C_MAXFLD);   // DDS name of a field that is assigned before the write (RV-61)
+dcl-s g_fSrc varchar(40) dim(C_MAXFLD);     // the value of that field: 'IA_E1 = ARR(3)'
+dcl-s g_fFmt char(1) dim(C_MAXFLD);         // data format (column 44)
+dcl-s g_aliasNo int(10) inz(0);
 dcl-s g_fCount int(10) inz(0);
 // The DDS source.
 dcl-s g_dds varchar(80) dim(C_MAXDDS);
@@ -539,6 +548,11 @@ dcl-proc OutBuild;
       if l_g = 0 or g_fCount >= C_MAXFLD;
         iter;
       endif;
+      if LineField(l_line) = '*PLACE';
+        PlaceExpand(l_g:l_line);
+        g_gEnd(l_g) = l_index;
+        iter;
+      endif;
       g_fCount += 1;
       g_fName(g_fCount) = LineField(l_line);
       g_fEdit(g_fCount) = Up(%subst(l_line:38:1));
@@ -547,8 +561,11 @@ dcl-proc OutBuild;
       g_fEnd(g_fCount) = 0;
       g_fBlank(g_fCount) = *off;
       g_fSpecial(g_fCount) = ' ';
+      g_fAlias(g_fCount) = '';
+      g_fSrc(g_fCount) = '';
       l_end = Cols(l_line:40:43);
       l_fmt = %subst(Up(%subst(l_line:44:1) + ' '):1:1);
+      g_fFmt(g_fCount) = l_fmt;
       l_cond = IndicatorCond(l_line:l_reason:' ');
       g_fCond(g_fCount) = l_cond;
       l_relative = (%subst(l_end:1:1) = '+');
@@ -563,6 +580,21 @@ dcl-proc OutBuild;
                  and %scan(%subst(g_fName(g_fCount):5:1):'1234567') > 0);
           // PAGE and PAGE1 to PAGE7 (RV-61): page numbers, one for each kind of page.
           g_fSpecial(g_fCount) = 'P';
+        when g_fName(g_fCount) = 'UDAY' or g_fName(g_fCount) = 'UMONTH'
+             or g_fName(g_fCount) = 'UYEAR';
+          // Part of the program date (RV-61): a field of 2 digits that is assigned
+          // before the write (DDS has no keyword for a part of the date).
+          g_fSpecial(g_fCount) = 'D';
+          g_fAlias(g_fCount) = 'IA_' + g_fName(g_fCount);
+          g_fSrc(g_fCount) = g_fName(g_fCount);
+        when ArrayBase(g_fName(g_fCount)) <> '';
+          // An array element ARR,3 or ARR,I (RV-61): a work field assigned before
+          // the write.
+          g_fSpecial(g_fCount) = 'E';
+          g_aliasNo += 1;
+          g_fAlias(g_fCount) = 'IA_E' + %char(g_aliasNo);
+          g_fSrc(g_fCount) = ArrayBase(g_fName(g_fCount)) + '('
+                             + ArrayIndex(g_fName(g_fCount)) + ')';
         when g_fName(g_fCount) = 'UDATE';
           g_fSpecial(g_fCount) = 'J';
         when g_fName(g_fCount) = '*DATE';
@@ -578,7 +610,7 @@ dcl-proc OutBuild;
         when l_relative and (g_gFields(l_g) = 0 or g_fEnd(g_fCount - 1) = 0);
           g_fReason(g_fCount) = 'A relative end position needs an end position '
                                 + 'before it in the same record';
-        when l_fmt <> ' ';
+        when l_fmt <> ' ' and not (g_gDisk(l_g) and (l_fmt = 'P' or l_fmt = 'B'));
           if l_fmt = 'P' or l_fmt = 'B';
             g_fReason(g_fCount) = 'Data format ' + l_fmt + ' (column 44): packed '
                                   + 'and binary fields cannot be printed, only '
@@ -592,6 +624,11 @@ dcl-proc OutBuild;
         when Up(%subst(l_line:39:1)) <> ' ' and Up(%subst(l_line:39:1)) <> 'B';
           g_fReason(g_fCount) = 'Entry ' + %subst(l_line:39:1) + ' in column 39 '
                                 + 'is not valid';
+        when Up(%subst(l_line:39:1)) = 'B'
+             and (g_fSpecial(g_fCount) = 'D' or g_fSpecial(g_fCount) = 'E');
+          g_fReason(g_fCount) = 'Blank after of ' + g_fName(g_fCount) + ' (a part '
+                                + 'of the date or an array element) is not '
+                                + 'converted';
         when Up(%subst(l_line:39:1)) = 'B' and g_fName(g_fCount) = '';
           g_fReason(g_fCount) = 'Blank after (column 39) needs a field';
         when g_fName(g_fCount) = '' and not IsConstant(g_fConst(g_fCount));
@@ -684,6 +721,7 @@ dcl-proc OutBuild;
     g_gDisk(l_g) = *off;
     g_gAct(l_g) = ' ';
     g_gRecLen(l_g) = 0;
+    g_gPlace(l_g) = 0;
 
     // A program described DISK file (RV-62): exception records only; blank or ADD
     // writes the record, DEL deletes the record read.
@@ -1236,6 +1274,9 @@ dcl-proc DdsName;
   if g_fSpecial(i_field) = 'S';
     return 'SYSDATE';
   endif;
+  if g_fAlias(i_field) <> '';
+    return g_fAlias(i_field);
+  endif;
   return g_fName(i_field);
 end-proc;
 
@@ -1365,6 +1406,181 @@ dcl-proc EditWordLength;
     l_k += 1;
   enddo;
   return l_len;
+end-proc;
+
+// ------------------------------------------------------------------
+// ARR,3 or ARR,I of RPG II/III: the array name, '' for any other name.
+dcl-proc ArrayBase;
+  dcl-pi *n varchar(14);
+    i_name varchar(14) const;
+  end-pi;
+
+  dcl-s l_comma int(10);
+
+  l_comma = %scan(',':i_name);
+  if l_comma < 2 or l_comma = %len(i_name)
+     or %check(C_DIGITS + C_UPPER + '#$@_':%subst(i_name:1:l_comma - 1)) > 0
+     or %check(C_DIGITS + C_UPPER + '#$@_':%subst(i_name:l_comma + 1)) > 0;
+    return '';
+  endif;
+  return %subst(i_name:1:l_comma - 1);
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc ArrayIndex;
+  dcl-pi *n varchar(14);
+    i_name varchar(14) const;
+  end-pi;
+
+  return %subst(i_name:%scan(',':i_name) + 1);
+end-proc;
+
+// ------------------------------------------------------------------
+// *PLACE (RV-61): the fields before the first *PLACE of the record are written again,
+// ending at the end position of the line: each of them is a copy with its own DDS
+// name, assigned before the write. The group moves by the end position less the end
+// of its last field (Table 18 and Figure 228 of SC09-1818).
+dcl-proc PlaceExpand;
+  dcl-pi *n;
+    i_g int(10) const;
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_reason varchar(150) inz('');
+  dcl-s l_iReason varchar(150) inz('');
+  dcl-s l_cond varchar(200);
+  dcl-s l_end varchar(5);
+  dcl-s l_n int(10);
+  dcl-s l_f int(10);
+  dcl-s l_new int(10);
+  dcl-s l_last int(10) inz(0);
+  dcl-s l_shift int(10);
+
+  if g_gPlace(i_g) = 0;
+    g_gPlace(i_g) = g_gFields(i_g);
+  endif;
+  l_n = g_gPlace(i_g);
+  l_end = Cols(i_line:40:43);
+  l_cond = IndicatorCond(i_line:l_iReason:' ');
+  for l_f = g_gFirst(i_g) to g_gFirst(i_g) + l_n - 1;
+    if g_fReason(l_f) <> '' and l_reason = '';
+      l_reason = g_fReason(l_f);
+    endif;
+    if g_fSpecial(l_f) = 'P' or g_fSpecial(l_f) = 'J' or g_fSpecial(l_f) = 'S';
+      l_reason = 'PAGE, UDATE and *DATE cannot be repeated by *PLACE';
+    endif;
+    if g_fEnd(l_f) > l_last;
+      l_last = g_fEnd(l_f);
+    endif;
+  endfor;
+  select;
+    when l_reason <> '';
+    when g_n4Reason <> '';
+      l_reason = g_n4Reason;
+    when l_iReason <> '';
+      l_reason = l_iReason;
+    when l_cond <> '';
+      l_reason = 'Output indicators on a *PLACE line are not converted';
+    when %subst(i_line:44:1) <> ' ' or %subst(i_line:38:1) <> ' '
+         or %subst(i_line:39:1) <> ' ' or Cols(i_line:45:70) <> '';
+      l_reason = 'A *PLACE line has only the end position (columns 40-43)';
+    when l_end = '' or %check(C_DIGITS:l_end) > 0 or %int(l_end) < 1
+         or %int(l_end) > 256;
+      l_reason = 'End position of *PLACE is not 1 to 256';
+    when l_n = 0;
+      l_reason = '*PLACE has no field before it in the record';
+    when g_fCount + l_n > C_MAXFLD;
+      l_reason = 'Too many fields for *PLACE';
+  endsl;
+  if l_reason <> '';
+    if g_gReason(i_g) = '';
+      g_gReason(i_g) = l_reason;
+    endif;
+    return;
+  endif;
+
+  l_shift = %int(l_end) - l_last;
+  for l_f = g_gFirst(i_g) to g_gFirst(i_g) + l_n - 1;
+    g_fCount += 1;
+    l_new = g_fCount;
+    g_fName(l_new) = g_fName(l_f);
+    g_fEdit(l_new) = g_fEdit(l_f);
+    g_fConst(l_new) = g_fConst(l_f);
+    g_fCond(l_new) = g_fCond(l_f);
+    g_fReason(l_new) = '';
+    g_fBlank(l_new) = *off;
+    g_fSpecial(l_new) = g_fSpecial(l_f);
+    g_fFmt(l_new) = g_fFmt(l_f);
+    g_fEnd(l_new) = g_fEnd(l_f) + l_shift;
+    g_fAlias(l_new) = '';
+    g_fSrc(l_new) = '';
+    if g_fName(l_f) <> '';
+      g_aliasNo += 1;
+      g_fAlias(l_new) = 'IA_P' + %char(g_aliasNo);
+      g_fSrc(l_new) = g_fSrc(l_f);
+      if g_fSrc(l_f) = '';
+        g_fSrc(l_new) = g_fName(l_f);
+      endif;
+    endif;
+    g_gFields(i_g) += 1;
+  endfor;
+end-proc;
+
+// ------------------------------------------------------------------
+// The assignments before the write of a record (RV-61): 'IA_E1 = ARR(3); ...' for
+// array elements, the parts of the date and the copies of *PLACE; '' when none.
+dcl-proc GroupBefore;
+  dcl-pi *n varchar(250);
+    i_group int(10) const;
+  end-pi;
+
+  dcl-s l_f int(10);
+  dcl-s l_text varchar(250) inz('');
+
+  for l_f = g_gFirst(i_group) to g_gFirst(i_group) + g_gFields(i_group) - 1;
+    if g_fAlias(l_f) <> '' and g_fSrc(l_f) <> '' and g_fReason(l_f) = '';
+      if %len(l_text) + %len(g_fAlias(l_f)) + %len(g_fSrc(l_f)) + 5 > 250;
+        return l_text + 'x';
+      endif;
+      if l_text <> '';
+        l_text += '; ';
+      endif;
+      l_text += g_fAlias(l_f) + ' = ' + g_fSrc(l_f);
+    endif;
+  endfor;
+  return l_text;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc OutExceptBefore export;
+  dcl-pi *n varchar(250);
+    i_name varchar(10) const;
+    i_number int(10) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  l_g = OutGroupNumber(i_name:i_number);
+  if l_g = 0;
+    return '';
+  endif;
+  return GroupBefore(l_g);
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc OutCycleBefore export;
+  dcl-pi *n varchar(250);
+    i_part char(1) const;
+    i_number int(10) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+
+  l_g = OutCycleGroup(i_part:i_number);
+  if l_g = 0;
+    return '';
+  endif;
+  return GroupBefore(l_g);
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1520,6 +1736,12 @@ dcl-proc OutFinish export;
               l_kind = 'N';
               l_len = 6;
               l_dec = 0;
+            when g_fSpecial(l_f) = 'D';
+              l_kind = 'N';
+              l_len = 2;
+              l_dec = 0;
+            when g_fSpecial(l_f) = 'E';
+              l_known = FieldInfoAny(ArrayBase(g_fName(l_f)):l_kind:l_len:l_dec);
             other;
               l_known = FieldInfoAny(g_fName(l_f):l_kind:l_len:l_dec);
           endsl;
@@ -1542,10 +1764,17 @@ dcl-proc OutFinish export;
               l_decText = '';
             endif;
             l_special = g_fSpecial(l_f);
+            if l_special = 'D' or l_special = 'E';
+              l_special = ' ';
+            endif;
           endif;
       endsl;
       if l_reason = '' and l_start < 1;
         l_reason = 'Field ' + g_fName(l_f) + ' starts before position 1';
+      endif;
+      if l_reason = '' and %len(GroupBefore(l_g)) > 200;
+        l_reason = 'Too many fields with an assignment before the write for one '
+                   + 'statement: split the record';
       endif;
       if l_reason = '' and l_start <= l_prevStart and l_rowCount > 0;
         l_reason = 'Fields are not in ascending position order';
@@ -1707,6 +1936,8 @@ dcl-proc DiskBuild;
   dcl-s l_after varchar(120);
   dcl-s l_known ind;
   dcl-s l_cond varchar(200);
+  dcl-s l_pb varchar(12);
+  dcl-s l_digits int(10);
 
   o_reason = '';
   l_ds = g_gFile(i_g) + '_OUT';
@@ -1765,8 +1996,36 @@ dcl-proc DiskBuild;
                      + 'at this point (define it before the EXCPT)';
           return 0;
         endif;
+        l_digits = l_len;
         l_start = g_fEnd(l_f) - l_len + 1;
-        if l_kind = 'N';
+        if g_fFmt(l_f) = 'P' or g_fFmt(l_f) = 'B';
+          // Packed or binary output (RV-61): a work field in a data structure of
+          // its own, moved into the record bytes.
+          l_pb = 'IA_' + g_fFmt(l_f) + %char(l_f);
+          select;
+            when l_kind <> 'N';
+              o_reason = 'Data format ' + g_fFmt(l_f) + ' of the character field '
+                         + g_fName(l_f) + ' is not valid';
+              return 0;
+            when g_fFmt(l_f) = 'P';
+              l_len = l_len / 2 + 1;
+              CalcDeclare('dcl-ds ' + l_pb + 'D; ' + l_pb + ' packed('
+                          + %char(l_digits) + ':' + %char(l_dec) + '); end-ds;');
+            when l_dec > 0 or l_digits > 9;
+              o_reason = 'Binary output of ' + g_fName(l_f) + ' with decimal '
+                         + 'positions or more than 9 digits is not converted';
+              return 0;
+            when l_digits <= 4;
+              l_len = 2;
+              CalcDeclare('dcl-ds ' + l_pb + 'D; ' + l_pb + ' int(5); end-ds;');
+            other;
+              l_len = 4;
+              CalcDeclare('dcl-ds ' + l_pb + 'D; ' + l_pb + ' int(10); end-ds;');
+          endsl;
+          l_start = g_fEnd(l_f) - l_len + 1;
+          l_one = l_pb + ' = ' + g_fName(l_f) + '; %subst(' + l_ds + ':'
+                  + %char(l_start) + ':' + %char(l_len) + ') = ' + l_pb + 'D';
+        elseif l_kind = 'N';
           l_one = '%subst(' + l_ds + ':' + %char(l_start) + ':' + %char(l_len)
                   + ') = %editc(' + g_fName(l_f) + ':''X'')';
         else;
@@ -1844,7 +2103,7 @@ dcl-proc DiskFinish;
           :'Record of a DISK file written by the EXCPT with a data structure'
           + ' (fields placed by '
           + '%SUBST at their end positions, numeric fields as zoned digits '
-          + 'with %EDITC code X)' + CycleNote(g_gType(i_g)) + '; not tested');
+          + 'with %EDITC code X; data format P and B through a work field)' + CycleNote(g_gType(i_g)) + '; not tested');
   for l_j = g_gStart(i_g) + 1 to g_gEnd(i_g);
     RptItem(C_STS_CONVERTED:SrcLineNo(l_j):%trimr(%subst(SrcLine(l_j):6:75)):'');
   endfor;

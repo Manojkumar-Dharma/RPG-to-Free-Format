@@ -1,0 +1,14 @@
+      * Before-write assignments (RV-61): UDAY, UMONTH, an array element and *PLACE
+     H
+     FREPORT  O         132     OA     PRINTER
+     E                    WORK       10  5
+     C                     MOVE 'ABCDE'   WORK,3
+     C                     Z-ADD12345     AMT     52
+     C                     EXCPT LINE
+     OREPORT  E  1             LINE
+     O                         UDAY       2
+     O                         UMONTH     5
+     O                         WORK,3    12
+     O                         AMT   1   20
+     O                         *PLACE    40
+     O                         *PLACE    60

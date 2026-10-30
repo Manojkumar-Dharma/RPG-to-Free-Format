@@ -3176,6 +3176,7 @@ dcl-proc ConvertExcept;
   dcl-s l_j int(10);
   dcl-s l_cond varchar(200);
   dcl-s l_after varchar(120);
+  dcl-s l_before varchar(250);
   dcl-s l_total int(10) inz(0);
   dcl-s l_n int(10);
   dcl-s l_reason varchar(190);
@@ -3218,6 +3219,10 @@ dcl-proc ConvertExcept;
     if l_after <> '';
       l_after = '; ' + l_after;
     endif;
+    l_before = OutExceptBefore(l_name:l_k);
+    if l_before <> '';
+      l_before += '; ';
+    endif;
     l_total += 1;
     if l_total > C_MAXSTMT;
       ReviewHere(i_c.line:i_c.lineNo:'EXCPT ' + l_name + ' writes too many '
@@ -3225,13 +3230,36 @@ dcl-proc ConvertExcept;
       return;
     endif;
     if l_cond = '';
-      l_statements(l_total) = 'write ' + OutExceptFormat(l_name:l_k) + l_after;
+      l_statements(l_total) = l_before + 'write ' + OutExceptFormat(l_name:l_k)
+                              + l_after;
     else;
-      l_statements(l_total) = 'if ' + l_cond + '; write '
+      l_statements(l_total) = 'if ' + l_cond + '; ' + l_before + 'write '
                               + OutExceptFormat(l_name:l_k) + l_after + '; endif';
     endif;
   endfor;
   EmitStatements(i_c:i_rule:l_statements:l_total:'');
+end-proc;
+
+// ------------------------------------------------------------------
+// A declaration the output records need (RV-61: the packed or binary work field of a
+// DISK record), added once with the other declarations before the first calculation.
+dcl-proc CalcDeclare export;
+  dcl-pi *n;
+    i_text varchar(100) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  for l_index = 1 to g_protoLineCount;
+    if g_protoLine(l_index) = i_text;
+      return;
+    endif;
+  endfor;
+  if g_protoLineCount >= C_MAXPLINE;
+    return;
+  endif;
+  g_protoLineCount += 1;
+  g_protoLine(g_protoLineCount) = i_text;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -6532,6 +6560,7 @@ dcl-proc CycOutput;
   dcl-s l_cond varchar(200);
   dcl-s l_format varchar(10);
   dcl-s l_after varchar(120);
+  dcl-s l_before varchar(250);
   dcl-s l_j int(10);
   dcl-s l_n int(10);
   dcl-s l_reason varchar(190);
@@ -6562,11 +6591,15 @@ dcl-proc CycOutput;
     if l_after <> '';
       l_after = '; ' + l_after;
     endif;
+    l_before = OutCycleBefore(i_part:l_k);
+    if l_before <> '';
+      l_before += '; ';
+    endif;
     if l_cond = '';
-      Emit('write ' + l_format + l_after + ';':g_lastLineNo);
+      Emit(l_before + 'write ' + l_format + l_after + ';':g_lastLineNo);
     else;
       Emit('if ' + l_cond + ';':g_lastLineNo);
-      Emit('write ' + l_format + l_after + ';':g_lastLineNo:1);
+      Emit(l_before + 'write ' + l_format + l_after + ';':g_lastLineNo:1);
       Emit('endif;':g_lastLineNo);
     endif;
   endfor;

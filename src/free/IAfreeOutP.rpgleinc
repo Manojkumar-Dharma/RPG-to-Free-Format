@@ -80,6 +80,18 @@ end-pr;
 
 // The statements that clear the fields with blank after (column 39) of the nth
 // record, 'clear A; clear B', '' when there is none.
+// RV-61: assignments before the write (array elements, UDAY, UMONTH, UYEAR, *PLACE),
+// 'IA_E1 = ARR(3); ...', '' when there is none.
+dcl-pr OutExceptBefore varchar(250);
+  i_name varchar(10) const;
+  i_number int(10) const;
+end-pr;
+
+dcl-pr OutCycleBefore varchar(250);
+  i_part char(1) const;
+  i_number int(10) const;
+end-pr;
+
 dcl-pr OutExceptAfter varchar(120);
   i_name varchar(10) const;
   i_number int(10) const;

@@ -1,0 +1,11 @@
+      * Packed and binary output of a DISK record (RV-61)
+     H
+     FORDHIST O          40             DISK
+     C                     Z-ADD5         CUSTNO  40
+     C                     Z-ADD1234567   AMT     70
+     C                     Z-ADD77        QTY     30
+     C                     EXCPT NEWREC
+     OORDHIST E                NEWREC
+     O                         CUSTNO     4
+     O                         AMT       12P
+     O                         QTY       14B
