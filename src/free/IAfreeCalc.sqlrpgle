@@ -6615,6 +6615,49 @@ end-proc;
 // ------------------------------------------------------------------
 // The records of the O specifications the skeleton writes: part S at the start of
 // the cycle (step 1, heading and detail), part T at the end of IA_TOTALS.
+// FREE-68: the overflow indicators (OA to OG, OV) that condition records of one part of
+// the cycle output, written as 'oa,ov' (not with N), and the number of the last record
+// that uses one. In the RPG cycle the overflow lines are written (total lines, then
+// heading and detail lines) and the overflow indicator is set off (SC09-1818, Handling
+// Overflow, step 5); the printer file only sets it on.
+dcl-proc CycOverflowList;
+  dcl-pi *n varchar(40);
+    i_part char(1) const;
+    o_last int(10);
+  end-pi;
+
+  dcl-s l_names varchar(16) inz('oaobocodoeofogov');
+  dcl-s l_list varchar(40) inz('');
+  dcl-s l_cond varchar(200);
+  dcl-s l_name varchar(2);
+  dcl-s l_k int(10);
+  dcl-s l_i int(10);
+  dcl-s l_p int(10);
+
+  o_last = 0;
+  for l_k = 1 to OutCycleCount(i_part);
+    if OutCycleDisk(i_part:l_k);
+      iter;
+    endif;
+    l_cond = OutCycleCond(i_part:l_k);
+    for l_i = 1 to 8;
+      l_name = %subst(l_names:l_i * 2 - 1:2);
+      l_p = %scan('*in' + l_name:l_cond);
+      if l_p > 0 and not (l_p > 4 and %subst(l_cond:l_p - 4:4) = 'not ');
+        if %scan(l_name:l_list) = 0;
+          if l_list <> '';
+            l_list += ',';
+          endif;
+          l_list += l_name;
+        endif;
+        o_last = l_k;
+      endif;
+    endfor;
+  endfor;
+  return l_list;
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc CycOutput;
   dcl-pi *n;
     i_part char(1) const;
@@ -6630,6 +6673,18 @@ dcl-proc CycOutput;
   dcl-s l_n int(10);
   dcl-s l_reason varchar(190);
   dcl-s l_stmts varchar(250) dim(40);
+  dcl-s l_ovf varchar(40);
+  dcl-s l_ovfLast int(10);
+  dcl-s l_ovfOther int(10);
+  dcl-s l_x int(10);
+
+  // FREE-68: the overflow indicator is set off after the last record of the heading
+  // and detail part that it conditions, and after the last total record only when no
+  // heading or detail record uses it (both are printed before it is set off).
+  l_ovf = CycOverflowList(i_part:l_ovfLast);
+  if i_part = 'T' and CycOverflowList('S':l_ovfOther) <> '';
+    l_ovf = '';
+  endif;
 
   l_count = OutCycleCount(i_part);
   for l_k = 1 to l_count;
@@ -6666,6 +6721,13 @@ dcl-proc CycOutput;
       Emit('if ' + l_cond + ';':g_lastLineNo);
       Emit(l_before + 'write ' + l_format + l_after + ';':g_lastLineNo:1);
       Emit('endif;':g_lastLineNo);
+    endif;
+    if l_ovf <> '' and l_k = l_ovfLast;
+      for l_x = 1 to %len(l_ovf);
+        if %subst(l_ovf:l_x:1) <> ',' and (l_x = 1 or %subst(l_ovf:l_x - 1:1) = ',');
+          Emit('*in' + %subst(l_ovf:l_x:2) + ' = *off;':g_lastLineNo);
+        endif;
+      endfor;
     endif;
   endfor;
 end-proc;

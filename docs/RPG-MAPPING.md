@@ -967,7 +967,11 @@ Source: SC09-1817 (output indicators, the 1P indicator, the program cycle). The 
 | `1P` (H and D only) | `IA_FIRST` (on in step 1 of the first cycle, before the first record is read) |
 | `L1` to `L9`, `LR` | `*inl1` to `*inl9`, `*inlr`; the levels stay on during step 1 of the next cycle, as in RPG |
 | AND lines | `and`; OR lines: `(a) or (b)`, for every record type including E |
+| overflow indicator `OA` to `OG`, `OV` on the record (FREE-68) | `*inoa` in the condition, as before; **and** `*inoa = *off;` after the last heading or detail record that uses it (after the last total record when no heading or detail record uses it), because the printer file only sets it on and the RPG cycle sets it off after the overflow lines are printed (SC09-1818, Handling Overflow, step 5) |
 | `MR`, `RT`, `1P` on T, a field line with a level indicator | R |
+| fetch overflow (`F` in column 16, the fetch overflow routine) | R: the routine prints the overflow total, heading and detail lines in the middle of the cycle; the cycle does it once, at its own time (SC09-1818, Fetch Overflow Routine) |
+
+Sample for the overflow indicator: `samples/FREEOVF.rpg36` (expected: `*inoa = *off;` right after `write HEAD01;`, which is conditioned by `IA_FIRST or *inoa`; the total record `Continued on the next page` is conditioned by `*inoa` and written in `IA_TOTALS` before the heading sets the indicator off). Written from the manual and not from a run.
 
 A heading or detail record without any indicator is also written on the first cycle (fields still blank), as RPG does. The numbers of the record formats follow the source order for each type.
 
