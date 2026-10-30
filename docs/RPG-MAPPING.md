@@ -748,7 +748,7 @@ Source: SC09-1816 (RPG/400 User's Guide), chapter 1, "The Structured Query Langu
 | A `--` comment at the end of the last line | The `;` goes on a line of its own, so the comment cannot hide it | C |
 | `WHENEVER ... GOTO label` and `WHENEVER ... CONTINUE` | Kept as a comment; the tests of `SQLCODE` after the statements that follow take its place, see "WHENEVER ... GOTO (FREE-48, RV-37)" below | A |
 | The first statement outside a subroutine | Also carries the cycle note, as the first calculation does | A |
-| Conditioning indicators before `C/EXEC SQL`, `EXEC SQL` in a `CASxx` group, a `;` in the SQL text outside a literal, no SQL text, more than 200 lines | Lines kept as `// RPG III: ...` | R |
+| Conditioning indicators before `C/EXEC SQL` (no form: the delimiter fills columns 7-15 of the line, SC09-1816; use an `IFxx` group, which is converted), `EXEC SQL` in a `CASxx` group, a `;` in the SQL text outside a literal, no SQL text, more than 200 lines | Lines kept as `// RPG III: ...` | R |
 | `C/EXEC SQL` without `C/END-EXEC` (the next specification ends it), `C/END-EXEC` or `C+` without `C/EXEC SQL` | Lines kept as comments | R |
 
 Host variables (`:name`) are not changed. A field that is only used in an SQL statement and defined nowhere else is not declared; the SQL precompiler reports it. The converted member must be compiled as `SQLRPGLE` (`CRTSQLRPGI`); `C/EXEC SQL INCLUDE SQLCA` is converted to `exec sql include sqlca;` (check on the first compile that the precompiler accepts it in a free-form source). SQL in `/COPY` members is not allowed in RPG/400, so nothing is converted there.

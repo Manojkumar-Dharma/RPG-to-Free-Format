@@ -6309,7 +6309,8 @@ dcl-proc SqlEnd;
     when l_first = 0;
       l_reason = 'EXEC SQL without an SQL statement';
     when g_condLineCount > 0;
-      l_reason = 'Conditioning indicators cannot be used with EXEC SQL';
+      l_reason = 'Conditioning indicators cannot be used with EXEC SQL (the '
+                 + 'delimiter fills columns 7-15): put it in an IFxx group';
     when g_stackCount > 0 and g_stackKind(g_stackCount) = 'CAS';
       l_reason = 'Only CASxx operations can be in a CAS group';
   endsl;
