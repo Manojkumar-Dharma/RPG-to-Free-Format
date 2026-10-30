@@ -217,6 +217,10 @@ dcl-proc FreeConvert export;
     // RPG IV: the jumps, including the WHENEVER jumps of embedded SQL (RV-37), are
     // read before the first line is converted.
     Fx4ScanJumps();
+    // FREE-60: control levels and RT of the calculations, for the cycle skeleton.
+    for l_index = 1 to g_sourceCount;
+      CalcCycleScan(g_sourceLines(l_index));
+    endfor;
   endif;
   ConvertSource();
   if g_dialect = '4';
@@ -2942,16 +2946,21 @@ dcl-proc CycleFileOk;
   dcl-s l_up char(100);
   dcl-s l_primary int(10) inz(0);
   dcl-s l_other int(10) inz(0);
+  dcl-s l_col int(10) inz(16);
 
   o_why = '';
+  // FREE-60: the file designation is in column 18 of an RPG IV F specification.
+  if g_dialect = '4';
+    l_col = 18;
+  endif;
   for l_k = 1 to g_sourceCount;
     l_up = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
     if %subst(l_up:6:1) = 'F' and %subst(l_up:7:1) <> '*';
       select;
-        when %subst(l_up:16:1) = 'P';
+        when %subst(l_up:l_col:1) = 'P';
           l_primary += 1;
-        when %subst(l_up:16:1) = 'S' or %subst(l_up:16:1) = 'R'
-             or %subst(l_up:16:1) = 'T';
+        when %subst(l_up:l_col:1) = 'S' or %subst(l_up:l_col:1) = 'R'
+             or %subst(l_up:l_col:1) = 'T';
           l_other += 1;
       endsl;
     endif;
@@ -2969,6 +2978,57 @@ dcl-proc CycleFileOk;
       o_why = 'a primary file is already declared';
   endsl;
   return o_why = '';
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-60: the RPG IV F specification of a primary file: the checks of the cycle
+// skeleton (FREE-36), the registration of the file and its control fields.
+dcl-proc CvtCycleFileOk export;
+  dcl-pi *n ind;
+    i_type char(1) const;
+    i_fmt char(1) const;
+    o_why varchar(150);
+  end-pi;
+
+  return CycleFileOk(i_type:i_fmt:o_why);
+end-proc;
+
+dcl-proc CvtSetCycleFile export;
+  dcl-pi *n;
+    i_name varchar(8) const;
+  end-pi;
+
+  g_cycFile = i_name;
+end-proc;
+
+// A control field (L1 to L9 of an RPG IV I specification) of the primary file.
+dcl-proc CvtAddControl export;
+  dcl-pi *n;
+    i_name varchar(6) const;
+    i_level int(10) const;
+  end-pi;
+
+  if g_cycCtlCount >= 50;
+    return;
+  endif;
+  g_cycCtlCount += 1;
+  g_cycCtlName(g_cycCtlCount) = i_name;
+  g_cycCtlLevel(g_cycCtlCount) = i_level;
+  g_cycCtlType(g_cycCtlCount) = 0;
+end-proc;
+
+// The record layout of the primary file is written.
+dcl-proc CvtSetLayout export;
+  dcl-pi *n;
+    i_name varchar(8) const;
+  end-pi;
+
+  dcl-s l_file int(10);
+
+  l_file = FindFile(i_name);
+  if l_file > 0;
+    g_fileHasLayout(l_file) = *on;
+  endif;
 end-proc;
 
 // ------------------------------------------------------------------

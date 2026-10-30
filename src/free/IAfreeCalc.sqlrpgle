@@ -6478,6 +6478,59 @@ dcl-proc CycScan;
 end-proc;
 
 // ------------------------------------------------------------------
+// FREE-60: the prescan of the cycle skeleton for an RPG IV C specification (levels in
+// columns 7-8, RT as conditioning indicator or in the result indicator columns 71-76).
+dcl-proc CalcCycleScan export;
+  dcl-pi *n;
+    i_line char(100) const;
+  end-pi;
+
+  dcl-s l_up char(100);
+
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  if %subst(l_up:6:1) <> 'C' or %subst(l_up:7:1) = '*' or %subst(l_up:7:1) = '/'
+     or %subst(l_up:7:1) = '+';
+    return;
+  endif;
+  CycScan(l_up);
+  if Fld(l_up:'HI') = 'RT' or Fld(l_up:'LO') = 'RT' or Fld(l_up:'EQ') = 'RT';
+    g_cycUsesRt = *on;
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-60: called by IAfreeFx4 before an RPG IV C specification is converted: opens
+// and closes the parts of the cycle skeleton as CalcLine does for RPG II and III. The
+// operations that only declare (KLIST, KFLD, PLIST, PARM, DEFINE) leave the
+// skeleton as it is, so their declarations stay before the loop.
+dcl-proc CalcCycleBefore export;
+  dcl-pi *n;
+    i_line char(100) const;
+    i_lineNo int(10) const;
+  end-pi;
+
+  dcl-s l_up char(100);
+  dcl-s l_op varchar(10);
+
+  l_up = %xlate(C_LOWER:C_UPPER:i_line);
+  g_lastLineNo = i_lineNo;
+  if %trim(%subst(l_up:7:74)) = '' or %subst(l_up:7:1) = '*'
+     or %subst(l_up:7:1) = '/' or %subst(l_up:7:1) = '+';
+    return;
+  endif;
+  l_op = %trim(Fld(l_up:'OPERATION'));
+  if l_op = 'KLIST' or l_op = 'KFLD' or l_op = 'PLIST' or l_op = 'PARM'
+     or l_op = 'DEFN' or l_op = 'DEFINE';
+    return;
+  endif;
+  if g_declAt = 0;
+    AddOut('':i_lineNo);
+    g_declAt = OutCount();
+  endif;
+  CycBefore(l_up:i_lineNo);
+end-proc;
+
+// ------------------------------------------------------------------
 // The control level 1 to 9 of an indicator name such as L2, else 0 (L0, LR, 01).
 dcl-proc LevelOf;
   dcl-pi *n int(10);

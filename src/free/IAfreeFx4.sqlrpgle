@@ -63,6 +63,8 @@ dcl-s g_protoName varchar(10) dim(40);
 dcl-s g_protoSig varchar(300) dim(40);
 dcl-s g_protoCount int(10) inz(0);
 dcl-s g_cStarted ind inz(*off);
+// FREE-60: the primary file of the RPG cycle skeleton (RPG IV).
+dcl-s g_cycFile4 varchar(8) inz('');
 // The last DIV (for a following MVR).
 dcl-s g_divIdx int(10) inz(0);
 dcl-s g_divF1 varchar(14);
@@ -162,6 +164,7 @@ dcl-proc Fx4Start export;
   g_arrCount = 0;
   g_dtCount = 0;
   g_cStarted = *off;
+  g_cycFile4 = '';
   g_protoCount = 0;
   g_divIdx = 0;
   g_flCount = 0;
@@ -679,6 +682,8 @@ dcl-proc ConvertF;
   dcl-s l_progPrinter ind inz(*off);
   dcl-s l_progDisk ind inz(*off);
   dcl-s l_index int(10);
+  dcl-s l_primary ind inz(*off);
+  dcl-s l_cycWhy varchar(150) inz('');
 
   if not CollectKeywords('F':i_index:i_line:l_kwText:l_extra);
     ReviewWithContinuations(i_index:i_lineNo:i_line:l_extra
@@ -703,6 +708,20 @@ dcl-proc ConvertF;
   l_device = Up(Txt('F':'DEVICE':i_line));
   l_isLike = KwFind('LIKEFILE') > 0;
 
+  // FREE-60: a primary file (designation P) is converted as a full procedural input
+  // file when the cycle skeleton can be written for it (one program described DISK
+  // input file, see CycleFileOk in IAfreeCvt); the skeleton reads it.
+  if l_desig = 'P' and not l_isLike;
+    if l_device <> 'DISK';
+      l_cycWhy = 'only a DISK primary file is converted';
+    elseif l_fmt = 'F' and %len(l_name) > 8;
+      l_cycWhy = 'the file name has more than 8 characters';
+    elseif CvtCycleFileOk(l_type:l_fmt:l_cycWhy);
+      l_primary = *on;
+      l_desig = 'F';
+    endif;
+  endif;
+
   select;
     when l_name = '' or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$#@':Up(l_name))
          > 0;
@@ -715,6 +734,8 @@ dcl-proc ConvertF;
       endif;
     when l_type <> 'I' and l_type <> 'O' and l_type <> 'U' and l_type <> 'C';
       l_reason = 'File type (column 17) must be I, O, U or C';
+    when l_desig = 'P' and l_cycWhy <> '';
+      l_reason = 'Primary file (the RPG cycle) is not converted: ' + l_cycWhy;
     when l_desig = 'P' or l_desig = 'S' or l_desig = 'T' or l_desig = 'R';
       l_reason = 'Primary, secondary, table and record address files (the RPG '
                  + 'cycle) are not supported in free-form';
@@ -786,6 +807,15 @@ dcl-proc ConvertF;
     CvtRegisterFile(l_name:%int(l_recLen):'D':l_type:i_lineNo:*off);
     CvtSetFileOutput(l_name:(l_type = 'O' or l_add = 'A'));
   endif;
+  if l_primary and l_progDisk;
+    CvtSetCycleFile(l_name);
+    g_cycFile4 = l_name;
+    if l_note <> '';
+      l_note += '; ';
+    endif;
+    l_note += 'primary file: the RPG cycle skeleton is written for it when its I '
+              + 'specification has a record layout (FREE-60)';
+  endif;
   if not l_isLike;
     select;
       when l_type = 'I' and l_add = 'A';
@@ -814,8 +844,11 @@ dcl-proc ConvertF;
       endif;
     endif;
     if l_eof = 'E';
-      l_note = 'end of file entry (column 19) ignored: it only matters for the '
-               + 'RPG cycle';
+      if l_note <> '';
+        l_note += '; ';
+      endif;
+      l_note += 'end of file entry (column 19) ignored: it only matters for the '
+                + 'RPG cycle';
     endif;
     l_stmt = 'dcl-f ' + l_name + ' ' + l_deviceText;
     // The usage of a combined display file (also a program described one) is the
@@ -906,8 +939,12 @@ dcl-proc InputField4;
     i_recLen int(10) const;
     o_stmt varchar(200);
     o_reason varchar(190);
+    i_primary ind const;
+    o_level int(10);
+    o_name varchar(14);
   end-pi;
 
+  dcl-s l_lvl int(10) inz(0);
   dcl-s l_up char(100);
   dcl-s l_fmt char(1);
   dcl-s l_decText varchar(2);
@@ -923,12 +960,20 @@ dcl-proc InputField4;
 
   o_stmt = '';
   o_reason = '';
+  o_level = 0;
+  o_name = '';
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
   l_fmt = %subst(l_up:36:1);
   l_fromText = %trim(%subst(l_up:37:5));
   l_toText = %trim(%subst(l_up:42:5));
   l_decText = %trim(%subst(l_up:47:2));
   l_name = %trim(%subst(l_up:49:14));
+  // FREE-60: a control level (columns 63-64: L1 to L9) of a field of the primary
+  // file, with nothing else in columns 65-74, is the control field of the skeleton.
+  if i_primary and %subst(l_up:63:1) = 'L' and %check('123456789':%subst(l_up:64:1)) = 0
+     and %trim(%subst(l_up:65:10)) = '';
+    l_lvl = %int(%subst(l_up:64:1));
+  endif;
 
   select;
     when %trim(%subst(l_up:31:5)) <> '';
@@ -936,9 +981,11 @@ dcl-proc InputField4;
                  + 'not converted';
     when not IsDigits(l_fromText) or not IsDigits(l_toText);
       o_reason = 'Field location (columns 37-46) is not valid';
-    when %trim(%subst(l_up:63:12)) <> '';
+    when %trim(%subst(l_up:63:12)) <> '' and l_lvl = 0;
       o_reason = 'Control level, matching fields, field record relation or field '
                  + 'indicators are not supported in free-form';
+    when l_lvl > 0 and %len(l_name) > 6;
+      o_reason = 'A control field name of more than 6 characters is not converted';
     when l_name = '' or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$#@':l_name) > 0
          or %check('ABCDEFGHIJKLMNOPQRSTUVWXYZ_$#@':%subst(l_name:1:1)) > 0;
       o_reason = 'Field name (columns 49-62) is not a simple name (an array '
@@ -1050,6 +1097,8 @@ dcl-proc InputField4;
 
   o_stmt = '  dcl-subf ' + l_name + ' ' + l_type + ' pos(' + %char(l_from) + ');';
   AddSym(l_name:l_type);
+  o_level = l_lvl;
+  o_name = l_name;
   return *on;
 end-proc;
 
@@ -1085,9 +1134,15 @@ dcl-proc ConvertI;
   dcl-s l_status char(1);
   dcl-s l_reasons varchar(190) dim(300);
   dcl-s l_ok ind dim(300);
+  dcl-s l_isCyc ind inz(*off);
+  dcl-s l_lvl int(10);
+  dcl-s l_lvls int(10) dim(300);
+  dcl-s l_fname varchar(14);
+  dcl-s l_fnames varchar(14) dim(300);
 
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
   l_name = %trim(%subst(l_up:7:10));
+  l_isCyc = (g_cycFile4 <> '' and l_name = g_cycFile4);
 
   // A field line or an AND/OR line with no record line before it.
   if l_name = '' and %subst(l_up:16:3) <> 'AND' and %subst(l_up:16:2) <> 'OR';
@@ -1167,7 +1222,10 @@ dcl-proc ConvertI;
   for l_k = 1 to l_last;
     l_next = SrcLine(i_index + l_k);
     l_nextUp = %xlate(C_LOWER:C_UPPER:l_next);
-    l_ok(l_k) = InputField4(l_next:l_recLen:l_stmt:l_fieldReason);
+    l_ok(l_k) = InputField4(l_next:l_recLen:l_stmt:l_fieldReason:l_isCyc:l_lvl
+                            :l_fname);
+    l_lvls(l_k) = l_lvl;
+    l_fnames(l_k) = l_fname;
     if l_ok(l_k);
       l_fields += 1;
       l_outCount += 1;
@@ -1193,6 +1251,16 @@ dcl-proc ConvertI;
   endfor;
   g_flLayout(l_file) = *on;
   AddSym(l_dsName:'ds');
+  // FREE-60: the record layout of the primary file and its control fields go to the
+  // cycle skeleton (IAfreeCalc reads them through CycleInfo and CycleControl).
+  if l_isCyc;
+    CvtSetLayout(l_name);
+    for l_k = 1 to l_last;
+      if l_ok(l_k) and l_lvls(l_k) > 0;
+        CvtAddControl(l_fnames(l_k):l_lvls(l_k));
+      endif;
+    endfor;
+  endif;
 
   RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:75))
           :'record layout of the file declared as a data structure: READ and '
@@ -3985,6 +4053,21 @@ dcl-proc ConvertJumpC;
 end-proc;
 
 // ------------------------------------------------------------------
+// FREE-60: a control level (L1 to L9, LR) in columns 7-8 of an RPG IV calculation is
+// converted when the cycle skeleton is written: the line is a total calculation.
+dcl-proc CycleLevelOk;
+  dcl-pi *n ind;
+    i_level varchar(100) const;
+  end-pi;
+
+  if not CalcCycleActive();
+    return *off;
+  endif;
+  return i_level = 'LR' or (%len(i_level) = 2 and %subst(i_level:1:1) = 'L'
+         and %check('123456789':%subst(i_level:2:1)) = 0);
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc ConvertC;
   dcl-pi *n int(10);
     i_index int(10) const;
@@ -4037,6 +4120,8 @@ dcl-proc ConvertC;
   dcl-s l_start varchar(14);
   dcl-s l_limit varchar(14);
   dcl-s l_base int(10);
+  dcl-s l_level varchar(2) inz('');
+  dcl-s l_lvlTerm varchar(8) inz('');
 
   if not g_klDone;
     PrescanKlist();
@@ -4085,14 +4170,15 @@ dcl-proc ConvertC;
   // ---- what cannot be converted here ----
   select;
     when l_reason <> '';
-    when Txt('C':'LEVEL':i_line) <> '';
+    when Txt('C':'LEVEL':i_line) <> '' and not CycleLevelOk(Up(Txt('C':'LEVEL':i_line)));
       l_reason = 'Level indicator (columns 7-8) on a calculation';
     when Txt('C':'NOT1':i_line) <> '' and Txt('C':'IND1':i_line) = '';
       l_reason = 'N in column 9 without an indicator';
     when Txt('C':'IND1':i_line) <> '' and
          %check(C_UPPER + C_DIGITS:Up(Txt('C':'IND1':i_line))) > 0;
       l_reason = 'Conditioning indicator is not valid';
-    when Txt('C':'IND1':i_line) <> '' and Up(Txt('C':'IND1':i_line)) = 'RT';
+    when Txt('C':'IND1':i_line) <> '' and Up(Txt('C':'IND1':i_line)) = 'RT'
+         and not CalcCycleActive();
       l_reason = 'Indicator RT is not converted';
     when (Txt('C':'HI':i_line) <> '' or Txt('C':'LO':i_line) <> ''
          or Txt('C':'EQ':i_line) <> '') and l_op <> 'SETON' and l_op <> 'SETOFF'
@@ -4623,6 +4709,22 @@ dcl-proc ConvertC;
     endif;
   endif;
 
+  // FREE-60: a total calculation (control level in columns 7-8) runs when the level
+  // indicator is on: the cycle skeleton calls IA_TOTALS for it.
+  l_level = Up(Txt('C':'LEVEL':i_line));
+  if l_reason = '' and l_level <> '';
+    l_lvlTerm = '*in' + Low(l_level);
+    if l_kind = 'I' or l_kind = 'L' or l_kind = 'F';
+      l_reason = 'Level indicator on ' + l_op + ' (a group operation) is not converted';
+    elseif l_kind <> ' ' and l_kind <> 'k';
+      l_reason = 'Level indicator on ' + l_op + ' is not converted';
+    elseif l_cond <> '';
+      l_cond = l_lvlTerm + ' and ' + l_cond;
+    else;
+      l_cond = l_lvlTerm;
+    endif;
+  endif;
+
   if l_reason <> '';
     ReviewWithContinuations(i_index:i_lineNo:i_line:l_extra:l_reason);
     return l_extra;
@@ -4830,6 +4932,16 @@ dcl-proc Fx4Line export;
                  + '(FREE-06)');
     when l_form = 'C';
       Fx4Flush();
+      // FREE-60: the prototypes and KLIST declarations go before the loop of the
+      // cycle skeleton, which CalcCycleBefore opens at the first calculation.
+      if not g_klDone;
+        PrescanKlist();
+      endif;
+      if not g_cStarted;
+        g_cStarted = *on;
+        WritePrototypes();
+      endif;
+      CalcCycleBefore(i_line:i_lineNo);
       o_extra = ConvertC(i_index:i_lineNo:i_line);
     other;
       Fx4Flush();

@@ -86,6 +86,17 @@ dcl-pr CalcDefineArray;
   i_alt varchar(10) const;
 end-pr;
 
+// FREE-60: RPG IV C specifications and the cycle skeleton: the prescan of one line
+// (levels, RT) and the call before the conversion of one line.
+dcl-pr CalcCycleScan;
+  i_line char(100) const;
+end-pr;
+
+dcl-pr CalcCycleBefore;
+  i_line char(100) const;
+  i_lineNo int(10) const;
+end-pr;
+
 // *ON when the cycle skeleton (FREE-36) is written for this source: heading, detail
 // and total records of the O specifications are written by it (RV-60).
 dcl-pr CalcCycleActive ind;

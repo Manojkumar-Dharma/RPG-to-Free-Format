@@ -67,6 +67,26 @@ dcl-pr CvtRegisterFile;
   i_keyed ind const;
 end-pr;
 
+// FREE-60: the RPG IV primary file of the cycle skeleton.
+dcl-pr CvtCycleFileOk ind;
+  i_type char(1) const;
+  i_fmt char(1) const;
+  o_why varchar(150);
+end-pr;
+
+dcl-pr CvtSetCycleFile;
+  i_name varchar(8) const;
+end-pr;
+
+dcl-pr CvtAddControl;
+  i_name varchar(6) const;
+  i_level int(10) const;
+end-pr;
+
+dcl-pr CvtSetLayout;
+  i_name varchar(8) const;
+end-pr;
+
 // Whether the file takes output records (O specifications) as a program described file.
 dcl-pr CvtSetFileOutput;
   i_name varchar(8) const;

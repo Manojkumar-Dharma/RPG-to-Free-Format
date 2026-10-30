@@ -1154,3 +1154,17 @@ Source: SC09-1818 (record identifying indicators and record identification codes
 | `RT` as conditioning or resulting indicator (`SETON RT`), or as an output indicator on H, D and T records | `*inrt`; the cycle ends with `if *inrt; *inrt = *off; return; endif;` after `if *inlr; leave; endif;` (A) |
 
 Sample: `samples/FREECYT.rpg36`. Needs a compile and test on the IBM i.
+
+## RPG IV: the cycle skeleton (FREE-60, RV-20, RV-56)
+
+The skeleton of FREE-36 is written for RPG IV when the source has one program described DISK input file with designation P (column 18) and the record layout of that file in the I specifications.
+
+| RPG IV | Free-form |
+|---|---|
+| F specification, type I, designation P, format F, device DISK | `dcl-f NAME disk(len) usage(*input);` and the skeleton: `dow *on`, `read NAME IA_NEXT`, `if %eof(NAME)`, control break, `NAME_REC = IA_NEXT` |
+| I specification, control level L1 to L9 in columns 63-64 (name of 6 characters or less) | the control field of the break test |
+| Control level or LR in columns 7-8 of a calculation | the calculation is in the subroutine `IA_TOTALS` under `if *inl1` ... `*inlr` |
+| RT in columns 9-11 or in the result indicator columns 71-76 | `*inrt`; the skeleton returns after the LR test (A) |
+| AND/OR lines, record identification codes, secondary files, MR | R (RV-21) |
+
+Sample: `samples/FREE4CYC.rpgle`. Needs a compile and test on the IBM i.
