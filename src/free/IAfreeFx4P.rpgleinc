@@ -83,6 +83,10 @@ dcl-pr CvtAddControl;
   i_level int(10) const;
 end-pr;
 
+dcl-pr CvtAddType;
+  i_ind char(2) const;
+end-pr;
+
 dcl-pr CvtSetLayout;
   i_name varchar(8) const;
 end-pr;

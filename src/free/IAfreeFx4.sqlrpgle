@@ -1200,9 +1200,12 @@ dcl-proc ConvertI;
                  + 'record type)';
     when %subst(l_up:21:2) = '**';
       l_reason = 'Look-ahead fields are not supported in free-form';
-    when %trim(%subst(l_up:21:2)) <> '';
+    when %trim(%subst(l_up:21:2)) <> ''
+         and not (l_isCyc and %check('0123456789':%subst(l_up:21:2)) = 0
+                  and %subst(l_up:21:2) <> '00');
       l_reason = 'Record identifying indicator ' + %trim(%subst(l_up:21:2))
-                 + ' is not set by free-form I/O';
+                 + ' is not set by free-form I/O (only 01 to 99 of the primary file '
+                 + 'of the cycle skeleton)';
     when %trim(%subst(l_up:23:24)) <> '';
       l_reason = 'Record identification codes (more than one record type) are not '
                  + 'supported in free-form';
@@ -1255,6 +1258,10 @@ dcl-proc ConvertI;
   // cycle skeleton (IAfreeCalc reads them through CycleInfo and CycleControl).
   if l_isCyc;
     CvtSetLayout(l_name);
+    // FREE-62: the record identifying indicator of the primary file (01 to 99).
+    if %trim(%subst(l_up:21:2)) <> '';
+      CvtAddType(%subst(l_up:21:2));
+    endif;
     for l_k = 1 to l_last;
       if l_ok(l_k) and l_lvls(l_k) > 0;
         CvtAddControl(l_fnames(l_k):l_lvls(l_k));

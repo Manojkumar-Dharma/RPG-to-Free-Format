@@ -3017,6 +3017,20 @@ dcl-proc CvtAddControl export;
   g_cycCtlType(g_cycCtlCount) = 0;
 end-proc;
 
+// The record identifying indicator (01 to 99, columns 21-22 of the I specification) of
+// the single record type of an RPG IV primary file: the skeleton sets it after the
+// read, as it does for the record types of FREE-49.
+dcl-proc CvtAddType export;
+  dcl-pi *n;
+    i_ind char(2) const;
+  end-pi;
+
+  g_cycTypeCount = 1;
+  g_cycTypeCond(1) = '';
+  g_cycTypeInd(1) = i_ind;
+  g_cycTypeCur = 1;
+end-proc;
+
 // The record layout of the primary file is written.
 dcl-proc CvtSetLayout export;
   dcl-pi *n;

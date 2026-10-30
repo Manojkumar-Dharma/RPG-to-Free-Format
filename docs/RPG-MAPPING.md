@@ -1165,6 +1165,7 @@ The skeleton of FREE-36 is written for RPG IV when the source has one program de
 | I specification, control level L1 to L9 in columns 63-64 (name of 6 characters or less) | the control field of the break test |
 | Control level or LR in columns 7-8 of a calculation | the calculation is in the subroutine `IA_TOTALS` under `if *inl1` ... `*inlr` |
 | RT in columns 9-11 or in the result indicator columns 71-76 | `*inrt`; the skeleton returns after the LR test (A) |
+| Record identifying indicator 01 to 99 (columns 21-22) of the I specification of the primary file (FREE-62) | `*in01 = *off; select; other; *in01 = *on; endsl;` after the read, as for the record types of FREE-49 (the control fields are then compared with `IA_P_name`); other indicators (H1, U1, L1, RT, `**`) stay R |
 | AND/OR lines, record identification codes, secondary files, MR | R (RV-21) |
 
-Sample: `samples/FREE4CYC.rpgle`. Needs a compile and test on the IBM i.
+Samples: `samples/FREE4CYC.rpgle` and `samples/FREE4CYP.rpgle` (FREE-62: a printer file with `H` on `1P` and `OR` `OA`, `D`, `T` on `L1` and `LR`, record identifying indicator `01` on the primary file and as a calculation condition). Expected, written from the design and not from a run: the DDS formats `HEAD01`, `DETAIL01`, `TOTAL01`, `TOTAL02`; the heading and detail written at the start of the cycle, `L1` and `LR` records at the end of `IA_TOTALS`. Needs a compile and test on the IBM i.
