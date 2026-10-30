@@ -470,12 +470,60 @@ dcl-proc InLiteral;
 end-proc;
 
 // ------------------------------------------------------------------
+// FREE-64: the text ends with a numeric literal (digits and decimal points that do not
+// belong to a name such as ABC12).
+dcl-proc NumericTail;
+  dcl-pi *n ind;
+    i_text varchar(1200) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_c char(1);
+
+  l_i = %len(i_text);
+  dow l_i > 0;
+    l_c = %subst(i_text:l_i:1);
+    if (l_c >= '0' and l_c <= '9') or l_c = '.';
+      l_i -= 1;
+    else;
+      leave;
+    endif;
+  enddo;
+  if l_i = %len(i_text);
+    return *off;
+  endif;
+  if l_i = 0;
+    return *on;
+  endif;
+  l_c = %subst(i_text:l_i:1);
+  return %check('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_$#@'
+                :l_c) > 0;
+end-proc;
+
+// The continued field starts with a digit or a decimal point.
+dcl-proc NumericStart;
+  dcl-pi *n ind;
+    i_text varchar(1200) const;
+  end-pi;
+
+  dcl-s l_c char(1);
+
+  if %len(i_text) = 0;
+    return *off;
+  endif;
+  l_c = %subst(i_text:1:1);
+  return (l_c >= '0' and l_c <= '9') or l_c = '.';
+end-proc;
+
+// ------------------------------------------------------------------
 // Takes the keyword field of a specification and of its continuation lines:
 // o_extra is the number of continuation lines. A literal continued with + (the
 // first non-blank character of the next line follows) or - (the next line follows
 // from the first position of the keyword field) and a name continued with ... are
-// joined (SC09-2508, Continuation Rules). *OFF when a + or - ends a line outside a
-// literal (not converted, the caller reports it).
+// joined (SC09-2508, Continuation Rules); a numeric literal goes on with a digit
+// or a decimal point at the start of the next line (FREE-64). *OFF when a + or -
+// ends a line outside a literal (not converted, the caller reports it).
+// ------------------------------------------------------------------
 dcl-proc CollectKeywords;
   dcl-pi *n ind;
     i_spec char(1) const;
@@ -510,6 +558,11 @@ dcl-proc CollectKeywords;
            and %subst(o_text:l_len - 2:3) = '...';
         o_text = %subst(o_text:1:l_len - 3)
                  + Txt(i_spec:'KEYWORDS':SrcLine(l_next));
+      // FREE-64: a numeric literal has no continuation character: it goes on with a
+      // digit or a decimal point at the start of the continued field (RV-57).
+      when not InLiteral(o_text) and NumericTail(o_text)
+           and NumericStart(Txt(i_spec:'KEYWORDS':SrcLine(l_next)));
+        o_text += Txt(i_spec:'KEYWORDS':SrcLine(l_next));
       when l_last = '+' or l_last = '-';
         l_ok = *off;
         o_text += ' ' + Txt(i_spec:'KEYWORDS':SrcLine(l_next));
