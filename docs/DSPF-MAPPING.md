@@ -267,7 +267,7 @@ Several D records on consecutive display lines with the same fields at the same 
 
 Rule (`CheckSubfileRows` in `IAdspCvt`), for the D records of one format:
 
-- A record counts when it is a field: input (column 26 `Y`) or output other than `N` and blank. A constant is a label and does not count.
+- A record counts when it is a field: input (column 26 `Y`) or output other than `N` and blank. A constant is a label and does not count. A constant is the same as in `ConvertFieldDefinition`: no input, and output `N`, or output `Y` with constant text (columns 57-79) that is not a message (column 56 `M`). Real members write the border characters as output `Y` with text; before the 2026-10-30 fix those were counted as fields and `STIPFM.dspf36` reported `CHOIX1` lines 16 to 19 and `CHOIX` lines 6 to 12 as candidates (borders only).
 - The fields of one display line (column 19-20) make its signature: column, length, output entry, input entry and data type of each field, in the order of the records. Names, line number and constant text are not part of it.
 - `C_SFLMIN` (4) or more consecutive display lines with the same signature are reported once, on the first record of the first line, status R: "Display lines a to b repeat the same fields at the same positions: a subfile candidate".
 

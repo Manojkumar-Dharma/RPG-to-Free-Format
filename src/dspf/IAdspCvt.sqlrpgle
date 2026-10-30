@@ -1565,6 +1565,10 @@ dcl-proc CheckSubfileRows;
   dcl-s l_line int(10);
   dcl-s l_record char(80);
   dcl-s l_isField ind;
+  dcl-s l_isConst ind;
+  dcl-s l_cont ind inz(*off);
+  dcl-s l_wasCont ind inz(*off);
+  dcl-s l_ctype char(1);
   dcl-s l_run int(10);
   dcl-s l_start int(10);
   dcl-s l_out varchar(3);
@@ -1580,14 +1584,26 @@ dcl-proc CheckSubfileRows;
        or %subst(l_record:7:1) = '*';
       iter;
     endif;
+    // Column 80 X: the next D record continues the constant text, it is no field.
+    l_wasCont = l_cont;
+    l_cont = (%subst(l_record:80:1) = 'X' or %subst(l_record:80:1) = 'x');
+    if l_wasCont;
+      iter;
+    endif;
     l_line = ToNumber(ColumnText(l_record:19:20));
     if l_line < 1 or l_line > C_MAXDSPLINE;
       iter;
     endif;
     l_out = ParseIndicatorSpec(ColumnText(l_record:23:24));
     l_inp = %xlate(C_LOWER:C_UPPER:%subst(l_record:26:1));
-    // A constant (output N or blank, no input) is a label, not a field of the row.
-    l_isField = (l_inp = 'Y' or (l_out <> 'N' and l_out <> ''));
+    l_ctype = %xlate(C_LOWER:C_UPPER:%subst(l_record:56:1));
+    // A constant is a label, not a field of the row. Same rule as
+    // ConvertFieldDefinition: no input, and output N, or output Y with constant
+    // text that is not a message (real members show borders as output Y text).
+    l_isConst = l_inp <> 'Y' and (l_out = 'N'
+                or (l_out = 'Y' and %trim(%subst(l_record:57:23)) <> ''
+                    and l_ctype <> 'M'));
+    l_isField = (l_inp = 'Y' or (l_out <> 'N' and l_out <> '')) and not l_isConst;
     if not l_isField;
       iter;
     endif;
