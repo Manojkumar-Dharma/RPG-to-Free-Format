@@ -104,7 +104,7 @@ The last statement lists the number of rows of each table (102 operation codes, 
 RUNSQLSTM SRCSTMF('REPO/rules/IACNVRULES_INSERT.sql') COMMIT(*NONE) NAMING(*SYS) DFTRDBCOL(MYLIB)
 ```
 
-The row counts at the end are the same. The file is generated: after changing a JSON file (or `IACNVRULES.sql`) run `python3 tools/GenRulesInsert.py` on a PC and commit the result with the change; `python3 tools/GenRulesInsert.py --check` fails when the file is out of date. Use one of the two files for a library, not both.
+The row counts at the end are the same. No line is longer than 80 columns (long texts are split into pieces joined with `CONCAT`). The file is generated: after changing a JSON file (or `IACNVRULES.sql`) run `python3 tools/GenRulesInsert.py` on a PC and commit the result with the change; `python3 tools/GenRulesInsert.py --check` fails when the file is out of date. Use one of the two files for a library, not both.
 
 Two more includes go into QCPYSRC, the same way as `IAcnvSrvP` (repeat the copy after every change):
 

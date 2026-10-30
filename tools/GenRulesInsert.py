@@ -26,7 +26,7 @@ RULES = ROOT / "rules"
 SRC_SQL = RULES / "IACNVRULES.sql"
 OUT_SQL = RULES / "IACNVRULES_INSERT.sql"
 
-LINE_WIDTH = 90  # values are wrapped to this width, a value is never split
+LINE_WIDTH = 80  # every line of the generated file is this long or shorter
 
 HEADER = """\
 -- IACNVRULES_INSERT - creates and loads the rule tables of IACNVFREE with plain
@@ -42,7 +42,8 @@ HEADER = """\
 --             NAMING(*SYS) DFTRDBCOL(MYLIB)
 -- The tables are created in MYLIB (the DFTRDBCOL value); put MYLIB on the
 -- library list so that IACNVFREE finds them. The file is UTF-8 (CCSID 1208)
--- and plain ASCII.
+-- and plain ASCII. No line is longer than 80 columns: a long text is split
+-- into pieces joined with CONCAT.
 --
 -- Do not run IACNVRULES.sql and this file into the same library: both create
 -- the same tables, the last one run wins.
@@ -66,12 +67,39 @@ def fail(message):
     sys.exit("GenRulesInsert: " + message)
 
 
+def split_literal(text, limit):
+    """Quote text as one or more literals of limit characters (quotes included).
+
+    A long value becomes 'part one' CONCAT 'part two' ..., split at a blank
+    when there is one, so that no line of the file passes LINE_WIDTH. Only
+    the first atom is a plain literal; the others start with CONCAT.
+    """
+    pieces, rest = [], text
+    while True:
+        room = limit - 2 - (len("CONCAT ") if pieces else 0)
+        cut, size = 0, 0
+        while cut < len(rest) and size + (2 if rest[cut] == "'" else 1) <= room:
+            size += 2 if rest[cut] == "'" else 1
+            cut += 1
+        if cut < len(rest):
+            blank = rest.rfind(" ", 0, cut)
+            if blank > 0:
+                cut = blank + 1  # keep the blank at the end of the piece
+        pieces.append(rest[:cut])
+        rest = rest[cut:]
+        if not rest:
+            break
+    return ["'" + piece.replace("'", "''") + "'" if i == 0
+            else "CONCAT '" + piece.replace("'", "''") + "'"
+            for i, piece in enumerate(pieces)]
+
+
 def sql_value(value, col, where):
-    """Literal for one JSON value, checked against the column type."""
+    """Atoms (pieces of the SQL text) of one JSON value, checked against the column."""
     if col["type"] == "INTEGER":
         if isinstance(value, bool) or not isinstance(value, int):
             fail(f"{where}: {col['key']} must be a whole number, got {value!r}")
-        return str(value)
+        return [str(value)]
     if isinstance(value, bool) or not isinstance(value, (str, int)):
         fail(f"{where}: {col['key']} must be text, got {value!r}")
     text = str(value)
@@ -80,7 +108,9 @@ def sql_value(value, col, where):
     if len(text) > col["length"]:
         fail(f"{where}: {col['key']} is {len(text)} long, column {col['name']} "
              f"holds {col['length']}: {text!r}")
-    return "'" + text.replace("'", "''") + "'"
+    # indent 3 (a blank after the indent of 2, or the opening bracket), and 2 at
+    # the end: the last value of a row has ")" and then "," or ";"
+    return split_literal(text, LINE_WIDTH - 3 - 2)
 
 
 def parse_columns(cols_text, table):
@@ -99,14 +129,24 @@ def parse_columns(cols_text, table):
 
 
 def wrap_values(values, indent):
-    """Lay the values of one row on lines of LINE_WIDTH at most."""
+    """Lay the atoms of one row on lines of LINE_WIDTH at most.
+
+    values is a list with the atoms of each value. A line never ends inside
+    a literal; a value that was split continues with CONCAT on the next line.
+    """
     lines, current = [], indent + "("
-    for i, value in enumerate(values):
-        piece = value + ("," if i < len(values) - 1 else ")")
-        if current.strip("( ") and len(current) + 1 + len(piece) > LINE_WIDTH:
-            lines.append(current.rstrip())
-            current = indent + " "
-        current += (" " if not current.endswith(("(", " ")) else "") + piece
+    last = len(values) - 1
+    for i, atoms in enumerate(values):
+        for j, atom in enumerate(atoms):
+            piece = atom
+            if j == len(atoms) - 1:
+                piece += "," if i < last else ")"
+            joiner = "" if current.endswith(("(", " ")) else " "
+            if len(current) + len(joiner) + len(piece) + 1 > LINE_WIDTH \
+                    and current.strip("( "):
+                lines.append(current.rstrip())
+                current, joiner = indent + " ", ""
+            current += joiner + piece
     lines.append(current)
     return lines
 
