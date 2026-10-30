@@ -995,12 +995,14 @@ Written in FREE-58 (RV-61), from SC09-1818 chapter 25 (special words, `*PLACE`, 
 
 Packed and binary output on a DISK record (data format `P`, `B`; FREE-58): a work field in a data structure of its own is declared with the other declarations (`dcl-ds IA_P12D; IA_P12 packed(7:0); end-ds;`, binary `int(5)` for 1 to 4 digits and `int(10)` for 5 to 9) and moved into the record: `IA_P12 = AMT; %subst(ORDHIST_OUT:9:4) = IA_P12D;`. The field takes digits/2 + 1 bytes (packed), 2 or 4 bytes (binary), ending at the end position. Binary with decimal positions or more than 9 digits stays R.
 
+Separate sign on a DISK record (data format `L`, `R`; FREE-65; RPG III only, SC09-1817 position 44): `L` puts the sign before the digits, `R` after them, and the end position is the end of the field including the sign, so the field takes digits + 1 positions. Written as `if AMT < 0; %subst(ORDHIST_OUT:6:1) = '-'; else; %subst(ORDHIST_OUT:6:1) = '+'; endif; %subst(ORDHIST_OUT:7:7) = %editc(%abs(AMT):'X');`. Status A, with its own cause in the report: the manual does not say which character a positive sign is (taken as `+`) or state that the end position counts the sign; check both against a record that the RPG program writes. Sample: `samples/FREEDLR.rpg38` (`AMT` 7 digits, `L`, end 13: sign at 6, digits 7-13; `QTY` 3 digits, `R`, end 17: digits 14-16, sign at 17). Written from the manual and not from a run.
+
 Stays R, with the reason in the report:
 
 | Item | Reason |
 |---|---|
 | Data format `P`, `B` on a printer file | SC09-1818: packed and binary fields cannot be printed, only written to disk or ICF output |
-| Data format `L`, `R` | not valid in SC09-1818 (blank, `P` and `B` only) |
+| Data format `L`, `R` in RPG II, and on a printer file | RPG II: SC09-1818 allows blank, `P` and `B` only; printer file: a separate sign is written only to a DISK record (SC09-1817) |
 | Edit codes 5-9 | user-defined edit codes depend on the system (SC09-1818) |
 | `PAGE8` and the like, other names starting with `*`, array elements in RPG IV (`ARR(3)`) | not covered |
 

@@ -1,0 +1,11 @@
+      * Separate sign of a DISK record, data format L and R (RV-61, RPG III)
+     H
+     FORDHIST O   F      40            DISK
+     C                     Z-ADD5         CUSTNO  40
+     C                     Z-ADD-12345    AMT     70
+     C                     Z-ADD77        QTY     30
+     C                     EXCPTNEWREC
+     OORDHIST E                NEWREC
+     O                         CUSTNO     4
+     O                         AMT       13L
+     O                         QTY       17R

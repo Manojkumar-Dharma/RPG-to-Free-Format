@@ -612,8 +612,14 @@ dcl-proc OutBuild;
         when l_relative and (g_gFields(l_g) = 0 or g_fEnd(g_fCount - 1) = 0);
           g_fReason(g_fCount) = 'A relative end position needs an end position '
                                 + 'before it in the same record';
-        when l_fmt <> ' ' and not (g_gDisk(l_g) and (l_fmt = 'P' or l_fmt = 'B'));
-          if l_fmt = 'P' or l_fmt = 'B';
+        when l_fmt <> ' ' and not (g_gDisk(l_g) and (l_fmt = 'P' or l_fmt = 'B'
+             or ((l_fmt = 'L' or l_fmt = 'R') and SrcDialect() = '3')));
+          if (l_fmt = 'L' or l_fmt = 'R') and SrcDialect() = '3';
+            g_fReason(g_fCount) = 'Data format ' + l_fmt + ' (column 44): a '
+                                  + 'separate plus or minus sign is written only '
+                                  + 'to a DISK record; a printer file cannot print '
+                                  + 'it this way (SC09-1817): not converted';
+          elseif l_fmt = 'P' or l_fmt = 'B';
             g_fReason(g_fCount) = 'Data format ' + l_fmt + ' (column 44): packed '
                                   + 'and binary fields cannot be printed, only '
                                   + 'written to disk or ICF (SC09-1818); a DISK '
@@ -621,7 +627,8 @@ dcl-proc OutBuild;
                                   + 'the record data structure: not converted';
           else;
             g_fReason(g_fCount) = 'Data format ' + l_fmt + ' (column 44) is not '
-                                  + 'valid: the manual allows blank, P and B';
+                                  + 'valid here: the manual allows blank, P and '
+                                  + 'B (L and R in RPG III on a DISK record)';
           endif;
         when Up(%subst(l_line:39:1)) <> ' ' and Up(%subst(l_line:39:1)) <> 'B';
           g_fReason(g_fCount) = 'Entry ' + %subst(l_line:39:1) + ' in column 39 '
@@ -1940,6 +1947,8 @@ dcl-proc DiskBuild;
   dcl-s l_cond varchar(200);
   dcl-s l_pb varchar(12);
   dcl-s l_digits int(10);
+  dcl-s l_signAt int(10);
+  dcl-s l_digitAt int(10);
 
   o_reason = '';
   l_ds = g_gFile(i_g) + '_OUT';
@@ -2027,6 +2036,29 @@ dcl-proc DiskBuild;
           l_start = g_fEnd(l_f) - l_len + 1;
           l_one = l_pb + ' = ' + g_fName(l_f) + '; %subst(' + l_ds + ':'
                   + %char(l_start) + ':' + %char(l_len) + ') = ' + l_pb + 'D';
+        elseif g_fFmt(l_f) = 'L' or g_fFmt(l_f) = 'R';
+          // A separate sign (RV-61, RPG III, SC09-1817 position 44): L before the
+          // digits, R after them; the end position is the end of the field with
+          // its sign, so the field is one position longer than its digits.
+          if l_kind <> 'N';
+            o_reason = 'Data format ' + g_fFmt(l_f) + ' of the character field '
+                       + g_fName(l_f) + ' is not valid';
+            return 0;
+          endif;
+          l_len = l_digits + 1;
+          l_start = g_fEnd(l_f) - l_len + 1;
+          if g_fFmt(l_f) = 'L';
+            l_signAt = l_start;
+            l_digitAt = l_start + 1;
+          else;
+            l_digitAt = l_start;
+            l_signAt = l_start + l_digits;
+          endif;
+          l_one = 'if ' + g_fName(l_f) + ' < 0; %subst(' + l_ds + ':'
+                  + %char(l_signAt) + ':1) = ''-''; else; %subst(' + l_ds + ':'
+                  + %char(l_signAt) + ':1) = ''+''; endif; %subst(' + l_ds + ':'
+                  + %char(l_digitAt) + ':' + %char(l_digits) + ') = %editc(%abs('
+                  + g_fName(l_f) + '):''X'')';
         elseif l_kind = 'N';
           l_one = '%subst(' + l_ds + ':' + %char(l_start) + ':' + %char(l_len)
                   + ') = %editc(' + g_fName(l_f) + ':''X'')';
@@ -2089,6 +2121,7 @@ dcl-proc DiskFinish;
   dcl-s l_reason varchar(190);
   dcl-s l_count int(10);
   dcl-s l_j int(10);
+  dcl-s l_sign varchar(160) inz('');
 
   l_count = DiskBuild(i_g:l_stmts:l_reason);
   if l_count = 0;
@@ -2100,6 +2133,15 @@ dcl-proc DiskFinish;
             + 'separately');
     return;
   endif;
+  // A separate sign is a cause of its own: the manual does not give the character
+  // of a plus sign or say that the end position counts the sign.
+  for l_j = g_gFirst(i_g) to g_gFirst(i_g) + g_gFields(i_g) - 1;
+    if g_fFmt(l_j) = 'L' or g_fFmt(l_j) = 'R';
+      l_sign = ' | Data format L or R: the sign is written as + or - in the extra '
+               + 'position that the end position includes; check a record written '
+               + 'by the RPG program';
+    endif;
+  endfor;
   RptItem(C_STS_ASSUMPTION:SrcLineNo(g_gStart(i_g)):%trimr(%subst(
           SrcLine(g_gStart(i_g)):6:75))
           :'Record of a DISK file written by the EXCPT with a data structure'
@@ -2107,7 +2149,7 @@ dcl-proc DiskFinish;
           + '%SUBST at their end positions, numeric fields as zoned digits '
           + 'with %EDITC code X; data format P and B through a work field)'
           + CycleNote(g_gType(i_g))
-          + '; not tested');
+          + '; not tested' + l_sign);
   for l_j = g_gStart(i_g) + 1 to g_gEnd(i_g);
     RptItem(C_STS_CONVERTED:SrcLineNo(l_j):%trimr(%subst(SrcLine(l_j):6:75)):'');
   endfor;
