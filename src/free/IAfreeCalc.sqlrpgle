@@ -953,8 +953,10 @@ dcl-proc AddReason;
     i_add varchar(190) const;
   end-pi;
 
+  // The causes of a report line are joined by ' | ' (IAcnvRpt counts each one on
+  // its own); a cause can hold '; ' itself.
   if %len(io_text) > 0;
-    io_text += '; ';
+    io_text += ' | ';
   endif;
   io_text += i_add;
 end-proc;
@@ -1180,10 +1182,15 @@ dcl-proc CalcLine export;
   endif;
   // EXFMT and READC of the display file (RV-12): converted when the source has a
   // WORKSTN file; the other WORKSTN operations (ACQ, REL, NEXT, POST) stay R.
-  if l_rule.kind = 'FILE' and (l_rule.opcode = 'EXFMT' or l_rule.opcode = 'READC')
-     and WorkstnFile() <> '';
-    l_rule.status = C_STS_CONVERTED;
-    l_rule.reason = '';
+  // The table says A (converted with a WORKSTN file); without one the line is R.
+  if l_rule.kind = 'FILE' and (l_rule.opcode = 'EXFMT' or l_rule.opcode = 'READC');
+    if WorkstnFile() <> '';
+      l_rule.status = C_STS_CONVERTED;
+      l_rule.reason = '';
+    else;
+      l_rule.status = 'R';
+      l_rule.reason = l_rule.opcode + ' needs a WORKSTN file in the source (RV-12)';
+    endif;
   endif;
   if l_rule.status = 'R';
     ReviewHere(i_line:i_lineNo:%trim(l_rule.reason):l_isStructure);
@@ -2167,7 +2174,7 @@ dcl-proc ConvertJump;
         Emit('// Groups are nested too deep':i_c.lineNo);
       endif;
       RptItem(C_STS_ASSUMPTION:i_c.lineNo:SpecText(i_c.line)
-              :'TAG ' + g_jvLabel(l_k) + ' starts a loop that ends at the jump back');
+              :'A TAG starts a loop that ends at the jump back');
       return;
     endif;
     if g_jvUnconv(l_k) > 0;
@@ -2193,7 +2200,7 @@ dcl-proc ConvertJump;
       Pop();
       Emit('enddo;':i_c.lineNo);
       RptItem(C_STS_ASSUMPTION:i_c.lineNo:SpecText(i_c.line)
-              :'Jump back to TAG ' + g_jvLabel(g_jvPeer(l_k)) + ' became the end of a loop');
+              :'Jump back to a TAG became the end of a loop');
     else;
       ReviewHere(i_c.line:i_c.lineNo:C_JUMP_R);
     endif;
@@ -2229,12 +2236,12 @@ dcl-proc ConvertJump;
         Emit('// Groups are nested too deep':i_c.lineNo);
       endif;
       RptItem(C_STS_ASSUMPTION:i_c.lineNo:SpecText(i_c.line)
-              :'Jump forward to TAG ' + g_jvLabel(l_k) + ' became an IF around the lines'
+              :'Jump forward to a TAG became an IF around the lines'
               + ' up to the TAG');
     when g_jvAct(l_k) = 'R' or g_jvAct(l_k) = 'V';
       if g_jvAct(l_k) = 'V';
         l_word = 'leave';
-        l_note = 'Jump to TAG ' + g_jvLabel(l_k) + ' after the loop became LEAVE';
+        l_note = 'Jump to the TAG after the loop became LEAVE';
       elseif g_inSub;
         l_word = 'leavesr';
         l_note = 'Jump to the last TAG of the subroutine became LEAVESR';
@@ -2935,6 +2942,11 @@ dcl-proc ConvertTemplate;
   dcl-s l_statement varchar(250);
   dcl-s l_reason varchar(150);
   dcl-s l_numeric ind;
+  dcl-ds l_rule likeds(IAfreeOpc_t);
+  dcl-s l_isTable ind;
+  dcl-s l_seq char(1);
+  dcl-s l_dim int(10);
+  dcl-s l_alt varchar(10);
 
   l_template = i_rule.template;
   if i_c.factor1C = '' and i_rule.templateNoF1 <> '';
@@ -2984,7 +2996,15 @@ dcl-proc ConvertTemplate;
       l_statements(l_count) = l_statement;
     endif;
   endfor;
-  EmitStatements(i_c:i_rule:l_statements:l_count:'');
+  // SORTA and XFOOT are A only because the array might not come from an E
+  // specification of this member; when it does, nothing is assumed: C.
+  l_rule = i_rule;
+  if (i_rule.opcode = 'SORTA' or i_rule.opcode = 'XFOOT')
+     and ArrayInfo(i_c.factor2:l_isTable:l_seq:l_dim:l_alt) and not l_isTable;
+    l_rule.status = C_STS_CONVERTED;
+    l_rule.reason = '';
+  endif;
+  EmitStatements(i_c:l_rule:l_statements:l_count:'');
 end-proc;
 
 // ------------------------------------------------------------------
@@ -4755,8 +4775,8 @@ dcl-proc ConvertLookup;
                           + l_idxConv + ' = LOKUP_IX; endif';
     endif;
   elseif l_isTable;
-    l_note = 'Table ' + l_name + ': the entry found is kept in ' + l_name
-             + '_IDX, which the references to the table name use';
+    l_note = 'A table: the entry found is kept in an index field NAME_IDX, '
+             + 'which the references to the table name use';
     l_n += 1;
     l_statements(l_n) = 'if LOKUP_IX > 0; ' + l_name + '_IDX = LOKUP_IX';
     if l_alt <> '';
@@ -5241,8 +5261,8 @@ dcl-proc ConvertFileOp;
               or l_op = 'CHAIN' or l_op = 'READ' or l_op = 'DELET');
         l_device = 'W';
         l_wsFormat = *on;
-        AddReason(l_note:'Record format ' + l_name + ' is taken as a format of the '
-                  + 'display file ' + l_wsFile + ' (its DDS is not read)');
+        AddReason(l_note:'A record format is taken as a format of the '
+                  + 'display file (its DDS is not read)');
       elseif l_wsFile = '*MANY' and (l_op = 'EXFMT' or l_op = 'READC');
         l_reason = 'More than one WORKSTN file: the display file of record format '
                    + l_name + ' is not known';
@@ -5315,7 +5335,7 @@ dcl-proc ConvertFileOp;
     if l_back <> '';
       l_count += 1;
       l_statements(l_count) = l_back;
-      AddReason(l_note:'The renamed fields of file ' + l_name + ' (I specification) '
+      AddReason(l_note:'The renamed fields of the file (I specification) '
                 + 'are copied to the external fields before the operation');
     endif;
     l_count += 1;
@@ -5370,7 +5390,7 @@ dcl-proc ConvertFileOp;
       l_statements(l_count) = '  ' + l_copy;
       l_count += 1;
       l_statements(l_count) = 'endif';
-      AddReason(l_note:'The renamed fields of file ' + l_name + ' (I specification) '
+      AddReason(l_note:'The renamed fields of the file (I specification) '
                 + 'are copied after the operation when a record was read');
     endif;
   endif;
@@ -5378,7 +5398,7 @@ dcl-proc ConvertFileOp;
   // The note: a character key of a program-described file.
   if l_keyOp and l_device = 'D' and l_keyed and l_key <> '';
     if %subst(l_key:1:1) <> C_QUOTE;
-      AddReason(l_note:'The key of file ' + l_name + ' is declared as a '
+      AddReason(l_note:'The key of the file is declared as a '
                 + 'character key: a numeric search argument must be converted');
     endif;
   endif;
@@ -6180,23 +6200,23 @@ dcl-proc SqlJumpWrite;
     else;
       Push('JMP':1:0:'');
     endif;
-    AddReason(io_note:l_what + ' became an IF around the lines up to TAG '
-              + l_label);
+    AddReason(io_note:'WHENEVER ... GOTO became an IF around the lines up to '
+              + 'the TAG');
     return *on;
   endif;
 
   if l_inSub;
     l_word = 'leavesr';
-    AddReason(io_note:l_what + ' became a LEAVESR (TAG ' + l_label
-              + ' is the last statement of the subroutine)');
+    AddReason(io_note:'WHENEVER ... GOTO became a LEAVESR (the TAG is the last '
+              + 'statement of the subroutine)');
   elseif RulDialect() = '3' and g_cycState = 'D';
     l_word = 'iter';
-    AddReason(io_note:l_what + ' became an ITER (TAG ' + l_label
-              + ' is the last statement of the detail calculations)');
+    AddReason(io_note:'WHENEVER ... GOTO became an ITER (the TAG is the last '
+              + 'statement of the detail calculations)');
   else;
     l_word = 'return';
-    AddReason(io_note:l_what + ' became a RETURN (TAG ' + l_label
-              + ' is the last statement of the program)');
+    AddReason(io_note:'WHENEVER ... GOTO became a RETURN (the TAG is the last '
+              + 'statement of the program)');
   endif;
   Emit('if ' + l_cond + ';':i_outNo);
   Emit(l_word + ';':i_outNo:1);
@@ -6232,12 +6252,11 @@ dcl-proc SqlWhenever;
     endif;
   endfor;
   if i_goto;
-    l_note = 'WHENEVER ' + WhenName(i_n) + ' GOTO ' + i_label
-             + ' is replaced by a test of SQLCODE after each SQL statement that '
-             + 'follows (RV-37)';
+    l_note = 'WHENEVER ... GOTO is replaced by a test of SQLCODE after each SQL '
+             + 'statement that follows (RV-37)';
   else;
-    l_note = 'WHENEVER ' + WhenName(i_n) + ' CONTINUE: no test of SQLCODE for this '
-             + 'condition in the statements that follow (RV-37)';
+    l_note = 'WHENEVER ... CONTINUE: no test of SQLCODE for this condition in '
+             + 'the statements that follow (RV-37)';
   endif;
   for l_index = 1 to g_sqlCount;
     if l_index = 1;
@@ -6831,7 +6850,7 @@ dcl-proc CycOpen;
   Emit('IA_FIRST = *off;':g_lastLineNo);
   g_cycState = 'D';
   RptItem(C_STS_ASSUMPTION:g_lastLineNo:'RPG cycle'
-          :'Cycle skeleton written for primary file ' + g_cycFile + ': read, control '
+          :'Cycle skeleton written for the primary file: read, control '
            + 'break, total calculations and detail calculations; heading, detail '
            + 'and total records of a converted printer file are written in it '
            + '(RV-60)');

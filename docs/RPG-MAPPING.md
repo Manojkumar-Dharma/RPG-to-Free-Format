@@ -248,8 +248,9 @@ Source: SC09-1818 chapter 24 (columns) and chapter 27 (operations). Written for 
 | `DO` ... `END` | `for idx = start to limit by incr;` `endfor;`. Start and limit default to 1; the increment is factor 2 of the END; without a result field the index `IADOn` is declared | C, A without a result field |
 | `CASxx` ... `END` | `select;` `when f1 op f2;` `exsr name;` ... `other;` (CAS with a blank xx) `endsl;`. Conditioning or resulting indicators: R | C |
 | `BEGSR`, `ENDSR`, `EXSR` | `begsr`, `endsr;`, `exsr` (`*PSSR` and `*INZSR` allowed). `ENDSR` with a return point (factor 2): R | C |
-| `TIME` with a 6-digit result | `r = %dec(%time():*hms);` | A: a 12-digit result also holds the system date: R |
-| `SQRT`, `XFOOT`, `SORTA`, `RETRN` | `%sqrt`, `%xfoot`, `sorta`, `return` | A |
+| `TIME` with a 6-digit result | `r = %dec(%time():*hms);` | C (FREE-56): a 12-digit result also holds the system date: R |
+| `XFOOT`, `SORTA` | `%xfoot`, `sorta` | C when the array is defined in the member (FREE-56), A when it is not |
+| `SQRT`, `RETRN` | `%sqrt`, `return` | A |
 | Result field with length (49-51) and decimals (52) | `dcl-s name zoned(len:dec);` (`char(len)` when the decimals are blank and the operation is not numeric), written before the first calculation | C. Two different definitions of one field: R |
 | Factors | character literal as is; numeric literal (`+` dropped, `.5` as `0.5`); `*BLANK(S)`, `*ZERO(S)`, `UDATE`, `UMONTH`, `UDAY`, `UYEAR`; array element `ARR,I` as `ARR(I)`; names as typed. `PAGE`, `PAGE1` to `PAGE7`: R (O specifications) | C |
 | Comment (columns 60-74) | `// text` after the first statement | - |

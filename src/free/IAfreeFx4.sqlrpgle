@@ -1195,8 +1195,8 @@ dcl-proc ConvertI;
   AddSym(l_dsName:'ds');
 
   RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:75))
-          :'record layout of file ' + l_name + ' declared as data structure '
-          + l_dsName + ': READ and CHAIN of the file name it');
+          :'record layout of the file declared as a data structure: READ and '
+          + 'CHAIN of the file name it');
   for l_k = 1 to l_last;
     l_next = SrcLine(i_index + l_k);
     if l_ok(l_k);
@@ -3927,7 +3927,7 @@ dcl-proc ConvertJumpC;
       endif;
       CPush('L');
       ReportWithContinuations(i_index:i_lineNo:i_line:0
-                              :'TAG ' + l_label + ' starts a loop that ends at the '
+                              :'A TAG starts a loop that ends at the '
                                + 'jump back');
     elseif l_unconv > 0;
       ReviewWithContinuations(i_index:i_lineNo:i_line:0
@@ -3944,14 +3944,14 @@ dcl-proc ConvertJumpC;
       EmitStatement(2 * g_depth:'if ' + JumpNegate(l_cond) + ';':i_lineNo);
       CPush('J');
       ReportWithContinuations(i_index:i_lineNo:i_line:0
-                              :'Jump forward to TAG ' + l_label + ' became an IF '
+                              :'Jump forward to a TAG became an IF '
                                + 'around the lines up to the TAG');
     when l_act = 'B';
       if g_depth > 0 and g_stack(g_depth) = 'L';
         CPop(' ');
         EmitStatement(2 * g_depth:'enddo;':i_lineNo);
         ReportWithContinuations(i_index:i_lineNo:i_line:0
-                                :'Jump back to TAG ' + l_label + ' became the end of '
+                                :'Jump back to a TAG became the end of '
                                  + 'a loop');
       else;
         ReviewWithContinuations(i_index:i_lineNo:i_line:0
@@ -3961,7 +3961,7 @@ dcl-proc ConvertJumpC;
     when l_act = 'R' or l_act = 'V';
       if l_act = 'V';
         l_word = 'leave';
-        l_note = 'Jump to TAG ' + l_label + ' after the loop became LEAVE';
+        l_note = 'Jump to the TAG after the loop became LEAVE';
       elseif l_inSub;
         l_word = 'leavesr';
         l_note = 'Jump to the last TAG of the subroutine became LEAVESR';
@@ -4181,7 +4181,7 @@ dcl-proc ConvertC;
         if l_res = '' and Txt('C':'LENGTH':i_line) = ''
            and Txt('C':'DECIMALS':i_line) = '' and l_ext = '';
           l_res = 'DOIX' + %char(i_lineNo);
-          l_note = 'DO without an index field: hidden index ' + l_res;
+          l_note = 'DO without an index field: hidden index DOIXnnn';
         endif;
         if l_res = '' or Txt('C':'LENGTH':i_line) <> ''
            or Txt('C':'DECIMALS':i_line) <> '' or l_ext <> '';
@@ -4207,7 +4207,7 @@ dcl-proc ConvertC;
         elseif Up(l_f1) = '*DTAARA' and DtaaraApplied(l_res);
           l_stmt = '';
           l_kind = 'k';
-          l_note = '*DTAARA DEFINE written as the DTAARA keyword of ' + l_res;
+          l_note = '*DTAARA DEFINE written as the DTAARA keyword of the field';
         else;
           if Up(l_f1) = '*DTAARA';
             l_reason = '*DTAARA DEFINE needs a stand-alone field or data structure '
@@ -4477,8 +4477,8 @@ dcl-proc ConvertC;
           l_stmt = StringStmt(l_op:l_ext = '(p)':l_f1:l_f2:l_res
                               :Txt('C':'EQ':i_line):l_post:l_reason);
           if l_reason = '' and not (l_ext = '(p)' and l_op <> 'SCAN');
-            l_note = l_op + ' converted: the unused part of the result is not '
-                     + 'padded the same way, check';
+            l_note = 'String operation converted: the unused part of the result is '
+                     + 'not padded the same way, check';
           endif;
         endif;
       when l_op = 'IN' or l_op = 'OUT';
@@ -4530,7 +4530,7 @@ dcl-proc ConvertC;
         else;
           l_stmt = MoveStmt(l_op:l_ext = '(p)':l_f2:l_res:l_reason);
           if l_reason = '' and l_stmt <> '';
-            l_note = l_op + ' converted from the declared field types: check';
+            l_note = 'MOVE or MOVEL converted from the declared field types: check';
           endif;
           // Two statements (MOVE(P) to a longer result): written one by one.
           if %scan('; ':l_stmt) > 0;

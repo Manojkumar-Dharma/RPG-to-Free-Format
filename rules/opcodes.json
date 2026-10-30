@@ -448,11 +448,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "A",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "GOTO and TAG are not allowed in free-form: no replacement is attempted",
+  "reason": "GOTO, CABxx and TAG: skip forward, jump to the end, loop back and leave are written with IF, LEAVESR/RETURN, DOU/DOW and LEAVE; every other jump stays R (RV-14, FREE-35, FREE-44)",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -984,7 +984,7 @@
   "template": "sorta {F2}",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "SORTA needs the array defined by an E specification (FREE-07)",
+  "reason": "The array is not defined by an E specification of this member (FREE-07): check that it exists",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -1037,11 +1037,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "A",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "GOTO and TAG are not allowed in free-form: no replacement is attempted",
+  "reason": "GOTO, CABxx and TAG: skip forward, jump to the end, loop back and leave are written with IF, LEAVESR/RETURN, DOU/DOW and LEAVE; every other jump stays R (RV-14, FREE-35, FREE-44)",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -1094,11 +1094,11 @@
   "ind2": "",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "A",
+  "status": "C",
   "template": "{RES} = %dec(%time():*hms)",
   "templateNoF1": "",
   "bifs": "%TIME,%DEC",
-  "reason": "TIME written for a 6-digit result field (hhmmss) only",
+  "reason": "TIME is converted for a result field of 6 digits and 0 decimals defined on the line; any other result field is R",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -1117,7 +1117,7 @@
   "template": "{RES} = %xfoot({F2})",
   "templateNoF1": "",
   "bifs": "%XFOOT",
-  "reason": "Array sum written with %XFOOT; the array comes from an E specification (FREE-07)",
+  "reason": "The array is not defined by an E specification of this member (FREE-07): check that it exists",
   "source": "SC09-1818 chapter 27, table of each operation code"
  },
  {
@@ -1417,11 +1417,11 @@
   "ind2": "LO",
   "ind3": "EQ",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "A",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "CABxx is a conditional GOTO; free-form has no GOTO or TAG",
+  "reason": "GOTO, CABxx and TAG: skip forward, jump to the end, loop back and leave are written with IF, LEAVESR/RETURN, DOU/DOW and LEAVE; every other jump stays R (RV-14, FREE-35, FREE-44)",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1740,11 +1740,11 @@
   "ind2": "ER",
   "ind3": "",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "A",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "Converted when the source has a WORKSTN file (RV-12, FREE-43, FREE-45); R when it has none",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {
@@ -1835,11 +1835,11 @@
   "ind2": "ER",
   "ind3": "EOF",
   "halfAdjust": "N",
-  "status": "R",
+  "status": "A",
   "template": "",
   "templateNoF1": "",
   "bifs": "",
-  "reason": "File operation: needs the record layout and file handling (FREE-08)",
+  "reason": "Converted when the source has a WORKSTN file (RV-12, FREE-43, FREE-45); R when it has none",
   "source": "SC09-1817 chapter 11, Table 35 and the description of each operation"
  },
  {

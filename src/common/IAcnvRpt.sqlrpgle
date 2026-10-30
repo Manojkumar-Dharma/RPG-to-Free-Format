@@ -16,6 +16,132 @@ dcl-s g_conv int(10) inz(0);
 dcl-s g_assump int(10) inz(0);
 dcl-s g_review int(10) inz(0);
 
+// The reasons of the items with an assumption (A), counted by cause. A reason can
+// hold several causes joined by ' | ' (AddReason, AppendText): each is counted on
+// its own, by its exact text, so a cause must have one fixed text (no names or
+// numbers in it). Only for IACNVFREE: the reasons of the other converters still hold
+// names and would fill the table with single causes.
+dcl-s g_countCauses ind inz(*off);
+dcl-c C_MAXCAUSE 60;
+dcl-c C_CAUSEWIDTH 118;
+dcl-s g_causeText varchar(200) dim(C_MAXCAUSE);
+dcl-s g_causeCount int(10) dim(C_MAXCAUSE);
+dcl-s g_causeUsed int(10) inz(0);
+dcl-s g_causeOther int(10) inz(0);     // causes after the table was full
+
+// ------------------------------------------------------------------
+dcl-proc AddCause;
+  dcl-pi *n;
+    i_text varchar(200) const;
+  end-pi;
+
+  dcl-s l_index int(10);
+
+  if i_text = '';
+    return;
+  endif;
+  for l_index = 1 to g_causeUsed;
+    if g_causeText(l_index) = i_text;
+      g_causeCount(l_index) += 1;
+      return;
+    endif;
+  endfor;
+  if g_causeUsed >= C_MAXCAUSE;
+    g_causeOther += 1;
+    return;
+  endif;
+  g_causeUsed += 1;
+  g_causeText(g_causeUsed) = i_text;
+  g_causeCount(g_causeUsed) = 1;
+end-proc;
+
+// ------------------------------------------------------------------
+// Splits a reason at ' | ' and counts each cause.
+dcl-proc CountCauses;
+  dcl-pi *n;
+    i_reason varchar(200) const;
+  end-pi;
+
+  dcl-s l_rest varchar(200);
+  dcl-s l_p int(10);
+
+  l_rest = i_reason;
+  dow l_rest <> '';
+    l_p = %scan(' | ':l_rest);
+    if l_p = 0;
+      AddCause(%trim(l_rest));
+      l_rest = '';
+    else;
+      AddCause(%trim(%subst(l_rest:1:l_p - 1)));
+      if l_p + 3 > %len(l_rest);
+        l_rest = '';
+      else;
+        l_rest = %subst(l_rest:l_p + 3);
+      endif;
+    endif;
+  enddo;
+end-proc;
+
+// ------------------------------------------------------------------
+// The causes of the assumptions with their counts, the most frequent first.
+dcl-proc PrintCauses;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_j int(10);
+  dcl-s l_text varchar(200);
+  dcl-s l_count int(10);
+  dcl-s l_rest varchar(200);
+  dcl-s l_first ind;
+  dcl-s l_num char(6);
+
+  if g_causeUsed = 0 and g_causeOther = 0;
+    return;
+  endif;
+  // Sort by count, descending; equal counts keep the order of first appearance.
+  for l_i = 1 to g_causeUsed - 1;
+    for l_j = 1 to g_causeUsed - l_i;
+      if g_causeCount(l_j) < g_causeCount(l_j + 1);
+        l_text = g_causeText(l_j);
+        l_count = g_causeCount(l_j);
+        g_causeText(l_j) = g_causeText(l_j + 1);
+        g_causeCount(l_j) = g_causeCount(l_j + 1);
+        g_causeText(l_j + 1) = l_text;
+        g_causeCount(l_j + 1) = l_count;
+      endif;
+    endfor;
+  endfor;
+
+  PutLine(' ':*off);
+  PutLine('Assumptions by cause:':*off);
+  for l_i = 1 to g_causeUsed;
+    evalr l_num = %char(g_causeCount(l_i));
+    l_rest = g_causeText(l_i);
+    l_first = *on;
+    dow l_rest <> '';
+      if l_first;
+        PutLine(l_num + '  ' + %subst(l_rest:1:%min(%len(l_rest):C_CAUSEWIDTH))
+                :*off);
+      else;
+        PutLine('        ' + %subst(l_rest:1:%min(%len(l_rest):C_CAUSEWIDTH))
+                :*off);
+      endif;
+      l_first = *off;
+      if %len(l_rest) > C_CAUSEWIDTH;
+        l_rest = %subst(l_rest:C_CAUSEWIDTH + 1);
+      else;
+        l_rest = '';
+      endif;
+    enddo;
+  endfor;
+  if g_causeOther > 0;
+    evalr l_num = %char(g_causeOther);
+    PutLine(l_num + '  other causes (more than ' + %char(C_MAXCAUSE)
+            + ' different ones)':*off);
+  endif;
+end-proc;
+
 // ------------------------------------------------------------------
 dcl-proc PutLine;
   dcl-pi *n;
@@ -100,6 +226,9 @@ dcl-proc RptOpen export;
   g_conv = 0;
   g_assump = 0;
   g_review = 0;
+  g_causeUsed = 0;
+  g_causeOther = 0;
+  g_countCauses = (i_converter = C_CNV_FREE or i_converter = C_CNV_FREEDDS);
 
   PutLine('Legacy source conversion report   ' + ConverterName(i_converter)
           + '   ' + %char(%date()) + ' ' + %char(%time()):*on);
@@ -140,6 +269,9 @@ dcl-proc RptItem export;
     when i_status = C_STS_ASSUMPTION;
       l_status = 'ASSUMPTION';
       g_assump += 1;
+      if g_countCauses;
+        CountCauses(i_reason);
+      endif;
     other;
       l_status = 'REVIEW';
       g_review += 1;
@@ -170,6 +302,7 @@ dcl-proc RptClose export;
     return;
   endif;
 
+  PrintCauses();
   PutLine(' ':*off);
   PutLine('Totals:  converted ' + %char(g_conv)
           + '   with assumption ' + %char(g_assump)

@@ -1602,9 +1602,10 @@ dcl-proc OutFinish export;
       AddDds(l_rows(l_j));
     endfor;
     RptItem(C_STS_ASSUMPTION:SrcLineNo(g_gStart(l_g)):%trimr(%subst(
-            SrcLine(g_gStart(l_g)):6:75)):'Record format ' + g_gFmt(l_g)
-            + ' of the printer file DDS (comments at the end of the converted '
-            + 'source); the DDS is not tested: check line and position entries'
+            SrcLine(g_gStart(l_g)):6:75))
+            :'Record format of the printer file DDS (comments at the end of the '
+            + 'converted source); the DDS is not tested: check line and position '
+            + 'entries'
             + CycleNote(g_gType(l_g)));
     for l_j = g_gStart(l_g) + 1 to g_gEnd(l_g);
       RptItem(C_STS_CONVERTED:SrcLineNo(l_j):%trimr(%subst(SrcLine(l_j):6:75)):'');
@@ -1815,12 +1816,7 @@ dcl-proc DiskFinish;
   dcl-s l_reason varchar(190);
   dcl-s l_count int(10);
   dcl-s l_j int(10);
-  dcl-s l_suffix varchar(4);
 
-  l_suffix = '_OUT';
-  if g_gAct(i_g) = 'U';
-    l_suffix = '_REC';
-  endif;
   l_count = DiskBuild(i_g:l_stmts:l_reason);
   if l_count = 0;
     g_gOk(i_g) = *off;
@@ -1833,9 +1829,7 @@ dcl-proc DiskFinish;
   endif;
   RptItem(C_STS_ASSUMPTION:SrcLineNo(g_gStart(i_g)):%trimr(%subst(
           SrcLine(g_gStart(i_g)):6:75))
-          :'Record of the DISK file ' + g_gFile(i_g) + ' written by the EXCPT '
-          + 'with the data structure ' + g_gFile(i_g)
-          + l_suffix
+          :'Record of a DISK file written by the EXCPT with a data structure'
           + ' (fields placed by '
           + '%SUBST at their end positions, numeric fields as zoned digits '
           + 'with %EDITC code X)' + CycleNote(g_gType(i_g)) + '; not tested');

@@ -3,7 +3,12 @@
 A means the line was converted, but the result depends on something the converter
 cannot check. The R list is in `REVIEW-ITEMS.md`. Audit of 2026-10-27.
 
-## A reported by the rules (`rules/opcodes.json`, 17 operations)
+## A reported by the rules (`rules/opcodes.json`, 21 operations)
+
+Since FREE-56 the table also shows A for `GOTO`, `TAG`, `CAB` (patterns written, the rest R, see
+`ConvertJump`) and `EXFMT`, `READC` (C with a WORKSTN file in the source, R without one; the code
+decides). `TIME` is C in the table. These rows describe the operation; the report line carries the
+status the code gives.
 
 | Operation | Assumption | Audit |
 |---|---|---|
@@ -11,10 +16,10 @@ cannot check. The R list is in `REVIEW-ITEMS.md`. Audit of 2026-10-27.
 | `EXCPT` | printer file DDS made from the O specifications is correct | keep A until the DDS is tested (FREE-06) |
 | `MVR` | whole numbers only, `%rem` of the `DIV` operands | keep A; decimals stay R |
 | `RETRN` | `RETURN`; halt and `LR` checks done by the runtime | keep A |
-| `SORTA`, `XFOOT` | array comes from an E specification | could be C when the array is known; today A always |
+| `SORTA`, `XFOOT` | array comes from an E specification | done (FREE-56): C when the array is defined in the member, A when it is not |
 | `SQRT` | decimals of the result | keep A |
 | `TESTZ` (2, 3), `TESTN` (3) | zone/digit test with `%bitand` / `%check` | keep A: EBCDIC assumed |
-| `TIME` | 6-digit result only | could be C for 6 digits and R otherwise |
+| `TIME` | 6-digit result only | done (FREE-56): C for a result of 6 digits and 0 decimals defined on the line, R otherwise (as before) |
 | `CAT`, `SUBST`, `XLATE` (3) | without `P` the rest of the result keeps its old value in RPG III; free-form pads | keep A: the real difference |
 | `CHECK`, `CHEKR`, `SCAN` (3) | start beyond the string: error in RPG III, 0 in free-form | keep A |
 | `OCUR` (3) | error indicator (occurrence out of range) | keep A |
@@ -47,13 +52,22 @@ cannot check. The R list is in `REVIEW-ITEMS.md`. Audit of 2026-10-27.
 
 ## Proposed changes
 
-1. `SORTA` and `XFOOT`: report C when the array is defined in the member.
+All three were written on 2026-10-30 (FREE-56, not compiled or tested):
+
+1. `SORTA` and `XFOOT`: reported C when the array is defined in the member.
 2. `TIME`: C for a 6-digit result field, R otherwise.
-3. Group the A reasons under one reason text each so a report counts them by cause.
+3. The A reasons of IACNVFREE have one fixed text per cause (no file, label or record names: the
+   source text on the report line shows them) and `IAcnvRpt` prints "Assumptions by cause" with a
+   count for each, before the totals. The causes of one line are joined by ` | ` (`AddReason`,
+   `AppendText`) and counted one by one; a cause can hold `; ` itself. Only IACNVFREE is counted:
+   the reasons of IAOCLTOCLE and IACNVDSPF still hold names. Left as they are in IACNVFREE: some
+   notes of `IAfreeCvt` (`INFDS`, `RECNO` and relative record number fields, `UC`) hold a field
+   name, and a line whose causes together pass 190 characters (a half-adjust note and the cycle
+   note) is cut at the end, as before.
 
 ## R list audit (REVIEW-ITEMS.md)
 
-- Done or by design, no work: RV-15, RV-34, RV-35.
+- Done or by design, no work: RV-15, RV-34, RV-35, `1P` (RV-20, RV-60: valid on output records only, written with the skeleton).
 - Written, waiting for a compile and test: RV-01 to RV-11, RV-13, RV-14 (RPG II/III), RV-30, RV-32, RV-36, RV-37 (WHENEVER GOTO, 2026-10-28, option decided by the owner: explicit SQLCODE tests), RV-50 to RV-55, RV-57, RV-58, RV-59.
 - Decided 2026-10-27: RV-20/21 (cycle skeleton, FREE-36 first increment), FREE-06 second member for the printer DDS, RV-12/31 (WORKSTN through IACNVDSPF display files, after the cycle).
 - Needs a decision: none open.

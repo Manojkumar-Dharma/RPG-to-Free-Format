@@ -591,12 +591,11 @@ dcl-proc ConvertExtension;
   if %subst(l_name:1:3) = 'TAB';
     l_status = C_STS_ASSUMPTION;
     if l_note <> '';
-      l_note += '; ';
+      l_note += ' | ';
     endif;
-    l_note += 'Table ' + l_name + ' is declared as an array with the index field '
-             + l_name + '_IDX: the table name in a calculation means the entry '
-             + 'found by the last LOKUP, written ' + l_name + '(' + l_name
-             + '_IDX)';
+    l_note += 'A table is declared as an array with an index field NAME_IDX: '
+             + 'the table name in a calculation means the entry found by the '
+             + 'last LOKUP, written NAME(NAME_IDX)';
   endif;
   RptItem(l_status:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
 end-proc;
@@ -1075,7 +1074,7 @@ dcl-proc ConvertHeader;
   // Columns 75-80: program name, set on the compile command in RPG IV.
   l_progId = %trim(%subst(i_line:75:6));
   if %len(l_progId) > 0;
-    AppendText(l_note:'program name ' + l_progId + ' is set on the compile command');
+    AppendText(l_note:'the program name is set on the compile command');
   endif;
 
   if l_kw <> '';
@@ -1974,7 +1973,7 @@ dcl-proc AppendText;
   end-pi;
 
   if %len(io_text) > 0;
-    io_text += '; ';
+    io_text += ' | ';
   endif;
   io_text += i_add;
 end-proc;
@@ -2331,8 +2330,8 @@ dcl-proc ConvertInput;
   if l_kind = 'F';
     l_dsName = l_name + '_REC';
     l_head = 'dcl-ds ' + l_dsName + ' len(' + %trim(%char(l_recLen)) + ');';
-    l_note = 'record layout of file ' + l_name + ' declared as data structure '
-             + l_dsName + ': READ and CHAIN of the file must name it (FREE-05)';
+    l_note = 'record layout of the file declared as a data structure: READ and '
+             + 'CHAIN of the file must name it (FREE-05)';
   elseif l_name = '';
     l_head = 'dcl-ds *n;';
   else;
@@ -2374,7 +2373,7 @@ dcl-proc ConvertInput;
                + ' (tested after READ in the cycle)':g_sourceLineNos(l_k));
       RptItem(C_STS_ASSUMPTION:g_sourceLineNos(l_k)
               :%trimr(%subst(g_sourceLines(l_k):6:69))
-              :'Record type ' + %char(l_typeNo) + ': identification codes and indicator '
+              :'Record type: identification codes and indicator '
                + 'are written in the cycle skeleton (FREE-49)');
     elseif l_typed and IsInputContinuation(l_nextUp);
       BlockAdd('// ' + %trimr(%subst(g_sourceLines(l_k):6:69)):g_sourceLineNos(l_k));
