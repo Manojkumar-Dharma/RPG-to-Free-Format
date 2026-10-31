@@ -1,0 +1,15 @@
+      * RPG II cycle with a primary and a secondary file (FREE-55 part B): match field CUST
+     H
+     FSALES   IP A       80            DISK
+     FPAYMNT  IS A       80            DISK
+     ISALES   AA  01
+     I                                        1   30REGION
+     I                                        4   60CUST    M1
+     I                                        7  122AMT
+     IPAYMNT  BB  02
+     I                                        1   30PREG
+     I                                        4   60PCUST   M1
+     I                                        7  122PAMT
+      * detail calculations: sales records with indicator 01, payments with 02
+     C   01                ADD  AMT       STOT    92
+     C   02                ADD  PAMT      PTOT    92

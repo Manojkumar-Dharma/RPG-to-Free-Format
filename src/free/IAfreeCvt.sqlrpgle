@@ -88,9 +88,9 @@ dcl-s g_cycCtlType int(10) dim(50);
 dcl-s g_inPrimary ind inz(*off);              // the I specification block of a cycle file
 // FREE-55: secondary files of the cycle (part A: the state; part B writes the skeleton).
 // The slot of a cycle file is 1 for the primary file, 2 and up for the secondary files
-// in the order of the file descriptions. C_MULTIFILE is off until the skeleton for
-// several files is written (secondary files stay R).
-dcl-c C_MULTIFILE *off;
+// in the order of the file descriptions. C_MULTIFILE: the skeleton for several files is
+// written (part B, IAfreeCalc) for RPG II and III; RPG IV secondary files stay R.
+dcl-c C_MULTIFILE *on;
 dcl-s g_cycSec varchar(8) dim(8);
 dcl-s g_cycSecCount int(10) inz(0);
 dcl-s g_cycCur int(10) inz(0);                // slot of the file whose I specification is read
@@ -3192,6 +3192,8 @@ dcl-proc CycleFileOk;
   dcl-s l_up char(100);
   dcl-s l_primary int(10) inz(0);
   dcl-s l_second int(10) inz(0);
+  dcl-s l_secBad int(10) inz(0);
+  dcl-s l_desc int(10) inz(0);
   dcl-s l_other int(10) inz(0);
   dcl-s l_col int(10) inz(16);
 
@@ -3208,9 +3210,19 @@ dcl-proc CycleFileOk;
           l_primary += 1;
         when %subst(l_up:l_col:1) = 'S';
           l_second += 1;
+          // FREE-55: a secondary file must be a program described DISK input file.
+          if g_dialect <> '4' and (%subst(l_up:15:1) <> 'I' or %subst(l_up:19:1) = 'E'
+             or %trim(%subst(l_up:40:7)) <> 'DISK');
+            l_secBad += 1;
+          endif;
         when %subst(l_up:l_col:1) = 'R' or %subst(l_up:l_col:1) = 'T';
           l_other += 1;
       endsl;
+      // Descending sequence (column 18 D of RPG II and III) is not converted.
+      if g_dialect <> '4' and %subst(l_up:18:1) = 'D'
+         and (%subst(l_up:l_col:1) = 'P' or %subst(l_up:l_col:1) = 'S');
+        l_desc += 1;
+      endif;
     endif;
   endfor;
   select;
@@ -3218,9 +3230,13 @@ dcl-proc CycleFileOk;
       o_why = 'more than one primary file';
     when l_other > 0;
       o_why = 'record address and table files are not converted';
-    when l_second > 0 and not C_MULTIFILE;
-      o_why = 'secondary files (the RPG cycle) are not converted: the cycle skeleton '
-              + 'handles one primary file';
+    when l_second > 0 and (not C_MULTIFILE or g_dialect = '4');
+      o_why = 'secondary files (the RPG cycle) are not converted for RPG IV yet '
+              + '(FREE-55 part D)';
+    when l_desc > 0;
+      o_why = 'a file with descending sequence (D in column 18) is not converted';
+    when l_secBad > 0;
+      o_why = 'a secondary file is not a program described DISK input file';
     when l_second > 0 and l_primary = 0;
       o_why = 'secondary files need a primary file';
     when l_second > 8;
@@ -3464,6 +3480,26 @@ dcl-proc CycleFileAt export;
   endif;
   o_recDs = o_file + '_REC';
   return *on;
+end-proc;
+
+dcl-proc CycleFileLength export;
+  dcl-pi *n int(10);
+    i_slot int(10) const;
+  end-pi;
+
+  dcl-s l_file int(10);
+  dcl-s l_name varchar(8);
+
+  if i_slot = 1;
+    l_name = g_cycFile;
+  elseif i_slot > 1 and i_slot <= g_cycSecCount + 1;
+    l_name = g_cycSec(i_slot - 1);
+  endif;
+  l_file = FindFile(l_name);
+  if l_name = '' or l_file = 0;
+    return 0;
+  endif;
+  return g_fileLens(l_file);
 end-proc;
 
 dcl-proc CycleTypeFile export;

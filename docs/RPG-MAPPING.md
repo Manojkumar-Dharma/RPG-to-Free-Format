@@ -1183,7 +1183,7 @@ Sample: `samples/FREECYT.rpg36`. Needs a compile and test on the IBM i.
 
 ## Secondary files and matching records (FREE-55, RV-20, RV-21, RV-60): design
 
-Status: **part A written** (the cycle state in `IAfreeCvt`, `C_MULTIFILE` off: secondary files still R, match fields `M1`-`M9` of a primary file are accepted and recorded); parts B to D not written (FREE-55 in `PLANNED.md`). Source: SC09-1818 chapter 12 (Primary/Secondary/Multifile Processing), Table 6 and Figures 112-115. It extends the cycle skeleton of FREE-36, FREE-49, FREE-60 and FREE-63 from one input file to a primary file and secondary files (designation `S`, in the order of the file descriptions), with or without match fields (`M1`-`M9`, columns 65-66 of the I specification field line) and the matching record indicator `MR`.
+Status: **parts A and B written** for RPG II and III (A: the cycle state in `IAfreeCvt`; B: the skeleton in `IAfreeCalc`: hold areas, selection, loop); part C (`MR`) and part D (RPG IV, `samples/FREEMR.rpg36`) not written (FREE-55 in `PLANNED.md`). RPG IV programs with secondary files stay R. Source: SC09-1818 chapter 12 (Primary/Secondary/Multifile Processing), Table 6 and Figures 112-115. It extends the cycle skeleton of FREE-36, FREE-49, FREE-60 and FREE-63 from one input file to a primary file and secondary files (designation `S`, in the order of the file descriptions), with or without match fields (`M1`-`M9`, columns 65-66 of the I specification field line) and the matching record indicator `MR`.
 
 What the manual says, as used here:
 
@@ -1207,6 +1207,8 @@ dow *on;
   // move the selected hold record to FILE_REC, set the record identifying indicator, control breaks
 enddo;
 ```
+
+**Part B as written** (`CycDeclareMulti`, `CycKeyMulti`, `CycReadMulti`, `CycAssignMulti` and the changes of `CycTypeTest`, `CycKeepControl`, `CycBreakTest` in `IAfreeCalc`): `IA_NEXT` is the selected record as bytes (the longest record), `IA_H1` to `IA_Hn` the hold areas (`likeds` of the record layout of each file), `IA_L(i)` loaded, `IA_E(i)` end of file, `IA_W(i)` the record has a match key, `IA_K(i)` the key, `IA_SEL` the file selected. The keys are built from `IA_Hi.field` with `%editc(field:'X')` for numeric fields. The record identifying codes and indicators of a record type are tested only for the file selected (`IA_SEL = k and (...)`); the control fields of a file are compared with their last value (`IA_P_name`) taken from the hold area of the file. A file with descending sequence (`D` in column 18), a secondary file that is not a program described DISK input file, or a file without record layout: R, with the reason. Sample `samples/FREEMF.rpg36` (primary `SALES` and secondary `PAYMNT` with the match field `CUST`, record identifying indicators 01 and 02): expected two hold areas, the record with the lower `CUST` first, the sales record before the payment of the same `CUST` (earlier file first). Written from the manual and not from a run.
 
 Match keys: the match fields of one record concatenated as characters (numeric fields with `%editc(field:'X')` so that the order of the characters is the order of the values; alphanumeric fields as they are). Control level fields (`L1`-`L9`) of every file are kept with `IA_P_name` as in FREE-49, so a control break is found whichever file the record comes from.
 

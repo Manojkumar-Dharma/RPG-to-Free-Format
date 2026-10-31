@@ -212,6 +212,10 @@ dcl-pr CycleFileAt ind;
   o_recDs varchar(12);
 end-pr;
 
+dcl-pr CycleFileLength int(10);
+  i_slot int(10) const;
+end-pr;
+
 dcl-pr CycleTypeFile int(10);
   i_type int(10) const;
 end-pr;

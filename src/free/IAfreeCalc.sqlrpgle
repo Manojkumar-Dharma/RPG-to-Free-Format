@@ -92,6 +92,7 @@ dcl-s g_cycHasTotals ind inz(*off);
 dcl-s g_cycPreMax int(10) inz(0);
 dcl-s g_cycUsesRt ind inz(*off);
 dcl-s g_cycNoPrim ind inz(*off);          // RV-60: the cycle without a primary file
+dcl-s g_cycMulti ind inz(*off);           // FREE-55: a primary and secondary files
 
 // GOTO, CABxx and TAG (RV-14): the calculation lines in order, with what the
 // planner decided for each of them (BuildJumpPlan). Kinds: O group (IF, SELEC),
@@ -312,6 +313,7 @@ dcl-proc CalcStart export;
   g_cycPreMax = 0;
   g_cycUsesRt = *off;
   g_cycNoPrim = *off;
+  g_cycMulti = *off;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -6620,6 +6622,8 @@ dcl-proc CycInit;
   dcl-s l_k int(10);
   dcl-s l_name varchar(6);
   dcl-s l_level int(10);
+  dcl-s l_file8 varchar(8);
+  dcl-s l_rec12 varchar(12);
 
   g_cycChecked = *on;
   if not CycleInfo(g_cycFile:g_cycRec:l_count);
@@ -6634,6 +6638,16 @@ dcl-proc CycInit;
       endif;
     endif;
     return;
+  endif;
+  // FREE-55: a primary file and secondary files: every file needs its record layout.
+  if CycleFileCount() > 1;
+    g_cycMulti = *on;
+    for l_k = 1 to CycleFileCount();
+      if not CycleFileAt(l_k:l_file8:l_rec12);
+        g_cycMulti = *off;
+        return;
+      endif;
+    endfor;
   endif;
   g_cycMax = g_cycPreMax;
   for l_k = 1 to l_count;
@@ -6852,7 +6866,15 @@ dcl-proc CycTypeTest;
   g_depth += 1;
   for l_k = 1 to l_n;
     if CycleType(l_k:l_cond:l_ind);
-      if l_cond = '';
+      if g_cycMulti;
+        // FREE-55: the record type belongs to one file: the one selected.
+        if l_cond = '';
+          Emit('when IA_SEL = ' + %char(CycleTypeFile(l_k)) + ';':g_lastLineNo);
+        else;
+          Emit('when IA_SEL = ' + %char(CycleTypeFile(l_k)) + ' and (' + l_cond + ');'
+               :g_lastLineNo);
+        endif;
+      elseif l_cond = '';
         Emit('other;':g_lastLineNo);
         l_other = *on;
       else;
@@ -6866,7 +6888,7 @@ dcl-proc CycTypeTest;
   if not l_other;
     Emit('other;':g_lastLineNo);
     Emit('// no record identification code matches: the RPG cycle halts here (not '
-         + 'converted)':g_lastLineNo:1);
+         + 'converted); a file without record types comes here too':g_lastLineNo:1);
   endif;
   g_depth -= 1;
   Emit('endsl;':g_lastLineNo);
@@ -6889,20 +6911,37 @@ dcl-proc CycKeepControl;
   dcl-s l_ind char(2);
   dcl-s l_file varchar(8);
   dcl-s l_rec varchar(12);
+  dcl-s l_src varchar(40);
+  dcl-s l_guard varchar(20);
 
-  if CycleTypeCount() = 0 or not CycleInfo(l_file:l_rec:l_count);
+  if (CycleTypeCount() = 0 and not g_cycMulti) or not CycleInfo(l_file:l_rec:l_count);
     return;
   endif;
   for l_k = 1 to l_count;
     if CycleControl(l_k:l_name:l_level);
       l_type = CycleControlType(l_k);
       DeclareHidden('IA_P_' + l_name:'like(' + l_name + ')');
+      l_src = 'IA_NEXT.' + l_name;
+      l_guard = '';
+      if g_cycMulti;
+        // FREE-55: the control field of a file is read from the hold area of that file,
+        // when a record of that file is the one selected.
+        l_src = 'IA_H' + %char(CycleControlFile(l_k)) + '.' + l_name;
+        l_guard = 'IA_SEL = ' + %char(CycleControlFile(l_k));
+      endif;
       if l_type > 0 and CycleType(l_type:l_cond:l_ind) and l_cond <> '';
+        if l_guard <> '';
+          l_cond = l_guard + ' and (' + l_cond + ')';
+        endif;
         Emit('if ' + l_cond + ';':g_lastLineNo);
-        Emit('IA_P_' + l_name + ' = IA_NEXT.' + l_name + ';':g_lastLineNo:1);
+        Emit('IA_P_' + l_name + ' = ' + l_src + ';':g_lastLineNo:1);
+        Emit('endif;':g_lastLineNo);
+      elseif l_guard <> '';
+        Emit('if ' + l_guard + ';':g_lastLineNo);
+        Emit('IA_P_' + l_name + ' = ' + l_src + ';':g_lastLineNo:1);
         Emit('endif;':g_lastLineNo);
       else;
-        Emit('IA_P_' + l_name + ' = IA_NEXT.' + l_name + ';':g_lastLineNo);
+        Emit('IA_P_' + l_name + ' = ' + l_src + ';':g_lastLineNo);
       endif;
     endif;
   endfor;
@@ -6931,7 +6970,7 @@ dcl-proc CycBreakTest;
   if not CycleInfo(l_file:l_rec:l_count) or l_count = 0;
     return;
   endif;
-  l_typed = (CycleTypeCount() > 0);
+  l_typed = (CycleTypeCount() > 0 or g_cycMulti);
   Emit('if IA_FIRST;':g_lastLineNo);
   g_depth += 1;
   Emit('// the first record: a control break of every control level':g_lastLineNo);
@@ -6951,8 +6990,15 @@ dcl-proc CycBreakTest;
           // with the value of the last record of that type.
           l_type = CycleControlType(l_k);
           l_term = 'IA_NEXT.' + l_name + ' <> IA_P_' + l_name;
+          if g_cycMulti;
+            l_term = 'IA_H' + %char(CycleControlFile(l_k)) + '.' + l_name
+                     + ' <> IA_P_' + l_name;
+          endif;
           if l_type > 0 and CycleType(l_type:l_tcond:l_tind) and l_tcond <> '';
             l_term = '(' + l_tcond + ') and ' + l_term;
+          endif;
+          if g_cycMulti;
+            l_term = 'IA_SEL = ' + %char(CycleControlFile(l_k)) + ' and ' + l_term;
           endif;
           if %len(l_term) > 176;
             RptItem(C_STS_REVIEW:g_lastLineNo:'Control field ' + l_name
@@ -7019,12 +7065,18 @@ dcl-proc CycOpen;
     g_declAt = OutCount();
   endif;
   DeclareHidden('IA_FIRST':'ind inz(*on)');
-  if not g_cycNoPrim and g_protoLineCount < C_MAXPLINE;
+  if g_cycMulti;
+    CycDeclareMulti();
+  elseif not g_cycNoPrim and g_protoLineCount < C_MAXPLINE;
     g_protoLineCount += 1;
     g_protoLine(g_protoLineCount) = 'dcl-ds IA_NEXT likeds(' + g_cycRec + ');';
   endif;
   g_cycleNoted = *on;
-  if g_cycNoPrim;
+  if g_cycMulti;
+    Emit('// RPG cycle skeleton (IACNVFREE): the program cycle of the primary file '
+         + g_cycFile + ' and the secondary files, a hold area for each file '
+         + '(FREE-55, check)':g_lastLineNo);
+  elseif g_cycNoPrim;
     Emit('// RPG cycle skeleton (IACNVFREE): the program cycle without a primary '
          + 'file, it repeats until the program sets LR on (check)':g_lastLineNo);
   else;
@@ -7053,7 +7105,9 @@ dcl-proc CycOpen;
     Emit('endif;':g_lastLineNo);
   endif;
   CycLevels(*off:g_cycMax);
-  if not g_cycNoPrim;
+  if g_cycMulti;
+    CycReadMulti();
+  elseif not g_cycNoPrim;
     Emit('read ' + g_cycFile + ' IA_NEXT;':g_lastLineNo);
     Emit('if %eof(' + g_cycFile + ');':g_lastLineNo);
     Emit('*inlr = *on;':g_lastLineNo:1);
@@ -7067,7 +7121,9 @@ dcl-proc CycOpen;
     Emit('exsr IA_TOTALS;':g_lastLineNo:1);
     Emit('endif;':g_lastLineNo);
   endif;
-  if not g_cycNoPrim;
+  if g_cycMulti;
+    CycAssignMulti();
+  elseif not g_cycNoPrim;
     Emit(g_cycRec + ' = IA_NEXT;':g_lastLineNo);
     // FREE-74: the field indicators of the I specification of the primary file, one
     // statement for each line.
@@ -7085,7 +7141,14 @@ dcl-proc CycOpen;
   endif;
   Emit('IA_FIRST = *off;':g_lastLineNo);
   g_cycState = 'D';
-  if g_cycNoPrim;
+  if g_cycMulti;
+    RptItem(C_STS_ASSUMPTION:g_lastLineNo:'RPG cycle'
+            :'Cycle skeleton written for a primary file and secondary files '
+             + '(FREE-55): a hold area for each file; the record without match '
+             + 'fields is processed first, then the lowest match field, the '
+             + 'earlier file first; ascending sequence is not checked (RPG9032 '
+             + 'not converted); MR is not written yet');
+  elseif g_cycNoPrim;
     RptItem(C_STS_ASSUMPTION:g_lastLineNo:'RPG cycle'
             :'Cycle skeleton written without a primary file (RV-60): the '
              + 'detail calculations repeat until the program sets LR on; '
@@ -7098,6 +7161,221 @@ dcl-proc CycOpen;
              + 'detail and total records of a converted printer file are '
              + 'written in it (RV-60)');
   endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-55 (part B): the declarations of the skeleton for a primary file and secondary
+// files: IA_NEXT (the selected record as bytes, as long as the longest record), a hold
+// area for each file (the record layout of the file), the flags of the hold areas, the
+// match key of each one, the number of the file selected (IA_SEL).
+dcl-proc CycDeclareMulti;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_max int(10) inz(0);
+  dcl-s l_file varchar(8);
+  dcl-s l_rec varchar(12);
+
+  for l_k = 1 to CycleFileCount();
+    if CycleFileLength(l_k) > l_max;
+      l_max = CycleFileLength(l_k);
+    endif;
+  endfor;
+  if g_protoLineCount < C_MAXPLINE;
+    g_protoLineCount += 1;
+    g_protoLine(g_protoLineCount) = 'dcl-ds IA_NEXT len(' + %char(l_max) + ') end-ds;';
+  endif;
+  for l_k = 1 to CycleFileCount();
+    if CycleFileAt(l_k:l_file:l_rec) and g_protoLineCount < C_MAXPLINE;
+      g_protoLineCount += 1;
+      g_protoLine(g_protoLineCount) = 'dcl-ds IA_H' + %char(l_k) + ' likeds('
+                                      + l_rec + ');';
+    endif;
+  endfor;
+  DeclareHidden('IA_L':'ind dim(9)');
+  DeclareHidden('IA_E':'ind dim(9)');
+  DeclareHidden('IA_W':'ind dim(9)');
+  DeclareHidden('IA_K':'varchar(100) dim(9)');
+  DeclareHidden('IA_SEL':'int(10)');
+  DeclareHidden('IA_I':'int(10)');
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-55 (part B): the match key of the record in the hold area of file i, in IA_K(i),
+// and IA_W(i) when the record has match fields. The match fields M1 to M9 of the record
+// type, in the order of their numbers, one after the other; a numeric field with
+// %EDITC(field:'X'), so that the order of the characters is the order of the values.
+dcl-proc CycKeyMulti;
+  dcl-pi *n;
+    i_file int(10) const;
+  end-pi;
+
+  dcl-s l_t int(10);
+  dcl-s l_typed ind inz(*off);
+  dcl-s l_cond varchar(200);
+  dcl-s l_ind char(2);
+  dcl-s l_first ind inz(*on);
+
+  Emit('IA_W(' + %char(i_file) + ') = *off;':g_lastLineNo);
+  Emit('IA_K(' + %char(i_file) + ') = '''';':g_lastLineNo);
+  for l_t = 1 to CycleTypeCount();
+    if CycleTypeFile(l_t) = i_file;
+      l_typed = *on;
+    endif;
+  endfor;
+  if not l_typed;
+    CycKeyStatement(i_file:0);
+    return;
+  endif;
+  // record types: the type of the record decides which match fields it has
+  Emit('select;':g_lastLineNo);
+  g_depth += 1;
+  for l_t = 1 to CycleTypeCount();
+    if CycleTypeFile(l_t) = i_file and CycleType(l_t:l_cond:l_ind);
+      if l_cond = '';
+        Emit('other;':g_lastLineNo);
+      else;
+        Emit('when ' + l_cond + ';':g_lastLineNo);
+      endif;
+      g_depth += 1;
+      CycKeyStatement(i_file:l_t);
+      g_depth -= 1;
+    endif;
+  endfor;
+  g_depth -= 1;
+  Emit('endsl;':g_lastLineNo);
+end-proc;
+
+// ------------------------------------------------------------------
+// The assignment of the key of one record type (0: a file without record types).
+dcl-proc CycKeyStatement;
+  dcl-pi *n;
+    i_file int(10) const;
+    i_type int(10) const;
+  end-pi;
+
+  dcl-s l_no int(10);
+  dcl-s l_m int(10);
+  dcl-s l_name varchar(6);
+  dcl-s l_mno int(10);
+  dcl-s l_mtype int(10);
+  dcl-s l_mfile int(10);
+  dcl-s l_kind char(1);
+  dcl-s l_len int(10);
+  dcl-s l_dec int(10);
+  dcl-s l_expr varchar(190) inz('');
+  dcl-s l_ref varchar(20);
+
+  for l_no = 1 to 9;
+    for l_m = 1 to CycleMatchCount();
+      if CycleMatchField(l_m:l_name:l_mno:l_mtype:l_mfile)
+         and l_mno = l_no and l_mfile = i_file and l_mtype = i_type;
+        l_ref = 'IA_H' + %char(i_file) + '.' + l_name;
+        l_kind = 'C';
+        if CalcFieldInfo(l_name:l_kind:l_len:l_dec) and l_kind = 'N';
+          l_ref = '%editc(' + l_ref + ':''X'')';
+        endif;
+        if l_expr <> '';
+          l_expr += ' + ';
+        endif;
+        l_expr += l_ref;
+      endif;
+    endfor;
+  endfor;
+  if l_expr <> '';
+    Emit('IA_K(' + %char(i_file) + ') = ' + l_expr + ';':g_lastLineNo);
+    Emit('IA_W(' + %char(i_file) + ') = *on;':g_lastLineNo);
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-55 (part B): the read part of the cycle for a primary file and secondary files:
+// the hold areas are filled, a record is selected (the first one without match fields,
+// else the lowest match key, the earlier file first on a tie; no record: LR), the
+// record identifying indicators and the control breaks are decided for it.
+dcl-proc CycReadMulti;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_n int(10);
+  dcl-s l_file varchar(8);
+  dcl-s l_rec varchar(12);
+  dcl-s l_s varchar(3);
+
+  l_n = CycleFileCount();
+  Emit('// hold areas: a record of every file that has none and is not at its end':g_lastLineNo);
+  for l_k = 1 to l_n;
+    l_s = %char(l_k);
+    CycleFileAt(l_k:l_file:l_rec);
+    Emit('if not IA_L(' + l_s + ') and not IA_E(' + l_s + ');':g_lastLineNo);
+    g_depth += 1;
+    Emit('read ' + l_file + ' IA_H' + l_s + ';':g_lastLineNo);
+    Emit('if %eof(' + l_file + ');':g_lastLineNo);
+    Emit('IA_E(' + l_s + ') = *on;':g_lastLineNo:1);
+    Emit('else;':g_lastLineNo);
+    Emit('IA_L(' + l_s + ') = *on;':g_lastLineNo:1);
+    Emit('IA_NEXT = IA_H' + l_s + ';':g_lastLineNo:1);
+    g_depth += 1;
+    CycKeyMulti(l_k);
+    g_depth -= 1;
+    Emit('endif;':g_lastLineNo);
+    g_depth -= 1;
+    Emit('endif;':g_lastLineNo);
+  endfor;
+  Emit('// the record to process: one without match fields first, else the lowest match '
+       + 'field (the earlier file on a tie)':g_lastLineNo);
+  Emit('IA_SEL = 0;':g_lastLineNo);
+  Emit('for IA_I = 1 to ' + %char(l_n) + ';':g_lastLineNo);
+  Emit('if IA_L(IA_I) and not IA_W(IA_I);':g_lastLineNo:1);
+  Emit('IA_SEL = IA_I;':g_lastLineNo:2);
+  Emit('leave;':g_lastLineNo:2);
+  Emit('endif;':g_lastLineNo:1);
+  Emit('endfor;':g_lastLineNo);
+  Emit('if IA_SEL = 0;':g_lastLineNo);
+  Emit('for IA_I = 1 to ' + %char(l_n) + ';':g_lastLineNo:1);
+  Emit('if IA_L(IA_I) and IA_W(IA_I);':g_lastLineNo:2);
+  Emit('if IA_SEL = 0;':g_lastLineNo:3);
+  Emit('IA_SEL = IA_I;':g_lastLineNo:4);
+  Emit('elseif IA_K(IA_I) < IA_K(IA_SEL);':g_lastLineNo:3);
+  Emit('IA_SEL = IA_I;':g_lastLineNo:4);
+  Emit('endif;':g_lastLineNo:3);
+  Emit('endif;':g_lastLineNo:2);
+  Emit('endfor;':g_lastLineNo:1);
+  Emit('endif;':g_lastLineNo);
+  Emit('if IA_SEL = 0;':g_lastLineNo);
+  Emit('*inlr = *on;':g_lastLineNo:1);
+  Emit('leave;':g_lastLineNo:1);
+  Emit('endif;':g_lastLineNo);
+  Emit('IA_L(IA_SEL) = *off;':g_lastLineNo);
+  Emit('select;':g_lastLineNo);
+  for l_k = 1 to l_n;
+    Emit('when IA_SEL = ' + %char(l_k) + ';':g_lastLineNo:1);
+    Emit('IA_NEXT = IA_H' + %char(l_k) + ';':g_lastLineNo:2);
+  endfor;
+  Emit('endsl;':g_lastLineNo);
+  CycTypeTest();
+  CycBreakTest();
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-55 (part B): the selected record becomes the record of its file.
+dcl-proc CycAssignMulti;
+  dcl-pi *n;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_file varchar(8);
+  dcl-s l_rec varchar(12);
+
+  Emit('select;':g_lastLineNo);
+  for l_k = 1 to CycleFileCount();
+    CycleFileAt(l_k:l_file:l_rec);
+    Emit('when IA_SEL = ' + %char(l_k) + ';':g_lastLineNo:1);
+    Emit(l_rec + ' = IA_H' + %char(l_k) + ';':g_lastLineNo:2);
+  endfor;
+  Emit('endsl;':g_lastLineNo);
 end-proc;
 
 // ------------------------------------------------------------------
