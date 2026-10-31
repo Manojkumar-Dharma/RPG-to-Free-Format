@@ -3076,6 +3076,46 @@ dcl-proc CvtAddType export;
   g_cycTypeCur = 1;
 end-proc;
 
+// FREE-69, RV-21: several record types of an RPG IV primary file (record identification
+// codes and AND/OR lines). CvtResetTypes clears the types, CvtAddTypeCond adds one
+// (record identifying indicator or '  ', and the test of IA_NEXT or ''), and
+// CvtAddControlType adds a control field that belongs to record type i_type.
+dcl-proc CvtResetTypes export;
+  g_cycTypeCount = 0;
+  g_cycTypeCur = 0;
+end-proc;
+
+dcl-proc CvtAddTypeCond export;
+  dcl-pi *n;
+    i_ind char(2) const;
+    i_cond varchar(200) const;
+  end-pi;
+
+  if g_cycTypeCount >= 20;
+    return;
+  endif;
+  g_cycTypeCount += 1;
+  g_cycTypeCond(g_cycTypeCount) = i_cond;
+  g_cycTypeInd(g_cycTypeCount) = i_ind;
+  g_cycTypeCur = g_cycTypeCount;
+end-proc;
+
+dcl-proc CvtAddControlType export;
+  dcl-pi *n;
+    i_name varchar(6) const;
+    i_level int(10) const;
+    i_type int(10) const;
+  end-pi;
+
+  if g_cycCtlCount >= 50;
+    return;
+  endif;
+  g_cycCtlCount += 1;
+  g_cycCtlName(g_cycCtlCount) = i_name;
+  g_cycCtlLevel(g_cycCtlCount) = i_level;
+  g_cycCtlType(g_cycCtlCount) = i_type;
+end-proc;
+
 // The record layout of the primary file is written.
 dcl-proc CvtSetLayout export;
   dcl-pi *n;

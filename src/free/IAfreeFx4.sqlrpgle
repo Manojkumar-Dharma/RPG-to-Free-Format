@@ -1162,6 +1162,318 @@ dcl-proc InputField4;
 end-proc;
 
 // ------------------------------------------------------------------
+// FREE-69: an AND or OR line of the record identification entries (columns 14-16,
+// the file name columns before them blank; the manual page of the input specification
+// did not show the columns, the RPG II/III position is taken).
+dcl-proc IsAndOr4;
+  dcl-pi *n ind;
+    i_up char(100) const;
+  end-pi;
+
+  return %trim(%subst(i_up:7:7)) = ''
+         and (%trim(%subst(i_up:14:3)) = 'AND' or %trim(%subst(i_up:14:3)) = 'OR');
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-69, RV-21: the three record identification codes of one RPG IV record or
+// AND/OR line (columns 23-46: position 5, Not 1, code 1, character 1; sets at 23, 31
+// and 39) as one test of IA_NEXT. Only the code C is converted; Z and D stay R.
+dcl-proc Codes4;
+  dcl-pi *n varchar(190);
+    i_up char(100) const;
+    i_line char(100) const;
+    i_recLen int(10) const;
+    o_cond varchar(200);
+  end-pi;
+
+  dcl-s l_g int(10);
+  dcl-s l_from int(10);
+  dcl-s l_pos varchar(5);
+  dcl-s l_not char(1);
+  dcl-s l_code char(1);
+  dcl-s l_chr char(1);
+  dcl-s l_lit varchar(2);
+  dcl-s l_term varchar(60);
+  dcl-s l_text varchar(200) inz('');
+
+  o_cond = '';
+  for l_g = 0 to 2;
+    l_from = 23 + 8 * l_g;
+    l_pos = %trim(%subst(i_up:l_from:5));
+    l_not = %subst(i_up:l_from + 5:1);
+    l_code = %subst(i_up:l_from + 6:1);
+    l_chr = %subst(i_line:l_from + 7:1);
+    if l_pos = '' and l_not = ' ' and l_code = ' ' and l_chr = ' ';
+      iter;
+    endif;
+    if l_pos = '' or %check('0123456789':l_pos) > 0;
+      return 'Record identification position (columns ' + %char(l_from) + '-'
+             + %char(l_from + 4) + ') is not valid';
+    endif;
+    if %dec(l_pos:5:0) < 1 or %dec(l_pos:5:0) > i_recLen;
+      return 'Record identification position ' + l_pos + ' is outside the record';
+    endif;
+    if l_not <> ' ' and l_not <> 'N';
+      return 'The Not entry of a record identification code must be blank or N';
+    endif;
+    if l_code = 'Z' or l_code = 'D';
+      return 'Zone and digit record identification codes (Z and D) are not converted';
+    endif;
+    if l_code <> 'C';
+      return 'The record identification code must be C (character)';
+    endif;
+    l_lit = l_chr;
+    if l_chr = '''';
+      l_lit = '''''';
+    endif;
+    l_term = '%subst(IA_NEXT:' + %char(%dec(l_pos:5:0)) + ':1)';
+    if l_not = 'N';
+      l_term = l_term + ' <> ';
+    else;
+      l_term = l_term + ' = ';
+    endif;
+    if l_text <> '';
+      l_text = l_text + ' and ';
+    endif;
+    l_text = l_text + l_term + '''' + l_lit + '''';
+  endfor;
+  if l_text = '';
+    return 'The record identification codes are blank';
+  endif;
+  o_cond = l_text;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-69, RV-21: the record layout of the primary file of the cycle skeleton with
+// several record types (record lines of the same file, record identifying indicators,
+// record identification codes, AND/OR lines). One data structure FILE_REC holds the
+// fields of all types (by position); the types go to the skeleton (CvtAddTypeCond):
+// the test of IA_NEXT and the indicator of each. As for RPG II and III (FREE-49):
+// every record type needs codes when there is more than one, only the code C is
+// converted, a field name used in a second type stays R, any other problem leaves the
+// whole block as comments with the reason.
+dcl-proc ConvertITyped4;
+  dcl-pi *n int(10);
+    i_index int(10) const;
+    i_lineNo int(10) const;
+    i_line char(100) const;
+    i_last int(10) const;
+    i_recLen int(10) const;
+    i_name varchar(10) const;
+    i_dsName varchar(14) const;
+    i_file int(10) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_line char(100);
+  dcl-s l_up char(100);
+  dcl-s l_reason varchar(190) inz('');
+  dcl-s l_piece varchar(200);
+  dcl-s l_cur varchar(200) inz('');
+  dcl-s l_alts varchar(400) inz('');
+  dcl-s l_total varchar(400);
+  dcl-s l_n int(10) inz(0);
+  dcl-s l_ind char(2) dim(20);
+  dcl-s l_cond varchar(200) dim(20);
+  dcl-s l_kind char(1) dim(300);
+  dcl-s l_type int(10) dim(300);
+  dcl-s l_stmt varchar(200);
+  dcl-s l_fieldReason varchar(190);
+  dcl-s l_ok ind dim(300);
+  dcl-s l_reasons varchar(190) dim(300);
+  dcl-s l_lvl int(10);
+  dcl-s l_lvls int(10) dim(300);
+  dcl-s l_fname varchar(14);
+  dcl-s l_fnames varchar(14) dim(300);
+  dcl-s l_used varchar(14) dim(300);
+  dcl-s l_usedCount int(10) inz(0);
+  dcl-s l_x int(10);
+  dcl-s l_dup ind;
+  dcl-s l_fields int(10) inz(0);
+  dcl-s l_nextNo int(10);
+
+  // Pass 1: the record types.
+  for l_k = 0 to i_last;
+    if l_k = 0;
+      l_line = i_line;
+    else;
+      l_line = SrcLine(i_index + l_k);
+    endif;
+    l_up = %xlate(C_LOWER:C_UPPER:l_line);
+    l_reason = '';
+    select;
+      when IsAndOr4(l_up);
+        l_kind(l_k + 1) = 'A';
+        if %trim(%subst(l_up:17:6)) <> '';
+          l_reason = 'Entries in columns 17-22 of an AND/OR line are not valid';
+        elseif %trim(%subst(l_up:23:24)) = '';
+          l_reason = 'An AND/OR line without record identification codes';
+        elseif l_cur = '' or l_n = 0;
+          l_reason = 'An AND/OR line after a record line without identification '
+                     + 'codes';
+        else;
+          l_reason = Codes4(l_up:l_line:i_recLen:l_piece);
+        endif;
+        if l_reason = '';
+          if %trim(%subst(l_up:14:3)) = 'AND';
+            l_cur = l_cur + ' and ' + l_piece;
+          else;
+            if l_alts = '';
+              l_alts = '(' + l_cur + ')';
+            else;
+              l_alts = l_alts + ' or (' + l_cur + ')';
+            endif;
+            l_cur = l_piece;
+          endif;
+          if l_alts = '';
+            l_total = l_cur;
+          else;
+            l_total = l_alts + ' or (' + l_cur + ')';
+          endif;
+          if %len(l_total) > 170;
+            l_reason = 'The record identification codes of a record type are too '
+                       + 'long';
+          else;
+            l_cond(l_n) = l_total;
+          endif;
+        endif;
+      when %trim(%subst(l_up:7:10)) <> '';
+        l_kind(l_k + 1) = 'R';
+        l_n += 1;
+        if l_n > 20;
+          l_reason = 'More than 20 record types in the primary file';
+        elseif %subst(l_up:21:2) = '**';
+          l_reason = 'Look-ahead fields are not supported in free-form';
+        elseif %trim(%subst(l_up:19:2)) <> '' or (%subst(l_up:17:2) <> '  '
+               and %check(C_UPPER:%subst(l_up:17:2)) > 0);
+          l_reason = 'Sequence checking (columns 17-20) is not supported in '
+                     + 'free-form';
+        elseif %trim(%subst(l_up:21:2)) <> ''
+               and (%check('0123456789':%subst(l_up:21:2)) > 0
+                    or %subst(l_up:21:2) = '00');
+          l_reason = 'Record identifying indicator ' + %trim(%subst(l_up:21:2))
+                     + ' is converted only for 01 to 99';
+        else;
+          l_ind(l_n) = %subst(l_up:21:2);
+          l_cond(l_n) = '';
+          l_cur = '';
+          l_alts = '';
+          if %trim(%subst(l_up:23:24)) <> '';
+            l_reason = Codes4(l_up:l_line:i_recLen:l_piece);
+            if l_reason = '';
+              l_cur = l_piece;
+              l_cond(l_n) = l_cur;
+            endif;
+          endif;
+        endif;
+      other;
+        l_kind(l_k + 1) = 'F';
+    endsl;
+    l_type(l_k + 1) = l_n;
+    if l_reason <> '';
+      ReviewWithContinuations(i_index:i_lineNo:i_line:i_last:l_reason);
+      return i_last;
+    endif;
+  endfor;
+  if l_n > 1;
+    for l_k = 1 to l_n;
+      if l_cond(l_k) = '';
+        ReviewWithContinuations(i_index:i_lineNo:i_line:i_last
+          :'More than one record type, but record type ' + %char(l_k)
+           + ' has no record identification codes');
+        return i_last;
+      endif;
+    endfor;
+  endif;
+
+  // Pass 2: the fields of all types, in one data structure.
+  for l_k = 1 to i_last;
+    l_line = SrcLine(i_index + l_k);
+    l_ok(l_k) = *off;
+    l_lvls(l_k) = 0;
+    l_fnames(l_k) = '';
+    if l_kind(l_k + 1) <> 'F';
+      iter;
+    endif;
+    l_ok(l_k) = InputField4(l_line:i_recLen:l_stmt:l_fieldReason:*on:l_lvl:l_fname);
+    l_lvls(l_k) = l_lvl;
+    l_fnames(l_k) = l_fname;
+    if l_ok(l_k) and l_fname <> '';
+      l_dup = *off;
+      for l_x = 1 to l_usedCount;
+        if l_used(l_x) = l_fname;
+          l_dup = *on;
+        endif;
+      endfor;
+      if l_dup;
+        l_ok(l_k) = *off;
+        l_fieldReason = 'The field ' + l_fname + ' is already defined in another '
+                        + 'record type of the layout';
+      elseif l_usedCount < 300;
+        l_usedCount += 1;
+        l_used(l_usedCount) = l_fname;
+      endif;
+    endif;
+    if l_ok(l_k);
+      l_fields += 1;
+      l_reasons(l_k) = l_stmt;
+    else;
+      l_reasons(l_k) = l_fieldReason;
+    endif;
+  endfor;
+  if l_fields = 0;
+    ReviewWithContinuations(i_index:i_lineNo:i_line:i_last
+                            :'No subfield could be converted');
+    return i_last;
+  endif;
+
+  AddOut('dcl-ds ' + i_dsName + ' len(' + %char(i_recLen) + ');':i_lineNo);
+  for l_k = 1 to i_last;
+    if l_kind(l_k + 1) <> 'F';
+      iter;
+    endif;
+    if l_ok(l_k);
+      AddOut(l_reasons(l_k):SrcLineNo(i_index + l_k));
+    else;
+      AddOut('// ' + %trimr(%subst(SrcLine(i_index + l_k):6:69))
+             :SrcLineNo(i_index + l_k));
+    endif;
+  endfor;
+  AddOut('end-ds;':SrcLineNo(i_index + i_last));
+  g_flLayout(i_file) = *on;
+  AddSym(i_dsName:'ds');
+  CvtSetLayout(i_name);
+  CvtResetTypes();
+  for l_k = 1 to l_n;
+    CvtAddTypeCond(l_ind(l_k):l_cond(l_k));
+  endfor;
+  for l_k = 1 to i_last;
+    if l_ok(l_k) and l_lvls(l_k) > 0;
+      CvtAddControlType(l_fnames(l_k):l_lvls(l_k):l_type(l_k + 1));
+    endif;
+  endfor;
+
+  RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:75))
+          :'record layout of the file declared as a data structure: READ and '
+          + 'CHAIN of the file name it | ' + %char(l_n) + ' record type(s) of the '
+          + 'primary file: the type is tested after the READ with IA_NEXT | AND/OR '
+          + 'lines are read from columns 14-16 of the I specification (not shown '
+          + 'in the manual page of the input specification): check on a compile');
+  for l_k = 1 to i_last;
+    l_line = SrcLine(i_index + l_k);
+    l_nextNo = SrcLineNo(i_index + l_k);
+    if l_kind(l_k + 1) <> 'F' or l_ok(l_k);
+      RptItem(C_STS_CONVERTED:l_nextNo:%trimr(%subst(l_line:6:75)):'');
+    else;
+      RptItem(C_STS_REVIEW:l_nextNo:%trimr(%subst(l_line:6:75)):l_reasons(l_k));
+    endif;
+  endfor;
+  g_lastLineNo = SrcLineNo(i_index + i_last);
+  return i_last;
+end-proc;
+
+// ------------------------------------------------------------------
 // I specification of a program described file: one record type, no record
 // identifying codes. The record line and its field lines become the data
 // structure FILE_REC (length of the record) with the fields as subfields; the
@@ -1185,6 +1497,7 @@ dcl-proc ConvertI;
   dcl-s l_fieldReason varchar(190);
   dcl-s l_fields int(10) inz(0);
   dcl-s l_multi ind inz(*off);
+  dcl-s l_typed ind inz(*off);
   dcl-s l_recLen int(10) inz(0);
   dcl-s l_dsName varchar(14);
   dcl-s l_out varchar(200) dim(300);
@@ -1204,12 +1517,12 @@ dcl-proc ConvertI;
   l_isCyc = (g_cycFile4 <> '' and l_name = g_cycFile4);
 
   // A field line or an AND/OR line with no record line before it.
-  if l_name = '' and %subst(l_up:16:3) <> 'AND' and %subst(l_up:16:2) <> 'OR';
-    ReviewSpec(i_lineNo:i_line:'Field line without an input record line');
+  if IsAndOr4(l_up);
+    ReviewSpec(i_lineNo:i_line:'AND/OR line without an input record line');
     return 0;
   endif;
   if l_name = '';
-    ReviewSpec(i_lineNo:i_line:'AND/OR line without an input record line');
+    ReviewSpec(i_lineNo:i_line:'Field line without an input record line');
     return 0;
   endif;
 
@@ -1224,20 +1537,29 @@ dcl-proc ConvertI;
        or %subst(l_nextUp:7:1) = '/';
       leave;
     endif;
-    if %trim(%subst(l_nextUp:7:10)) <> '';
+    if l_last >= 280;
       leave;
     endif;
-    if %subst(l_nextUp:16:3) = 'AND' or %subst(l_nextUp:16:2) = 'OR';
+    if IsAndOr4(l_nextUp);
       l_multi = *on;
+    elseif %trim(%subst(l_nextUp:7:10)) <> '';
+      // FREE-69: another record line of the primary file of the cycle is one more
+      // record type of the same layout.
+      if l_isCyc and %trim(%subst(l_nextUp:7:10)) = l_name;
+        l_multi = *on;
+      else;
+        leave;
+      endif;
     endif;
     l_last += 1;
     l_k += 1;
   enddo;
+  l_typed = l_isCyc and (l_multi or %trim(%subst(l_up:23:24)) <> '');
 
   l_file = FlFind(l_name);
   l_dsName = l_name + '_REC';
   select;
-    when l_multi;
+    when l_multi and not l_typed;
       l_reason = 'More than one record type (AND/OR lines) is not supported in '
                  + 'free-form';
     when l_last > 250;
@@ -1259,6 +1581,8 @@ dcl-proc ConvertI;
                  + 'record type)';
     when %subst(l_up:21:2) = '**';
       l_reason = 'Look-ahead fields are not supported in free-form';
+    when l_typed;
+      l_reason = '';
     when %trim(%subst(l_up:21:2)) <> ''
          and not (l_isCyc and %check('0123456789':%subst(l_up:21:2)) = 0
                   and %subst(l_up:21:2) <> '00');
@@ -1275,6 +1599,10 @@ dcl-proc ConvertI;
   if l_reason <> '';
     ReviewWithContinuations(i_index:i_lineNo:i_line:l_last:l_reason);
     return l_last;
+  endif;
+  if l_typed;
+    return ConvertITyped4(i_index:i_lineNo:i_line:l_last:g_flLen(l_file):l_name
+                          :l_dsName:l_file);
   endif;
   l_recLen = g_flLen(l_file);
 

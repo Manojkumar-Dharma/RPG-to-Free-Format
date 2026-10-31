@@ -87,6 +87,21 @@ dcl-pr CvtAddType;
   i_ind char(2) const;
 end-pr;
 
+// FREE-69, RV-21: several record types of the RPG IV primary file.
+dcl-pr CvtResetTypes;
+end-pr;
+
+dcl-pr CvtAddTypeCond;
+  i_ind char(2) const;
+  i_cond varchar(200) const;
+end-pr;
+
+dcl-pr CvtAddControlType;
+  i_name varchar(6) const;
+  i_level int(10) const;
+  i_type int(10) const;
+end-pr;
+
 dcl-pr CvtSetLayout;
   i_name varchar(8) const;
 end-pr;

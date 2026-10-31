@@ -40,7 +40,7 @@ Code status and test status follow `PLANNED.md`.
 | ID | Item | Why R today | Resolution | Code status | Test status |
 |----|------|-------------|------------|-------------|-------------|
 | RV-20 | Control level indicators `L1` to `L9`, `LR`, matching records `MR`, total calculations, `1P` | the cycle is not in free-form | Decide: write the cycle as a `dow` loop with the primary file, level breaks and `*INLR` at the end (a skeleton the programmer completes), or keep R | Decided 2026-10-27: skeleton. FREE-36 wrote it for one primary file with control levels and total calculations | Written | Not tested; FREE-60: the skeleton for RPG IV (one program described DISK primary file, L1 to L9 and LR on calculations); open: matching records `MR`, secondary and look-ahead files (`1P` needs no work: it is valid on output records only and is written with the skeleton) |
-| RV-21 | Primary, secondary and look-ahead files, multiple record types, record identifying codes | the cycle | Decide with RV-20 | Decided with RV-20; FREE-36 handles one primary file; FREE-49 adds record types of the primary file (indicators 01 to 99, codes C and N, AND/OR); secondary and look-ahead files, Z and D codes stay R | Written in part | Not tested |
+| RV-21 | Primary, secondary and look-ahead files, multiple record types, record identifying codes | the cycle | Decide with RV-20 | Decided with RV-20; FREE-36 handles one primary file; FREE-49 adds record types of the primary file (indicators 01 to 99, codes C and N, AND/OR); FREE-69 the same for RPG IV; secondary and look-ahead files, Z and D codes stay R | Written in part | Not tested |
 
 ## IACNVFREE: F, E and I specifications
 
