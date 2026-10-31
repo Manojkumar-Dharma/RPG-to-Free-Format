@@ -50,8 +50,9 @@ dcl-s g_keywordCount int(10);
 // Subfile candidates (DSP-06): display lines in a row that make one, highest line checked.
 dcl-c C_SFLMIN 4;
 dcl-c C_MAXDSPLINE 27;
-dcl-c C_SFLIND_CLR '31';           // SFLCLR, SFLDSPCTL (N31) of the generated subfile
-dcl-c C_SFLIND_DSP '32';           // SFLDSP of the generated subfile
+// Indicators of the generated subfile (SFLCLR with SFLDSPCTL, SFLDSP): 31 and 32 as in
+// the real STIP01FM, the next free pair when the display member uses them.
+dcl-c C_SFLIND_FIRST 31;
 
 // Format names of the whole source, for help formats that are defined later.
 dcl-c C_MAXFMT 300;
@@ -1712,16 +1713,84 @@ dcl-proc Digits4;
 end-proc;
 
 // ------------------------------------------------------------------
+// Whether an output indicator (columns 23-24 of a D record) of the display member is i_ind.
+dcl-proc IndicatorUsed;
+  dcl-pi *n ind;
+    i_ind int(10) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_text varchar(3);
+
+  l_text = 'I' + %subst('0' + %trim(%char(i_ind)):%len(%trim(%char(i_ind))):2);
+  for l_k = 1 to g_sourceCount;
+    if %xlate(C_LOWER:C_UPPER:%subst(g_sourceLines(l_k):6:1)) = 'D'
+       and %subst(g_sourceLines(l_k):7:1) <> '*'
+       and ParseIndicatorSpec(ColumnText(g_sourceLines(l_k):23:24)) = l_text;
+      return *on;
+    endif;
+  endfor;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+// The first pair of indicators from 31 up (31 and 32, 33 and 34 ...) that the display
+// member does not use as output indicator; 0 when there is none up to 98.
+dcl-proc FreeSflIndicator;
+  dcl-pi *n int(10);
+  end-pi;
+
+  dcl-s l_n int(10);
+
+  for l_n = C_SFLIND_FIRST to 97 by 2;
+    if not IndicatorUsed(l_n) and not IndicatorUsed(l_n + 1);
+      return l_n;
+    endif;
+  endfor;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// ROLLUP and ROLLDOWN of the S record (keyword lines of its output, one for each
+// line), '' when the key is not enabled. STIP01FM moves them to the SFLCTL record.
+dcl-proc FormatKeyword;
+  dcl-pi *n varchar(36);
+    i_sIndex int(10) const;
+    i_word varchar(8) const;
+  end-pi;
+
+  dcl-s l_o int(10);
+  dcl-s l_rec char(80);
+  dcl-s l_text varchar(36);
+
+  if i_sIndex < 1 or g_srcOutFirst(i_sIndex) = 0;
+    return '';
+  endif;
+  for l_o = g_srcOutFirst(i_sIndex) to g_srcOutLast(i_sIndex);
+    l_rec = g_outputLines(l_o);
+    l_text = %trim(%subst(l_rec:45:36));
+    if l_text = i_word
+       or (%len(l_text) > %len(i_word) and %subst(l_text:1:%len(i_word) + 1)
+           = i_word + '(');
+      return l_text;
+    endif;
+  endfor;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
 // DSP-06, RV-42: after a format with a subfile candidate, the subfile version of it
 // as comment lines (decided 2026-10-31: report plus generated SFL and SFLCTL):
 //   - record <base>SFL (SFL): the fields and constants of the first row line, the
 //     fields named SFL01, SFL02 ... (the program's own names are not in the display
 //     member), with the DDS lines of the plain conversion otherwise;
 //   - record <base>CTL (SFLCTL(<base>SFL)): SFLSIZ and SFLPAG of the number of rows,
-//     OVERLAY, SFLCLR (31), SFLDSPCTL (N31), SFLDSP (32), and the other lines of the
-//     format outside the rows.
-// The format's own keywords (function keys and the like) are not copied. Nothing is
-// active: the lines are comments (remove the * in column 7 to use them).
+//     OVERLAY, SFLCLR, SFLDSPCTL (N), SFLDSP (31 and 32 or the next free pair), the
+//     ROLLUP and ROLLDOWN of the format, and the other lines of the format outside
+//     the rows. As the real subfile version of SELECT (STIP01FM) does, the other
+//     keywords of the format (PRINT, INVITE, SLNO, CLRL, ALWROL, HLPRTN, HOME, HELP)
+//     are not copied, and the function keys stay at file level.
+// Nothing is active: the lines are comments (remove the * in column 7 to use them).
 dcl-proc WriteSubfileVersion;
   dcl-pi *n;
     i_first int(10) const;
@@ -1749,6 +1818,10 @@ dcl-proc WriteSubfileVersion;
   dcl-s l_dds varchar(10);
   dcl-s l_clash ind inz(*off);
   dcl-s l_lastLine int(10);
+  dcl-s l_ind int(10);
+  dcl-s l_indClr varchar(2);
+  dcl-s l_indDsp varchar(2);
+  dcl-s l_roll varchar(36);
 
   if i_index < 1;
     return;
@@ -1771,6 +1844,15 @@ dcl-proc WriteSubfileVersion;
              + l_ctlName + ' are already formats of this member');
     return;
   endif;
+  l_ind = FreeSflIndicator();
+  if l_ind = 0;
+    RptItem(C_STS_ASSUMPTION:g_sourceLineNos(i_index):%trimr(g_sourceLines(i_index))
+            :'Subfile version not written: no pair of free output indicators '
+             + 'from 31 to 98');
+    return;
+  endif;
+  l_indClr = %trim(%char(l_ind));
+  l_indDsp = %trim(%char(l_ind + 1));
   l_lastLine = i_startLine + i_rows - 1;
 
   AddDdsComment('Generated, not active (DSP-06): subfile version of ' + l_dds);
@@ -1822,9 +1904,17 @@ dcl-proc WriteSubfileVersion;
   AddKeywordLine('':'SFLSIZ(' + Digits4(i_rows) + ')');
   AddKeywordLine('':'SFLPAG(' + Digits4(i_rows) + ')');
   AddKeywordLine('':'OVERLAY');
-  AddKeywordLine(C_SFLIND_CLR:'SFLCLR');
-  AddCondKeywordLine(C_SFLIND_CLR:*on:'SFLDSPCTL');
-  AddKeywordLine(C_SFLIND_DSP:'SFLDSP');
+  AddKeywordLine(l_indClr:'SFLCLR');
+  AddCondKeywordLine(l_indClr:*on:'SFLDSPCTL');
+  AddKeywordLine(l_indDsp:'SFLDSP');
+  l_roll = FormatKeyword(i_first:'ROLLUP');
+  if l_roll <> '';
+    AddKeywordLine('':l_roll);
+  endif;
+  l_roll = FormatKeyword(i_first:'ROLLDOWN');
+  if l_roll <> '';
+    AddKeywordLine('':l_roll);
+  endif;
   // The other lines of the format (headings, messages, key text), outside the rows.
   for l_k = i_first + 1 to i_last;
     l_record = g_sourceLines(l_k);
@@ -1847,10 +1937,12 @@ dcl-proc WriteSubfileVersion;
           :'Subfile version of ' + l_dds + ' written as comment lines (records '
            + l_sflName + ' and ' + l_ctlName + ') | Names SFL01 to SFLnn and the '
            + 'types of the plain conversion are generated: rename to the fields '
-           + 'of the program | Indicators ' + C_SFLIND_CLR + ' (SFLCLR, '
-           + 'SFLDSPCTL) and ' + C_SFLIND_DSP + ' (SFLDSP), SFLSIZ = SFLPAG = '
-           + %char(i_rows) + ' are assumed | Keywords of the format itself are '
-           + 'not copied; the program has to be changed to write the subfile');
+           + 'of the program | Indicators ' + l_indClr + ' (SFLCLR, SFLDSPCTL) '
+           + 'and ' + l_indDsp + ' (SFLDSP) and SFLSIZ = SFLPAG = ' + %char(i_rows)
+           + ' are as in STIP01FM: check that the program does not use them '
+           + '| ROLLUP and ROLLDOWN are copied to the control record, the other '
+           + 'keywords of the format are not (as in STIP01FM) | The program has '
+           + 'to be changed to write the subfile');
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1897,7 +1989,9 @@ dcl-proc ConvertDsp36;
           CheckSubfileRows(l_fmtFirst:l_index - 1);
         endif;
         l_fmtFirst = l_index;
+        g_srcOutFirst(l_index) = g_outputCount + 1;
         ConvertDisplayControl(l_record:g_sourceLineNos(l_index));
+        g_srcOutLast(l_index) = g_outputCount;
       when l_recordType = 'H';
         if not g_formatOpen;
           RptItem(C_STS_REVIEW:g_sourceLineNos(l_index):%trimr(l_record)
