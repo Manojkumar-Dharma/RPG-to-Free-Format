@@ -68,6 +68,13 @@ dcl-s g_fSpecial char(1) dim(C_MAXFLD);
 dcl-s g_fAlias varchar(10) dim(C_MAXFLD);
 dcl-s g_fSrc varchar(40) dim(C_MAXFLD);     // the value of that field: 'IA_E1 = ARR(3)'
 dcl-s g_fFmt char(1) dim(C_MAXFLD);         // data format (column 44)
+// g_fPre: assignments before the write that copy a level indicator of the field's
+// conditions to a numbered indicator (FREE-73): '*in98 = *inl1'
+dcl-s g_fPre varchar(40) dim(C_MAXFLD);
+// The copies: level indicator name (L1 to L9, LR) and the numbered indicator.
+dcl-s g_lvName varchar(2) dim(10);
+dcl-s g_lvNo int(10) dim(10);
+dcl-s g_lvCount int(10) inz(0);
 dcl-s g_aliasNo int(10) inz(0);
 dcl-s g_fCount int(10) inz(0);
 // The DDS source.
@@ -107,6 +114,115 @@ dcl-proc OutStart export;
   g_pCount = 0;
   g_curFile = 0;
   g_built = *off;
+  g_lvCount = 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-73: whether the two-digit indicator i_no may be used by the program: *ON when a
+// source line (not a comment) mentions it as *INnn or in the columns of an indicator
+// entry (7-31 and 65-76) or is already a copy.
+dcl-proc IndicatorInSource;
+  dcl-pi *n ind;
+    i_no int(10) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_up varchar(100);
+  dcl-s l_text varchar(2);
+
+  l_text = %subst('0' + %trim(%char(i_no)):%len(%trim(%char(i_no))):2);
+  for l_k = 1 to g_lvCount;
+    if g_lvNo(l_k) = i_no;
+      return *on;
+    endif;
+  endfor;
+  for l_k = 1 to SrcCount();
+    l_up = %xlate(C_LOWER:C_UPPER:SrcLine(l_k));
+    if %subst(l_up:7:1) = '*';
+      iter;
+    endif;
+    if %scan('*IN' + l_text:l_up) > 0 or %scan('*IN(' + l_text:l_up) > 0
+       or %scan(l_text:%subst(l_up:7:25)) > 0
+       or %scan(l_text:%subst(l_up:65:12)) > 0;
+      return *on;
+    endif;
+  endfor;
+  return *off;
+end-proc;
+
+// ------------------------------------------------------------------
+// The numbered indicator that stands for the level indicator i_name (L1 to L9, LR) in
+// the DDS conditions of a field (a DDS condition takes a numbered indicator only): the
+// first unused one from 99 down, the same for every field of the member. 0 when there
+// is none (or ten copies are in use).
+dcl-proc LevelCopy;
+  dcl-pi *n int(10);
+    i_name varchar(2) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+  dcl-s l_no int(10);
+
+  for l_k = 1 to g_lvCount;
+    if g_lvName(l_k) = i_name;
+      return g_lvNo(l_k);
+    endif;
+  endfor;
+  if g_lvCount >= 10;
+    return 0;
+  endif;
+  for l_no = 99 downto 1;
+    if not IndicatorInSource(l_no);
+      g_lvCount += 1;
+      g_lvName(g_lvCount) = i_name;
+      g_lvNo(g_lvCount) = l_no;
+      return l_no;
+    endif;
+  endfor;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// A field line's output indicator entries (columns 23-31) with the level indicators
+// (L1 to L9, LR) replaced by their numbered copies; o_pre has the assignments that set
+// the copies before the write ('*in99 = *inl1').
+dcl-proc FieldLevels;
+  dcl-pi *n char(100);
+    i_line char(100) const;
+    o_pre varchar(40);
+  end-pi;
+
+  dcl-s l_line char(100);
+  dcl-s l_slot int(10);
+  dcl-s l_col int(10);
+  dcl-s l_ind varchar(2);
+  dcl-s l_no int(10);
+  dcl-s l_text varchar(2);
+  dcl-s l_add varchar(20);
+
+  l_line = i_line;
+  o_pre = '';
+  for l_slot = 0 to 2;
+    l_col = 23 + 3 * l_slot;
+    l_ind = Up(%trim(%subst(l_line:l_col + 1:2)));
+    if l_ind = 'LR' or (%len(l_ind) = 2 and %subst(l_ind:1:1) = 'L'
+       and %check('123456789':%subst(l_ind:2:1)) = 0);
+      l_no = LevelCopy(l_ind);
+      if l_no = 0;
+        iter;
+      endif;
+      l_text = %subst('0' + %trim(%char(l_no)):%len(%trim(%char(l_no))):2);
+      %subst(l_line:l_col + 1:2) = l_text;
+      l_add = '*in' + l_text + ' = *in' + %xlate(C_UPPER:C_LOWER:l_ind);
+      if %scan(l_add:o_pre) = 0 and %len(o_pre) + %len(l_add) + 2 <= 40;
+        if o_pre <> '';
+          o_pre += '; ';
+        endif;
+        o_pre += l_add;
+      endif;
+    endif;
+  endfor;
+  return l_line;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -495,6 +611,8 @@ dcl-proc OutBuild;
 
   dcl-s l_index int(10);
   dcl-s l_line char(100);
+  dcl-s l_fline char(100);
+  dcl-s l_pre varchar(40);
   dcl-s l_g int(10) inz(0);
   dcl-s l_file varchar(8) inz('');
   dcl-s l_type char(1);
@@ -572,10 +690,18 @@ dcl-proc OutBuild;
       g_fSpecial(g_fCount) = ' ';
       g_fAlias(g_fCount) = '';
       g_fSrc(g_fCount) = '';
+      g_fPre(g_fCount) = '';
       l_end = Cols(l_line:40:43);
       l_fmt = %subst(Up(%subst(l_line:44:1) + ' '):1:1);
       g_fFmt(g_fCount) = l_fmt;
-      l_cond = IndicatorCond(l_line:l_reason:' ');
+      if g_gExt(l_g) or g_gDisk(l_g);
+        l_cond = IndicatorCond(l_line:l_reason:' ');
+      else;
+        // FREE-73: a level indicator on a field of a printer record.
+        l_fline = FieldLevels(l_line:l_pre);
+        g_fPre(g_fCount) = l_pre;
+        l_cond = IndicatorCond(l_fline:l_reason:' ');
+      endif;
       g_fCond(g_fCount) = l_cond;
       if g_gExt(l_g);
         // RV-56: a field line of an externally described record: the field name
@@ -1638,6 +1764,7 @@ dcl-proc PlaceExpand;
     g_fEdit(l_new) = g_fEdit(l_f);
     g_fConst(l_new) = g_fConst(l_f);
     g_fCond(l_new) = g_fCond(l_f);
+    g_fPre(l_new) = g_fPre(l_f);
     g_fReason(l_new) = '';
     g_fBlank(l_new) = *off;
     g_fSpecial(l_new) = g_fSpecial(l_f);
@@ -1669,6 +1796,16 @@ dcl-proc GroupBefore;
   dcl-s l_text varchar(250) inz('');
 
   for l_f = g_gFirst(i_group) to g_gFirst(i_group) + g_gFields(i_group) - 1;
+    if g_fPre(l_f) <> '' and g_fReason(l_f) = ''
+       and %scan(g_fPre(l_f):l_text) = 0;
+      if %len(l_text) + %len(g_fPre(l_f)) + 2 > 250;
+        return l_text + 'x';
+      endif;
+      if l_text <> '';
+        l_text += '; ';
+      endif;
+      l_text += g_fPre(l_f);
+    endif;
     if g_fAlias(l_f) <> '' and g_fSrc(l_f) <> '' and g_fReason(l_f) = '';
       if %len(l_text) + %len(g_fAlias(l_f)) + %len(g_fSrc(l_f)) + 5 > 250;
         return l_text + 'x';
@@ -1766,6 +1903,25 @@ dcl-proc OutCycleAfter export;
     return '';
   endif;
   return GroupAfter(l_g);
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-73: the cause for the level indicators on the fields of a record, '' when none.
+dcl-proc LevelNote;
+  dcl-pi *n varchar(190);
+    i_group int(10) const;
+  end-pi;
+
+  dcl-s l_f int(10);
+
+  for l_f = g_gFirst(i_group) to g_gFirst(i_group) + g_gFields(i_group) - 1;
+    if g_fPre(l_f) <> '';
+      return ' | A level indicator on a field line is copied to a numbered '
+             + 'indicator before the write (' + g_fPre(l_f) + '; the DDS condition '
+             + 'takes a numbered indicator): check that the program does not use it';
+    endif;
+  endfor;
+  return '';
 end-proc;
 
 // ------------------------------------------------------------------
@@ -1978,7 +2134,7 @@ dcl-proc OutFinish export;
             :'Record format of the printer file DDS (comments at the end of the '
             + 'converted source); the DDS is not tested: check line and position '
             + 'entries'
-            + CycleNote(g_gType(l_g)));
+            + CycleNote(g_gType(l_g)) + LevelNote(l_g));
     for l_j = g_gStart(l_g) + 1 to g_gEnd(l_g);
       RptItem(C_STS_CONVERTED:SrcLineNo(l_j):%trimr(%subst(SrcLine(l_j):6:75)):'');
     endfor;

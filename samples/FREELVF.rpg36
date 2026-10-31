@@ -1,0 +1,28 @@
+      * A level indicator on a field line (FREE-73): CUST is printed when L1 is on
+     H
+     FSALES   IP         80            DISK
+     FREPORT  O         132     OA     PRINTER
+     ISALES   AA
+     I                                        1   30REGIONL2
+     I                                        4   60CUST  L1
+     I                                        7  122AMT
+      * detail calculations
+     C                     ADD  AMT       CTOT    92
+      * total calculation
+     CL1                   ADD  CTOT      GRAND   92
+      * output
+     OREPORT  H  1     1P
+     O       OR        OA
+     O                                   25 'Sales by customer'
+     OREPORT  D  1
+     O                 L1      CUST      10
+     O                         AMT       25
+     OREPORT  T  2     L1
+     O                                   20 'Customer total'
+     O                         CTOT      35
+     OREPORT  T  1     OA
+     O                                   20 'Continued on the next page'
+     OREPORT  T  2     LR
+     O                                   20 'Grand total'
+     O                         GRAND     35
+
