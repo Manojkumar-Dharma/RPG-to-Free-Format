@@ -43,7 +43,7 @@ dcl-s g_srcLineNo int(10);         // line number reported for the current item
 
 // Keywords collected for one field: indicator ('' = always, else 2 digits).
 dcl-c C_MAXKW 40;
-dcl-s g_keywordIndicators varchar(2) dim(C_MAXKW);
+dcl-s g_keywordIndicators varchar(3) dim(C_MAXKW);   // 'nn' or 'Nnn' (not on)
 dcl-s g_keywordTexts varchar(80) dim(C_MAXKW);
 dcl-s g_keywordCount int(10);
 
@@ -265,11 +265,17 @@ end-proc;
 // an indicator.
 dcl-proc AddKeywordLine;
   dcl-pi *n;
-    i_indicator varchar(2) const;
+    i_indicator varchar(3) const;
     i_text varchar(36) const;
   end-pi;
 
-  AddOutputLine(BuildDdsLine(i_indicator:*off:' ':'':0:' ':-1:' ':0:0:i_text));
+  // 'Nnn' is the indicator nn negated (DSP-05).
+  if %len(i_indicator) = 3;
+    AddOutputLine(BuildDdsLine(%subst(i_indicator:2:2):*on:' ':'':0:' ':-1:' ':0:0
+                  :i_text));
+  else;
+    AddOutputLine(BuildDdsLine(i_indicator:*off:' ':'':0:' ':-1:' ':0:0:i_text));
+  endif;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -518,7 +524,10 @@ dcl-proc ConvertDisplayControl;
     AddKeywordLine('':'CLRL(*ALL)');
   else;
     l_number = ToNumber(l_value);
-    if l_number = 0;
+    if l_number = 24;
+      // DSP-05: 24 lines is the whole display (IBM's conversion of STIPFM: *ALL).
+      AddKeywordLine('':'CLRL(*ALL)');
+    elseif l_number = 0;
       AddKeywordLine('':'CLRL(*NO)');
     elseif l_number > 0;
       AddKeywordLine('':'CLRL(' + %trim(%char(l_number)) + ')');
@@ -595,7 +604,7 @@ end-proc;
 // written after the field (or constant) line.
 dcl-proc CollectKeyword;
   dcl-pi *n;
-    i_indicator varchar(2) const;
+    i_indicator varchar(3) const;
     i_text varchar(80) const;
   end-pi;
 
@@ -645,11 +654,21 @@ dcl-proc CollectAttrs;
         l_hasInd = *on;
     endsl;
   endfor;
+  // Column separators (column 49): not shown on a field that an indicator protects
+  // (IBM's conversion of STIPFM: N60 DSPATR(CS) with PR on 60), DSP-05.
+  l_spec = ParseIndicatorSpec(ColumnText(i_record:37:38));
   if %subst(i_record:49:1) = 'Y' or %subst(i_record:49:1) = 'y';
-    l_always += ' CS';
+    if i_input and %subst(l_spec:1:1) = 'I';
+      CollectKeyword('N' + IndicatorNumber(l_spec):'DSPATR(CS)');
+    else;
+      l_always += ' CS';
+    endif;
   endif;
 
   if i_input;
+    // DSP-05: every input field has MDT in IBM's conversion of STIPFM (S/36 returns
+    // the field whether or not it was changed).
+    l_always += ' MDT';
     l_spec = ParseIndicatorSpec(ColumnText(i_record:37:38));            // protect
     if l_spec = 'Y';
       l_always += ' PR';
@@ -711,24 +730,22 @@ dcl-proc CollectInput;
     l_checks += ' FE';
   endif;
   if %subst(i_record:36:1) = 'Y';
-    // DDS: at field level AB must be used with another validity checking
-    // keyword (M10, M11 and so on); CHECK(AB) alone does not compile.
-    if %scan('M10':l_checks) > 0 or %scan('M11':l_checks) > 0;
-      l_checks += ' AB';
-    else;
-      l_abDropped = *on;
-    endif;
+    // DSP-05: column 36 is automatic record advance (SC41-4730 Appendix B); IBM's
+    // conversion of STIPFM writes it as CHECK(ER).
+    l_checks += ' ER';
+  endif;
+  // DSP-05: IBM's conversion of STIPFM writes lowercase as CHECK(LC), with the other
+  // checks in the same keyword.
+  if not i_numeric
+     and (%subst(i_record:51:1) = 'Y'
+          or (%subst(i_record:51:1) = ' ' and g_lowerDft));
+    l_checks += ' LC';
   endif;
   if %len(l_checks) > 0;
     CollectKeyword('':'CHECK(' + %trim(l_checks) + ')');
   endif;
   if %subst(i_record:34:1) = 'Y';
     CollectKeyword('':'DUP');
-  endif;
-  if not i_numeric
-     and (%subst(i_record:51:1) = 'Y'
-          or (%subst(i_record:51:1) = ' ' and g_lowerDft));
-    CollectKeyword('':'LOWER');
   endif;
   return l_abDropped;
 end-proc;
@@ -919,6 +936,7 @@ dcl-proc ConvertFieldDefinition;
   dcl-s l_editOk ind inz(*off);
   dcl-s l_editDigits int(10) inz(0);
   dcl-s l_editNote varchar(120) inz('');
+  dcl-s l_dft ind inz(*off);
   dcl-s l_dualDefinition ind inz(*off);   // input/output field with output indicator
   dcl-s l_baseKeywordCount int(10) inz(0);
   dcl-s l_index int(10);
@@ -937,14 +955,18 @@ dcl-proc ConvertFieldDefinition;
 
   // Constant data is columns 57-79; column 80 = X continues it in columns
   // 7-79 of the next record(s).
-  l_data = %trimr(%subst(l_record:57:23));
+  // DSP-05: the blanks at the end of a record that is continued belong to the text
+  // (IBM's conversion of STIPFM keeps 23 blanks before 'F3-Abandon'): trim once at
+  // the end.
+  l_data = %subst(l_record:57:23);
   l_cont = (%subst(l_record:80:1) = 'X' or %subst(l_record:80:1) = 'x');
   dow l_cont and io_index < g_sourceCount;
     io_index += 1;
-    l_data = %trimr(l_data + %subst(g_sourceLines(io_index):7:73));
+    l_data = l_data + %subst(g_sourceLines(io_index):7:73);
     l_cont = (%subst(g_sourceLines(io_index):80:1) = 'X'
               or %subst(g_sourceLines(io_index):80:1) = 'x');
   enddo;
+  l_data = %trimr(l_data);
 
   if l_length < 1 or l_line < 1 or l_column < 1;
     RptItem(C_STS_REVIEW:l_lineNo:%trimr(l_record)
@@ -963,13 +985,20 @@ dcl-proc ConvertFieldDefinition;
   // Output Y with constant text (not a message field) is also a constant: DDS
   // does not accept DFT on an output-only field without OVRDTA, which needs an
   // option indicator.
+  // DSP-05: output Y with constant type C and no text is a constant of blanks (IBM's
+  // conversion of STIPFM writes it as a literal of the field length).
   if not l_isInput and (l_outputSpec = 'N'
-     or (l_outputSpec = 'Y' and %len(l_data) > 0 and l_ctype <> 'M'));
-    if %len(l_data) = 0;
+     or (l_outputSpec = 'Y' and (%len(l_data) > 0 or l_ctype = 'C')
+         and l_ctype <> 'M'));
+    if %len(l_data) = 0 and not (l_ctype = 'C' and l_outputSpec = 'Y');
       RptItem(C_STS_ASSUMPTION:l_lineNo:%trimr(l_record)
               :'Field has no constant text and no data; skipped');
       return;
     endif;
+    // The constant fills the whole field: padded with blanks to its length.
+    dow %len(l_data) < l_length and %len(l_data) < 500;
+      l_data += ' ';
+    enddo;
     l_front = BuildDdsLine('':*off:' ':'':0:' ':-1:' ':l_line:l_column:'');
     AddLiteral(l_front:'':l_data:'');
     l_attrInd = CollectAttrs(l_record:*off);
@@ -1080,7 +1109,15 @@ dcl-proc ConvertFieldDefinition;
     endif;
   endif;
 
-  if l_isInput and l_outputSpec <> 'N';
+  // DSP-05: an input field with output Y, constant type C and constant text is an
+  // input-only field with the text as its default (IBM's conversion of STIPFM writes
+  // DFT('1') on the hidden field of the format, usage I): not when the text is too
+  // long for one keyword line.
+  l_dft = l_isInput and l_outputSpec = 'Y' and l_ctype = 'C' and %len(l_data) > 0
+          and %len(l_data) <= 25 and %scan(C_QUOTE:l_data) = 0;
+  if l_dft;
+    l_usage = 'I';
+  elseif l_isInput and l_outputSpec <> 'N';
     l_usage = 'B';
   elseif l_isInput;
     l_usage = 'I';
@@ -1135,11 +1172,16 @@ dcl-proc ConvertFieldDefinition;
             + ' written twice with the same name, input/output while ' + l_indicator
             + ' is on and input only while it is off';
   endif;
-  if l_usage = 'I' and %len(l_data) > 0;
+  if l_usage = 'I' and %len(l_data) > 0 and not l_dft;
     if l_status = C_STS_CONVERTED;
       l_status = C_STS_ASSUMPTION;
       l_reason = 'Constant data on an input-only field is not used';
     endif;
+  endif;
+  if l_dft and l_status = C_STS_CONVERTED;
+    l_status = C_STS_ASSUMPTION;
+    l_reason = 'Input field with constant text: written as an input-only field '
+               + 'with DFT, as IBM''s conversion of a S/36 member does';
   endif;
 
   if l_editOk;
@@ -1181,6 +1223,9 @@ dcl-proc ConvertFieldDefinition;
       l_status = C_STS_ASSUMPTION;
       l_reason = 'CHECK(RZ/RB) left out: DDS does not allow it with CHECK(MF)';
     endif;
+  endif;
+  if l_dft;
+    CollectKeyword('':'DFT(' + C_QUOTE + l_data + C_QUOTE + ')');
   endif;
   l_baseKeywordCount = g_keywordCount;      // keywords the input-only copy shares
   if l_editOk;
@@ -1258,14 +1303,14 @@ dcl-proc AddFileLevelKeywords;
   else;
     AddKeywordLine('':'DSPSIZ(24 80 *DS3)');
   endif;
-  AddKeywordLine('':'INDARA');
+  AddKeywordLine('':'CHGINPDFT INDARA');
   g_rightToLeft = l_rightToLeft;
   if l_rightToLeft;
     AddKeywordLine('':'CHECK(RLTB)');
   endif;
   RptItem(C_STS_ASSUMPTION:0:'File-level DDS'
-          :'DSPSIZ and INDARA added (CHECK(RLTB) for right-to-left); '
-          + 'INVITE added to every format');
+          :'DSPSIZ, CHGINPDFT (as IBM''s conversion) and INDARA added '
+          + '(CHECK(RLTB) for right-to-left); INVITE added to every format');
 end-proc;
 
 // ------------------------------------------------------------------

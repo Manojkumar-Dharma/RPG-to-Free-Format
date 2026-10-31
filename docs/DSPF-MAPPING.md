@@ -33,6 +33,7 @@ A `D` record before the first `S` is reported R and skipped.
 |---|---|
 | `DSPSIZ(24 80 *DS3)` | Always. `DSPSIZ(24 80 *DS3 27 132 *DS4)` when any S record has Y in column 39 |
 | `INDARA` | Always (SC41-4730 chapter 14: separate indicator area is required in the System/36 environment) |
+| `CHGINPDFT` | Always (DSP-05: IBM's own conversion of `STIPFM` has `USRDSPMGT CHGINPDFT INDARA`; copied from IBM's conversion; its effect on the display (input fields without the default underline) is to be checked; A) |
 | `CHECK(RLTB)` | When the first S record has Y in column 40 (only the first format counts, as in the manual) |
 
 ## S specification: record format
@@ -42,8 +43,8 @@ A `D` record before the first `S` is reported R and skipped.
 | 7-14 name | `R name`. A name that is not valid in DDS becomes `FMTn` and the original is kept with `ALTNAME('name')` (A) |
 | 7-14 help format name `axxxxxnn` | `HLPSEQ(nn)` is added for an 8-character name of a letter, five letters or digits and two digits (SC41-4730 chapter 14) (A) |
 | 17-18 start line | blank: nothing; `V`: `SLNO(*VAR)`; number: `SLNO(n)` |
-| 19-20 lines to clear | blank: `CLRL(*ALL)`; `0`: `CLRL(*NO)`; number: `CLRL(n)` |
-| 21 lowercase | Y makes input fields `LOWER` unless the D record says N (column 51) |
+| 19-20 lines to clear | blank: `CLRL(*ALL)`; `0`: `CLRL(*NO)`; `24`: `CLRL(*ALL)` (DSP-05: the whole display, as IBM's conversion); other number: `CLRL(n)` |
+| 21 lowercase | Y makes input fields `CHECK(LC)` unless the D record says N (column 51) (DSP-05: was `LOWER`) |
 | 22 return input | N: nothing; otherwise `RTNDTA` |
 | 25-26 sound alarm | Y: `ALARM`; indicator: `ALARM` conditioned by it |
 | 27, 28, 64-79 keys | See keys below |
@@ -93,6 +94,7 @@ Assumptions (A): command keys become `CFnn(nn)`, so data is returned with the ke
 | Y | not Y | With constant text (not a message field): constant text as above (A, reported once), because DDS rejects `DFT` on an output-only field without `OVRDTA` (CPD7620) and the program cannot send data to it. Without constant text: output field (`O`) |
 | indicator | not Y | Output field conditioned by the indicator. Constant text, if any, is a constant conditioned by NOT the indicator |
 | N or blank | Y | Input field (`I`). Constant text is not used (A) |
+| Y with constant type C and constant text of up to 25 characters (DSP-05) | Y | Input-only field (`I`) with `DFT('text')`, as IBM's conversion of the hidden field of `STIPFM` (A); longer text: input/output field as below |
 | Y | Y | Input/output field (`B`) |
 | indicator | Y | Input/output field defined twice with the same name (A): `B` conditioned by the indicator (the program's data is shown while it is on) and `I` conditioned by NOT the indicator (input only, no data sent, while it is off). Attributes, checks and `LOWER` are written under both; `EDTCDE` and `OVRDTA` only under the `B` one |
 
@@ -142,17 +144,18 @@ The output length is a guess: if the S/36 field length already includes the edit
 | 43-44 | `DSPATR(ND)` |
 | 45-46 | `DSPATR(RI)` |
 | 47-48 | `DSPATR(UL)` |
-| 49 | `DSPATR(CS)` |
+| 49 | `DSPATR(CS)`; on an input field that an indicator protects (columns 37-38) it is conditioned by NOT that indicator (DSP-05: IBM's `N60 DSPATR(CS)`) |
 | 37-38 (input) | `DSPATR(PR)` |
+| every input field (DSP-05) | `DSPATR(MDT)`: IBM's conversion puts it on all 44 input fields of `STIPFM`, the hidden ones included (the S/36 returns the field changed or not) |
 | 32-33 (input) | `DSPATR(PC)` |
 | 28 | `CHECK(MF)`. DDS does not allow `RZ` or `RB` with it (CPD7621), so they are left out when column 28 is Y (A) |
 | 29 | `CHECK(ME)` |
 | 30 | T: `CHECK(M10)`, E: `CHECK(M11)` |
 | 31 | Z: `CHECK(RZ)`, B: `CHECK(RB)` |
 | 35 | `CHECK(FE)` |
-| 36 | `CHECK(AB)`, only together with `M10` or `M11`; DDS needs another validity checking keyword with it (CPD7656). Otherwise left out (A) |
+| 36 | `CHECK(ER)`: column 36 is automatic record advance (SC41-4730 Appendix B), and IBM's conversion of `STIPFM` writes `CHECK(ER)` (DSP-05; before it was read as `AB` and left out without `M10`/`M11`) |
 | 34 | `DUP` |
-| 51 (or S column 21) | `LOWER`, not on numeric fields |
+| 51 (or S column 21) | `CHECK(LC)` in the same `CHECK` keyword as the other checks (DSP-05: IBM's conversion; was `LOWER`), not on numeric fields |
 
 Each attribute is Y (always) or an indicator. Always-on attributes are joined in one `DSPATR(...)`. An indicator-conditioned attribute is a keyword line conditioned by the indicator.
 
@@ -238,7 +241,7 @@ Not in the sample (would stop the compile or needs a program): fields in columns
 | `FKEYALL` | Keys blank | Every function key and `CF01` to `CF24` |
 | `FKEYMIX` | Function keys `Y` mask `5`, command keys blank | `HELP` and all `CFnn` |
 | `FSTARTV`, `FSTARTN`, `FCLR10` | Start line and lines to clear | `SLNO(*VAR) CLRL(*ALL)`; `SLNO(5) CLRL(*NO)`; `CLRL(10)` |
-| `FOPTY` | Lowercase Y, return input N, alarm, blink, erase, lock Y | `ALARM BLINK ERASEINP LOCK`, no `RTNDTA`; `LCFLD` has `LOWER`, `NOLC` and numeric `NUMLC` do not |
+| `FOPTY` | Lowercase Y, return input N, alarm, blink, erase, lock Y | `ALARM BLINK ERASEINP LOCK`, no `RTNDTA`; `LCFLD` has `CHECK(LC)` (FREE-75, was `LOWER`), `NOLC` and numeric `NUMLC` do not |
 | `FOPTI` | Alarm 31, blink 32, erase 33, override 34, lock 35 | Each keyword conditioned by its indicator, `OVERLAY` before `ERASEINP(33)`, `PUTOVR` conditioned by 34; A |
 | `1BADFMT` | Name not valid in DDS | `FMTn` with `ALTNAME('1BADFMT')`, A |
 | `F132` | Column 39 `Y` | `DSPSIZ(24 80 *DS3 27 132 *DS4)`, A |
@@ -250,7 +253,7 @@ Not in the sample (would stop the compile or needs a program): fields in columns
 | `FBADD` | No length, no line, no column, output `Q` | R each, not written |
 | `FATTR` | HI BL ND RI UL CS, indicators, PR, PC, combinations | `DSPATR(...)` per attribute, indicator forms conditioned; `IALL` has `DSPATR(HI BL RI UL CS)` and `PR` conditioned by 56 |
 | `FATTRPC` | Position cursor `Y` | `DSPATR(PC)` on `IPC` |
-| `FCHECK` | MF ME M10 M11 RZ RB FE AB DUP LOWER | `CHECK(...)` per field; `CKAB10` has `M10 AB`; `CKABONLY` has no `AB`, A; `CKALL` (MF with RZ) has no `RZ`, A; `CKNUMLOW` has no `LOWER`; `CKOUT` (output) gets no checks |
+| `FCHECK` | MF ME M10 M11 RZ RB FE column 36 DUP lowercase | `CHECK(...)` per field; `CKAB10` has `M10 ER` and `CKABONLY` has `ER` (FREE-75: column 36 is automatic record advance, was `AB`); `CKALL` (MF with RZ) has no `RZ`, A; `CKNUMLOW` has no `LC`; `CKOUT` (output) gets no checks |
 | `FOVER` | Override (S 33-34) | `PUTOVR` conditioned by 34, `OVRATR` on `OVIN`/`OVBOTH`, `OVRDTA` conditioned by 37 on `OVOUT`, A |
 | `FHELP` | 18 H records | 6 valid: `HLPARA` lines with `HLPRCD`/`HLPDOC` (see H table above); the 12 not valid ones R as comments; `1BADFMT` becomes `HLPRCD(FMTn)` |
 | `ORDHLP01`, `ORDHLP03`, `ORDHLP05` | Help formats | `HLPSEQ(ORDHLP 1)`, `(ORDHLP 3)`, `(ORDHLP 5)`, A |
@@ -299,3 +302,27 @@ What the pair `STIPFM.dspf` and `STIP01FM.dspf` shows (read from the files):
 - The function keys became `CFnn(nn 'text')` with response indicators; the record keywords `PRINT(*PGM)`, `INVITE`, `SLNO(01)`, `CLRL(*ALL)`, `ALWROL`, `HLPRTN`, `HOME` and `HELP` are not in the subfile version, and the file keywords are `DSPSIZ(*DS3)`, `INDARA` and `PRINT`.
 
 Decided 2026-10-31 for DSP-06: the plain format stays as written and is reported; a generated subfile version follows as comment lines (not a replacement, so a program that still writes the plain format keeps working); the names are generated and reported, not read from a parameter. Still open: a parameter member with the program's field names and types (`SXSEL`, `SLGART` 4,2 `EDTCDE(4)` ...), and the conversion of the keywords of the format into the control record.
+
+## DSP-05: comparison with IBM's conversion of STIPFM (2026-10-31)
+
+`samples/STIPFM.dspf` is IBM's own conversion (header `A*0IGC 0DS4 V7R3M0`, file keywords `DSPSIZ(*DS3 *DS4)`, `USRDSPMGT CHGINPDFT INDARA`) of the real S/36 member `samples/STIPFM.dspf36` (7 formats, 496 display items). It is the reference for the layout. The converter cannot be run here, so the comparison was done by reading `IAdspCvt` and applying its rules to every D record of the member by script (`tools` of the session, not kept), and matching the result with the reference by line and column.
+
+**Same as IBM:** the line and column of all 496 items, the length, data type and usage of every named field except the ones below, the constant texts, the attributes `HI`, `BL`, `ND`, `RI`, `UL`, `CS`, `PR`, `PC` with their indicators, `CHECK(RB)`, the function keys (`CF03 CF21` by mask `CV`: ours are `CF03(03) CF21(21)` with a response indicator, DSP-04), `ROLLUP ROLLDOWN CLEAR HOME HELP`.
+
+**Differences found and written (FREE-75):**
+
+| Item | IBM | Before | Now |
+|---|---|---|---|
+| input fields | `DSPATR(MDT)` on all 44 | none | `MDT` added |
+| `CS` on a field with a protect indicator (11 of 11) | `N60 DSPATR(CS)` | `DSPATR(CS)` always | conditioned by NOT the protect indicator |
+| column 36 `Y` | `CHECK(ER)` | read as `AB`, left out | `CHECK(ER)` |
+| lowercase (column 51) | `CHECK(LC)` | `LOWER` | `CHECK(LC)` in the one `CHECK` keyword |
+| output `Y`, type `C`, no text (43 of them) | a literal of blanks of the field length | a named output field | a constant of blanks |
+| constants | literal padded to the field length | trailing blanks cut; blanks at the end of a continued record cut too (text moved left by 23 columns in `CHOIX2` line 24) | padded; the join of continued records keeps the blanks |
+| input `Y`, output `Y`, type `C` with text (6, the hidden field `CE`) | usage `I`, `DFT('1')` | usage `B` | `I` with `DFT` |
+| lines to clear `24` | `CLRL(*ALL)` | `CLRL(24)` | `CLRL(*ALL)` |
+| file keyword | `CHGINPDFT` | none | added |
+
+**Differences left (not changed, need a display test):** `DSPMOD(*DS3)` and `ALWROL` on every format, `PRINT(*PGM)` instead of `PRINT`, `SLNO(01)` when the start line is blank (the DDS default is 1), `OVERLAY` on `SORTIE` (start line 18), `USRDSPMGT`, `DSPSIZ(*DS3 *DS4)` instead of `DSPSIZ(24 80 *DS3)`, and the function keys without a response indicator.
+
+Not tested: written from the manual and the reference, not compiled. The check to make on the system is `CRTDSPF` of the converted `STIPFM` and a display of a few formats (hidden field `CE`, the lowercase field of `ECRDI`, the formats with `CLRL(*NO)`).
