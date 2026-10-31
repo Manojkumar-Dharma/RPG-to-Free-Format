@@ -1185,7 +1185,9 @@ dcl-proc CalcLine export;
   // EXFMT and READC of the display file (RV-12): converted when the source has a
   // WORKSTN file; the other WORKSTN operations (ACQ, REL, NEXT, POST) stay R.
   // The table says A (converted with a WORKSTN file); without one the line is R.
-  if l_rule.kind = 'FILE' and (l_rule.opcode = 'EXFMT' or l_rule.opcode = 'READC');
+  if l_rule.kind = 'FILE' and (l_rule.opcode = 'EXFMT' or l_rule.opcode = 'READC'
+     or l_rule.opcode = 'ACQ' or l_rule.opcode = 'REL' or l_rule.opcode = 'NEXT'
+     or l_rule.opcode = 'POST');
     if WorkstnFile() <> '';
       l_rule.status = C_STS_CONVERTED;
       l_rule.reason = '';
@@ -5218,6 +5220,7 @@ dcl-proc ConvertFileOp;
   dcl-s l_note varchar(190) inz('');
   dcl-s l_slot int(10);
   dcl-s l_isArea ind inz(*off);
+  dcl-s l_devOp ind inz(*off);
   dcl-s l_wsFile varchar(8) inz('');
   dcl-s l_wsFormat ind inz(*off);
   dcl-s l_test varchar(250);
@@ -5263,9 +5266,19 @@ dcl-proc ConvertFileOp;
       l_free = 'exfmt';
     when l_op = 'READC';
       l_free = 'readc';
+    // FREE-71 (RV-12): the operations of a multiple device WORKSTN file.
+    when l_op = 'ACQ';
+      l_free = 'acq';
+    when l_op = 'REL';
+      l_free = 'rel';
+    when l_op = 'NEXT';
+      l_free = 'next';
+    when l_op = 'POST';
+      l_free = 'post';
     other;
       l_reason = l_op + ' is not converted';
   endsl;
+  l_devOp = (l_op = 'ACQ' or l_op = 'REL' or l_op = 'NEXT' or l_op = 'POST');
   l_keyOp = (l_op = 'CHAIN' or l_op = 'READE' or l_op = 'REDPE' or l_op = 'SETLL'
              or l_op = 'SETGT' or l_op = 'DELET');
   l_dsOp = (l_op = 'CHAIN' or l_op = 'READ' or l_op = 'READE' or l_op = 'READP'
@@ -5306,7 +5319,16 @@ dcl-proc ConvertFileOp;
     elseif (l_op = 'EXFMT' or l_op = 'READC');
       l_reason = l_op + ' needs a record format of the display file, not the file '
                  + l_name;
+    elseif l_devOp and l_device <> 'W';
+      l_reason = l_op + ' needs a WORKSTN file, not the file ' + l_name;
     endif;
+  endif;
+  if l_reason = '' and l_devOp and l_op <> 'POST' and i_c.factor1 = '';
+    l_reason = l_op + ' without a program device in factor 1';
+  endif;
+  if l_reason = '' and l_op = 'POST' and i_c.result <> '';
+    l_reason = 'POST with an INFDS name in the result field is not converted: '
+               + 'free-form uses the INFDS keyword of the file';
   endif;
 
   // The search argument and the data structure.
@@ -5344,6 +5366,11 @@ dcl-proc ConvertFileOp;
     l_stmt = l_free + l_ext;
     if l_key <> '';
       l_stmt += ' ' + l_key;
+    endif;
+    if l_devOp and i_c.factor1 <> '';
+      l_stmt += ' ' + i_c.factor1C;
+      AddReason(l_note:l_op + ' of a multiple device WORKSTN file (program device '
+                + 'in factor 1): check');
     endif;
     if l_op = 'COMIT' or l_op = 'ROLBK';
       if l_op = 'COMIT' and i_c.factor1 <> '';

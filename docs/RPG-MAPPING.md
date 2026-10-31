@@ -1210,3 +1210,22 @@ The skeleton of FREE-36 is written for RPG IV when the source has one program de
 | secondary files, MR | R (RV-21) |
 
 Samples: `samples/FREE4CYC.rpgle` and `samples/FREE4CYP.rpgle` (FREE-62: a printer file with `H` on `1P` and `OR` `OA`, `D`, `T` on `L1` and `LR`, record identifying indicator `01` on the primary file and as a calculation condition). Expected, written from the design and not from a run: the DDS formats `HEAD01`, `DETAIL01`, `TOTAL01`, `TOTAL02`; the heading and detail written at the start of the cycle, `L1` and `LR` records at the end of `IA_TOTALS`. Needs a compile and test on the IBM i.
+
+## WORKSTN: multiple device files (FREE-71, RV-12, RV-31, RV-32)
+
+Source: SC09-1817 (operation codes ACQ, NEXT, POST, REL; Table 17, continuation line options), SC09-2508 (free-form syntax of the operations, keywords DEVID, MAXDEV, PASS, SAVEDS, SAVEIND, SLN).
+
+| RPG | Free-form |
+|---|---|
+| `ACQ` factor 1 device, factor 2 WORKSTN file (RPG II, III, IV) | `acq dev file;` |
+| `REL`, `NEXT` the same | `rel dev file;`, `next dev file;` |
+| `POST` file (factor 1 optional) | `post [dev] file;`; an INFDS name in the result field stays R (free-form uses the INFDS keyword of the file) |
+| `ER` indicator (columns 56-57, RPG IV `LO`) or the extender `(E)` | `acq(e) ...` and `*inxx = %error` |
+| continuation option `ID` field | `devid(field)` (character, length 10) |
+| `SAVDS` data structure | `saveds(ds)` |
+| `IND` n | `saveind(n)` |
+| `NUM` 1, or `ID`, `IND` or `SAVDS` without `NUM` | `maxdev(*only)` |
+| `NUM` n above 1 | `maxdev(*file)` (A) |
+| `SLN` field | `sln(field)` (numeric 2,0, defined by the compiler) |
+| `PASS` `*NOIND` (program described file) | `pass(*noind)` |
+| `SPECIAL`, `PLIST`, `PRTCTL` | R |

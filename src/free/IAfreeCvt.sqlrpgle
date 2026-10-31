@@ -1147,10 +1147,15 @@ dcl-proc ContinuationKeywords;
   dcl-s l_rrn varchar(6);
   dcl-s l_seen varchar(100) inz('|');
   dcl-s l_disk ind;
+  dcl-s l_ws ind;
+  dcl-s l_hasNum ind inz(*off);
+  dcl-s l_needNum ind inz(*off);
 
   o_keywords = '';
   o_note = '';
   l_disk = (i_device = 'DISK');
+  // FREE-71 (RV-32): the options of a WORKSTN file of RPG III, as keywords of dcl-f.
+  l_ws = (i_device = 'WORKSTN' and g_dialect = '3');
   for l_k = 0 to i_extra;
     if l_k = 0;
       l_up = %xlate(C_LOWER:C_UPPER:i_line);
@@ -1237,6 +1242,53 @@ dcl-proc ContinuationKeywords;
         AppendText(o_note:'Relative record number field ' + l_rrn + ' of subfile '
                    + l_arg + ' must be a numeric field without decimals defined '
                    + 'in the program');
+      when l_ws and l_opt = 'ID';
+        if not ContName(l_arg);
+          return 'ID needs a field name in columns 60-65';
+        endif;
+        o_keywords += ' devid(' + l_arg + ')';
+        l_needNum = *on;
+        AppendText(o_note:'DEVID field ' + l_arg + ' must be a character field of '
+                   + 'length 10 defined in the program');
+      when l_ws and l_opt = 'SAVDS';
+        if not ContName(l_arg);
+          return 'SAVDS needs a data structure name in columns 60-65';
+        endif;
+        o_keywords += ' saveds(' + l_arg + ')';
+        l_needNum = *on;
+      when l_ws and l_opt = 'IND';
+        if l_arg = '' or %check(C_DIGITS:l_arg) > 0 or %len(l_arg) > 2
+           or %dec(l_arg:3:0) < 1;
+          return 'IND needs a number from 01 to 99 in columns 60-65';
+        endif;
+        o_keywords += ' saveind(' + %char(%dec(l_arg:3:0)) + ')';
+        l_needNum = *on;
+      when l_ws and l_opt = 'NUM';
+        if l_arg = '' or %check(C_DIGITS:l_arg) > 0 or %len(l_arg) > 4
+           or %dec(l_arg:5:0) < 1;
+          return 'NUM needs a number greater than zero in columns 60-65';
+        endif;
+        l_hasNum = *on;
+        if %dec(l_arg:5:0) = 1;
+          o_keywords += ' maxdev(*only)';
+        else;
+          o_keywords += ' maxdev(*file)';
+          AppendText(o_note:'NUM ' + l_arg + ' became MAXDEV(*FILE): the limit is '
+                     + 'the number of devices of the file, not ' + l_arg);
+        endif;
+      when l_ws and l_opt = 'SLN';
+        if not ContName(l_arg);
+          return 'SLN needs a field name in columns 60-65';
+        endif;
+        o_keywords += ' sln(' + l_arg + ')';
+        AppendText(o_note:'SLN field ' + l_arg + ' is defined by the compiler as '
+                   + 'numeric 2,0');
+      when l_ws and l_opt = 'PASS';
+        if l_arg <> '*NOIND' or i_fmt = 'E';
+          return 'PASS is converted for program described WORKSTN files, with '
+                 + '*NOIND in columns 60-65';
+        endif;
+        o_keywords += ' pass(*noind)';
       when l_opt = 'ID' or l_opt = 'IND' or l_opt = 'NUM' or l_opt = 'PASS'
            or l_opt = 'SAVDS' or l_opt = 'SLN'
            or l_opt = 'PLIST';
@@ -1246,6 +1298,11 @@ dcl-proc ContinuationKeywords;
         return 'Continuation option ' + l_opt + ' is not known';
     endsl;
   endfor;
+  // RPG III assumes NUM 1 when ID, IND or SAVDS is given without NUM; free-form
+  // assumes a multiple device file (MAXDEV(*FILE)) then, so the 1 is written.
+  if l_needNum and not l_hasNum;
+    o_keywords += ' maxdev(*only)';
+  endif;
   return '';
 end-proc;
 

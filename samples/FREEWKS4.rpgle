@@ -10,4 +10,9 @@
      C                   UPDATE    SFLREC
      C                   CLOSE     DSPFILE
      C                   ACQ       DSPFILE
+      * FREE-71: program device in factor 1; the ACQ above has none (R)
+     C     'DEV1'        ACQ       DSPFILE                              93
+     C     'DEV1'        NEXT      DSPFILE
+     C                   POST      DSPFILE
+     C     'DEV1'        REL(E)    DSPFILE
      C                   EVAL      *INLR = *ON

@@ -4039,7 +4039,8 @@ dcl-proc ResultInds;
              or i_op = 'READP' or i_op = 'READPE' or i_op = 'WRITE'
              or i_op = 'UPDATE' or i_op = 'EXFMT' or i_op = 'OPEN'
              or i_op = 'CLOSE' or i_op = 'UNLOCK' or i_op = 'FEOD'
-             or i_op = 'READC';
+             or i_op = 'READC' or i_op = 'ACQ' or i_op = 'REL' or i_op = 'NEXT'
+             or i_op = 'POST';
 
   for l_k = 1 to 3;
     if l_ind(l_k) = '';
@@ -4604,6 +4605,7 @@ dcl-proc ConvertC;
      and l_op <> 'DEFN' and l_op <> 'CALL' and l_op <> 'PLIST' and l_op <> 'PARM'
      and l_op <> 'IN' and l_op <> 'OUT'
      and l_op <> 'LOOKUP'
+     and l_op <> 'ACQ' and l_op <> 'REL' and l_op <> 'NEXT' and l_op <> 'POST'
      and l_op <> 'DO' and l_op <> 'DSPLY' and l_op <> 'COMIT' and l_op <> 'COMMIT'
      and not IsArith(l_op) and not (l_op = 'CHAIN' or l_op = 'SETLL'
      or l_op = 'SETGT' or l_op = 'READE' or l_op = 'READPE' or l_op = 'DELETE')
@@ -5091,8 +5093,34 @@ dcl-proc ConvertC;
         endif;
         l_stmt += ' ' + l_args;
       when l_op = 'ACQ' or l_op = 'REL' or l_op = 'NEXT' or l_op = 'POST';
-        l_reason = l_op + ' (multiple device files and WORKSTN) has no free-form '
-                   + 'equivalent that is converted';
+        // FREE-71 (RV-12): ACQ{(E)} device file, REL{(E)} device file,
+        // NEXT{(E)} device file and POST{(E)} {device} file (SC09-2508).
+        if l_err and %scan('e':l_ext) = 0;
+          if l_ext = '';
+            l_ext = '(e)';
+          else;
+            l_ext = '(e' + %subst(l_ext:2);
+          endif;
+        endif;
+        select;
+          when l_f2 = '';
+            l_reason = l_op + ' without a file in factor 2';
+          when l_op <> 'POST' and l_f1 = '';
+            l_reason = l_op + ' without a program device in factor 1';
+          when l_op = 'POST' and l_res <> '';
+            l_reason = 'POST with an INFDS name in the result field is not converted: '
+                       + 'free-form uses the INFDS keyword of the file';
+          when l_op <> 'POST' and l_res <> '';
+            l_reason = 'Result field on ' + l_op + ' is not converted';
+          other;
+            l_stmt = Low(l_op) + l_ext;
+            if l_f1 <> '';
+              l_stmt += ' ' + l_f1;
+            endif;
+            l_stmt += ' ' + l_f2;
+            l_note = l_op + ' of a multiple device WORKSTN file (program device in '
+                     + 'factor 1): check';
+        endsl;
       other;
         l_reason = 'Operation ' + l_op + ' is not converted yet (RPG IV)';
     endsl;

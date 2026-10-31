@@ -2,6 +2,9 @@
      H
      FDSPFILE CF  E                    WORKSTN
      F                                        RRN   KSFILE SFLREC
+     F                                               ID    DEVNAM
+     F                                               SAVDS DEVDS
+     F                                               NUM        2
      C                     Z-ADD1         RRN   40
      C                     WRITESFLREC
      C                     EXFMTCTLREC                 90
@@ -10,3 +13,8 @@
      C                     UPDATSFLREC
      C                     CLOSEDSPFILE
      C                     ACQ  DSPFILE
+      * FREE-71: program device in factor 1; the ACQ above has none (R)
+     C           'DEV1'    ACQ  DSPFILE                93
+     C           'DEV1'    NEXT DSPFILE
+     C                     POST DSPFILE
+     C           'DEV1'    REL  DSPFILE
