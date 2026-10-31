@@ -968,6 +968,7 @@ Source: SC09-1817 (output indicators, the 1P indicator, the program cycle). The 
 | `L1` to `L9`, `LR` | `*inl1` to `*inl9`, `*inlr`; the levels stay on during step 1 of the next cycle, as in RPG |
 | AND lines | `and`; OR lines: `(a) or (b)`, for every record type including E |
 | overflow indicator `OA` to `OG`, `OV` on the record (FREE-68) | `*inoa` in the condition, as before; **and** `*inoa = *off;` after the last heading or detail record that uses it (after the last total record when no heading or detail record uses it), because the printer file only sets it on and the RPG cycle sets it off after the overflow lines are printed (SC09-1818, Handling Overflow, step 5) |
+| an overflow indicator in the conditions of a record or field that is not the overflow indicator of the file (columns 33-34 of the RPG II/III file description, `OFLIND(*INxx)` of RPG IV), or a file without one (FREE-70) | R: RPG needs the same indicator in the file description and the file sets only that one on, so the records would never be written (SC09-1818, Overflow Indicators); `samples/FREEPRT.rpg36` had `OV` on a file with `OA` and now uses `OA` |
 | `MR`, `RT`, `1P` on T, a field line with a level indicator | R |
 | fetch overflow (`F` in column 16, the fetch overflow routine) | R: the routine prints the overflow total, heading and detail lines in the middle of the cycle; the cycle does it once, at its own time (SC09-1818, Fetch Overflow Routine) |
 

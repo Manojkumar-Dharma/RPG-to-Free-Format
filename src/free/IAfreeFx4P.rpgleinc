@@ -58,6 +58,11 @@ end-pr;
 
 // A converted file description of RPG IV for the output specifications and
 // IAfreeCvt FileInfo.
+dcl-pr CvtSetFileOverflow;
+  i_name varchar(8) const;
+  i_ovf varchar(2) const;
+end-pr;
+
 dcl-pr CvtRegisterFile;
   i_name varchar(8) const;
   i_recLen int(10) const;

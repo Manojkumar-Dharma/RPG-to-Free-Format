@@ -532,6 +532,8 @@ dcl-proc OutBuild;
   dcl-s l_nExt int(10);
   dcl-s l_extName varchar(8);
   dcl-s l_extType char(1);
+  dcl-s l_why varchar(150);
+  dcl-s l_f int(10);
 
   if g_built;
     return;
@@ -923,6 +925,21 @@ dcl-proc OutBuild;
     if g_gOr(l_k) <> '';
       g_gCond(l_k) = g_gOr(l_k) + ' or (' + g_gCond(l_k) + ')';
     endif;
+  endfor;
+
+  // FREE-69: an overflow indicator in the conditions of a record or a field must be the
+  // overflow indicator of its printer file; if not, the file never sets it on.
+  for l_k = 1 to g_gCount;
+    if g_gReason(l_k) <> '' or g_gDisk(l_k);
+      iter;
+    endif;
+    l_why = OverflowMismatch(g_gCond(l_k):g_gFile(l_k));
+    for l_f = g_gFirst(l_k) to g_gFirst(l_k) + g_gFields(l_k) - 1;
+      if l_why = '';
+        l_why = OverflowMismatch(g_fCond(l_f):g_gFile(l_k));
+      endif;
+    endfor;
+    g_gReason(l_k) = l_why;
   endfor;
 
   // Format names: the EXCPT name, with a two-digit number when the name is used
@@ -1486,6 +1503,40 @@ dcl-proc EditWordLength;
     l_k += 1;
   enddo;
   return l_len;
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-69: '' or the reason when the condition uses an overflow indicator (OA to OG, OV)
+// that is not the one assigned to the PRINTER file: RPG II to IV need the same
+// indicator in the file description, and the file sets only that one on.
+dcl-proc OverflowMismatch;
+  dcl-pi *n varchar(150);
+    i_cond varchar(200) const;
+    i_file varchar(8) const;
+  end-pi;
+
+  dcl-s l_names varchar(16) inz('oaobocodoeofogov');
+  dcl-s l_name varchar(2);
+  dcl-s l_ovf varchar(2);
+  dcl-s l_i int(10);
+
+  if i_cond = '';
+    return '';
+  endif;
+  l_ovf = %xlate(C_UPPER:C_LOWER:FileOverflow(i_file));
+  for l_i = 1 to 8;
+    l_name = %subst(l_names:l_i * 2 - 1:2);
+    if %scan('*in' + l_name:i_cond) > 0 and l_name <> l_ovf;
+      if l_ovf = '';
+        return 'Overflow indicator ' + %xlate(C_LOWER:C_UPPER:l_name) + ' is used but '
+               + 'file ' + i_file + ' has none (columns 33-34): not converted';
+      endif;
+      return 'Overflow indicator ' + %xlate(C_LOWER:C_UPPER:l_name) + ' is not the one '
+             + 'of file ' + i_file + ' (' + %xlate(C_LOWER:C_UPPER:l_ovf)
+             + '): not converted';
+    endif;
+  endfor;
+  return '';
 end-proc;
 
 // ------------------------------------------------------------------

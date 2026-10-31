@@ -163,6 +163,11 @@ dcl-pr FormatFile varchar(8);
 end-pr;
 
 // A file declared by a converted F specification (see IAfreeCvt FileInfo).
+// FREE-69: the overflow indicator of a PRINTER file, '' if none (IAfreeCvt).
+dcl-pr FileOverflow varchar(2);
+  i_name varchar(8) const;
+end-pr;
+
 // RV-56: the externally described files (IAfreeCvt).
 dcl-pr ExternalFileInfo int(10);
   o_name varchar(8);

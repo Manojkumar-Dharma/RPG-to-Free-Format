@@ -51,6 +51,7 @@ dcl-s g_fileLens int(10) dim(C_MAXFILES);
 dcl-s g_fileDevices char(1) dim(C_MAXFILES);
 dcl-s g_fileTypes char(1) dim(C_MAXFILES);
 dcl-s g_fileHasLayout ind dim(C_MAXFILES);
+dcl-s g_fileOvf varchar(2) dim(C_MAXFILES);   // overflow indicator of a printer file (FREE-69)
 
 // The renamed fields of externally described files (RV-30).
 dcl-s g_renFile varchar(8) dim(C_MAXREN);
@@ -1650,6 +1651,7 @@ dcl-proc ConvertPrinterFile;
              + 'specifications (FREE-06)');
   AddOut(l_stmt:i_lineNo);
   RegisterFile(i_name:0:'P':i_type:i_lineNo:*off);
+  CvtSetFileOverflow(i_name:i_ovf);
   o_ok = *on;
   RptItem(C_STS_ASSUMPTION:i_lineNo:%trimr(%subst(i_line:6:69)):l_note);
 end-proc;
@@ -2928,6 +2930,7 @@ dcl-proc RegisterFile;
   g_fileHasLayout(g_fileCount) = *off;
   g_fileKeyed(g_fileCount) = i_keyed;
   g_fileOut(g_fileCount) = *off;
+  g_fileOvf(g_fileCount) = '';
   DefineName(i_name:i_lineNo);
 end-proc;
 
@@ -3337,6 +3340,39 @@ end-proc;
 
 // ------------------------------------------------------------------
 // The number of the file in the table, or 0.
+// FREE-69: the overflow indicator (OA to OG, OV) assigned to a PRINTER file, '' if none.
+// An output specification may use an overflow indicator only when the same indicator
+// is assigned to the file (SC09-1818, Overflow Indicators).
+dcl-proc CvtSetFileOverflow export;
+  dcl-pi *n;
+    i_name varchar(8) const;
+    i_ovf varchar(2) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+
+  l_i = FindFile(i_name);
+  if l_i > 0;
+    g_fileOvf(l_i) = %xlate(C_LOWER:C_UPPER:i_ovf);
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+dcl-proc FileOverflow export;
+  dcl-pi *n varchar(2);
+    i_name varchar(8) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+
+  l_i = FindFile(i_name);
+  if l_i = 0;
+    return '';
+  endif;
+  return g_fileOvf(l_i);
+end-proc;
+
+// ------------------------------------------------------------------
 dcl-proc FindFile;
   dcl-pi *n int(10);
     i_name varchar(8) const;

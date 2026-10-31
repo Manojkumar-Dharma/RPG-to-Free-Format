@@ -733,6 +733,8 @@ dcl-proc ConvertF;
   dcl-s l_reason varchar(190) inz('');
   dcl-s l_isLike ind;
   dcl-s l_progPrinter ind inz(*off);
+  dcl-s l_kwUp varchar(1200);
+  dcl-s l_p int(10);
   dcl-s l_progDisk ind inz(*off);
   dcl-s l_index int(10);
   dcl-s l_primary ind inz(*off);
@@ -850,6 +852,13 @@ dcl-proc ConvertF;
                   and %len(l_name) <= 8;
   if l_progPrinter;
     CvtRegisterFile(l_name:0:'P':l_type:i_lineNo:*off);
+    // FREE-69: the overflow indicator of the file, OFLIND(*INOA), for the check of
+    // the output specifications.
+    l_kwUp = %xlate(C_LOWER:C_UPPER:l_kwText);
+    l_p = %scan('OFLIND(*IN':l_kwUp);
+    if l_p > 0 and %len(l_kwUp) >= l_p + 11;
+      CvtSetFileOverflow(l_name:%subst(l_kwUp:l_p + 10:2));
+    endif;
   endif;
   // A program described DISK or WORKSTN file: registered for the output specifications
   // (exception records, as for RPG II and RPG III) and its record data structure

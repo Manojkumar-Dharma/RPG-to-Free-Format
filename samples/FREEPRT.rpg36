@@ -12,7 +12,7 @@
      CL1                   ADD  CTOT      GRAND   92
       * output
      OREPORT  H  1     1P
-     O       OR        OV
+     O       OR        OA
      O                                   25 'Sales by customer'
      OREPORT  D  1
      O                         CUST      10
