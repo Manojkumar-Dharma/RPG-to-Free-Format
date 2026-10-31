@@ -5221,6 +5221,7 @@ dcl-proc ConvertFileOp;
   dcl-s l_slot int(10);
   dcl-s l_isArea ind inz(*off);
   dcl-s l_devOp ind inz(*off);
+  dcl-s l_fieldInds varchar(250);
   dcl-s l_wsFile varchar(8) inz('');
   dcl-s l_wsFormat ind inz(*off);
   dcl-s l_test varchar(250);
@@ -5449,6 +5450,28 @@ dcl-proc ConvertFileOp;
       l_statements(l_count) = 'endif';
       AddReason(l_note:'The renamed fields of the file (I specification) '
                 + 'are copied after the operation when a record was read');
+    endif;
+  endif;
+
+  // FREE-74: the field indicators of the I specification (plus, minus, zero or blank)
+  // are set after an input operation that read a record.
+  if l_device = 'D' and (l_op = 'CHAIN' or l_op = 'READ' or l_op = 'READE'
+                         or l_op = 'READP' or l_op = 'REDPE');
+    l_fieldInds = FileFieldInds(l_name);
+    if l_fieldInds <> '';
+      l_count += 1;
+      if l_op = 'CHAIN';
+        l_statements(l_count) = 'if %found(' + l_name + ')';
+      else;
+        l_statements(l_count) = 'if not %eof(' + l_name + ')';
+      endif;
+      l_count += 1;
+      l_statements(l_count) = '  ' + l_fieldInds;
+      l_count += 1;
+      l_statements(l_count) = 'endif';
+      AddReason(l_note:'The field indicators of the I specification are set after '
+                + 'the operation when a record was read (a numeric field with '
+                + 'blanks stops the program)');
     endif;
   endif;
 
@@ -6988,6 +7011,9 @@ dcl-proc CycOpen;
   dcl-pi *n;
   end-pi;
 
+  dcl-s l_fi varchar(250);
+  dcl-s l_fiPos int(10);
+
   if g_declAt = 0;
     AddOut('':g_lastLineNo);
     g_declAt = OutCount();
@@ -7043,6 +7069,19 @@ dcl-proc CycOpen;
   endif;
   if not g_cycNoPrim;
     Emit(g_cycRec + ' = IA_NEXT;':g_lastLineNo);
+    // FREE-74: the field indicators of the I specification of the primary file, one
+    // statement for each line.
+    l_fi = FileFieldInds(g_cycFile);
+    dow l_fi <> '';
+      l_fiPos = %scan('; ':l_fi);
+      if l_fiPos = 0;
+        Emit(l_fi + ';':g_lastLineNo);
+        l_fi = '';
+      else;
+        Emit(%subst(l_fi:1:l_fiPos - 1) + ';':g_lastLineNo);
+        l_fi = %subst(l_fi:l_fiPos + 2);
+      endif;
+    enddo;
   endif;
   Emit('IA_FIRST = *off;':g_lastLineNo);
   g_cycState = 'D';

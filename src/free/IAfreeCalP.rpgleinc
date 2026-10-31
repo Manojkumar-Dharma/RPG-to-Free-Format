@@ -131,6 +131,12 @@ dcl-pr ReviewSpec;
   i_reason varchar(190) const;
 end-pr;
 
+// FREE-74: the field indicators of a file (I specification columns 65-70) as
+// statements (*inNN = (FIELD > 0); ...), '' when there are none.
+dcl-pr FileFieldInds varchar(250);
+  i_name varchar(8) const;
+end-pr;
+
 // The renamed fields of an externally described file as assignments (see
 // IAfreeCvt FileRenames), '' when there is none.
 dcl-pr FileRenames varchar(250);

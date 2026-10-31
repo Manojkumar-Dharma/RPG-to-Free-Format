@@ -1283,3 +1283,15 @@ Source: SC09-1817 (file description, device SPECIAL, columns 54-59; Table 17, op
 | type C (combined file) | `usage(*input:*output)` |
 | continuation option `PLIST` | `plist(NAME)` |
 | E in column 19, no routine, file addition or organization, RPG II | R |
+
+## RPG II and III: field indicators of an I specification (FREE-74, RV-30)
+
+Source: SC09-1818 and SC09-1817 (input specifications: field indicators, columns 65-70). Program described files only.
+
+| RPG | Free-form |
+|---|---|
+| plus indicator (columns 65-66) | `*inNN = (FIELD > 0)` |
+| minus indicator (columns 67-68) | `*inNN = (FIELD < 0)` |
+| zero or blank indicator (columns 69-70) | `*inNN = (FIELD = 0)`, or `FIELD = *blanks` for a character field |
+| when it is set | after `READ`, `READE`, `READP`, `REDPE` (`if not %eof(FILE)`) and `CHAIN` (`if %found(FILE)`), and after `FILE_REC = IA_NEXT` in the cycle skeleton |
+| plus or minus on a character field, indicators other than 01 to 99, a record type of the primary file | R |

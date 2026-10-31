@@ -1,0 +1,12 @@
+      * RPG III field indicators of an I specification (FREE-74, RV-30)
+     H
+     FINFILE  IF  F      80            DISK
+     IINFILE  AA
+     I                                        1   30CUST            10
+     I                                        4  102AMT         202122
+     I                                       11  20 NAME            30
+     I                                       21  25 FLAG        40
+      * the last field is not converted: a plus indicator on a character field
+     C                     READ INFILE                   90
+     C   20                ADD  AMT       TOTAL   92
+     C                     SETON                     LR

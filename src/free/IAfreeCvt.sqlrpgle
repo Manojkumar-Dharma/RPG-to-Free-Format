@@ -58,6 +58,12 @@ dcl-s g_renFile varchar(8) dim(C_MAXREN);
 dcl-s g_renExt varchar(10) dim(C_MAXREN);
 dcl-s g_renNew varchar(6) dim(C_MAXREN);
 dcl-s g_renCount int(10);
+// FREE-74: field indicators (columns 65-70 of an I specification): one statement for
+// each indicator, set after a record of the file was read.
+dcl-s g_fiFile varchar(8) dim(C_MAXREN);
+dcl-s g_fiText varchar(60) dim(C_MAXREN);
+dcl-s g_fiCount int(10);
+dcl-s g_inFile varchar(8) inz('');
 // The record format names of the record lines of externally described files
 // (WRITE and UPDAT name a record format, FREE-25).
 dcl-s g_fmtName varchar(8) dim(C_MAXREN);
@@ -165,6 +171,8 @@ dcl-proc FreeConvert export;
   g_cycMatchCount = 0;
   g_inPrimary = *off;
   g_renCount = 0;
+  g_fiCount = 0;
+  g_inFile = '';
   g_fmtCount = 0;
   g_nameCount = 0;
   g_blockCount = 0;
@@ -2479,6 +2487,7 @@ dcl-proc ConvertInput;
   endif;
   BlockAdd(l_head:i_lineNo);
   g_inPrimary = l_isCyc;
+  g_inFile = l_name;
 
   for l_k = i_index + 1 to l_last;
     l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
@@ -2516,6 +2525,7 @@ dcl-proc ConvertInput;
   endfor;
 
   g_inPrimary = *off;
+  g_inFile = '';
   g_cycTypeCur = 0;
   g_cycCur = 0;
 
@@ -2632,13 +2642,25 @@ dcl-proc ConvertInputField;
     when FindName(l_name) > 0;
       o_reason = 'Field ' + l_name + ' is already defined at line '
                  + %char(FindName(l_name));
-    when %trim(%subst(l_up:59:12)) <> '' and not ControlLevelOnly(l_up);
-      o_reason = 'Control level, matching fields, field record relation or field '
-                 + 'indicators are not supported in free-form';
+    when %trim(%subst(l_up:59:6)) <> '' and not ControlLevelOnly(l_up);
+      o_reason = 'Control level, matching fields or field record relation are not '
+                 + 'supported in free-form';
+    when FieldIndReason(l_up) <> '';
+      o_reason = FieldIndReason(l_up);
     when i_recLen > 0 and l_to > i_recLen;
       o_reason = 'Field ends past the record length ' + %char(i_recLen);
   endsl;
   if o_reason <> '';
+    return *off;
+  endif;
+  // FREE-74: plus and minus indicators are for numeric fields.
+  if l_dec = ' ' and l_packBin = ' '
+     and (%trim(%subst(l_up:65:4)) <> '');
+    o_reason = 'Plus and minus field indicators (columns 65-68) are for numeric fields';
+    return *off;
+  endif;
+  if g_cycTypeCur > 0 and %trim(%subst(l_up:65:6)) <> '';
+    o_reason = 'Field indicators on a record type of the primary file are not converted';
     return *off;
   endif;
 
@@ -2703,6 +2725,8 @@ dcl-proc ConvertInputField;
     g_cycMatchType(g_cycMatchCount) = g_cycTypeCur;
     g_cycMatchFile(g_cycMatchCount) = g_cycCur;
   endif;
+  // FREE-74: the field indicators are set after a record was read.
+  FieldIndReg(l_up:l_name:(l_dec <> ' ' or l_packBin <> ' '));
   // The length and type are needed by MOVE and MOVEL.
   select;
     when l_packBin = ' ' and l_dec = ' ';
@@ -2713,6 +2737,97 @@ dcl-proc ConvertInputField;
       CalcDefineField(l_name:'N':l_len:ToInt(%trim(l_dec)));
   endsl;
   return *on;
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-74: why the field indicators of columns 65-70 (plus 65-66, minus 67-68, zero
+// or blank 69-70) of an I specification cannot be converted: only the indicators 01
+// to 99. '' when there are none or they can.
+dcl-proc FieldIndReason;
+  dcl-pi *n varchar(190);
+    i_up char(100) const;
+  end-pi;
+
+  dcl-s l_g int(10);
+  dcl-s l_ind char(2);
+
+  for l_g = 0 to 2;
+    l_ind = %subst(i_up:65 + 2 * l_g:2);
+    if l_ind <> '  ' and (%check(C_DIGITS:l_ind) > 0 or l_ind = '00');
+      return 'Field indicator ' + %trim(l_ind) + ' is converted only for 01 to 99';
+    endif;
+  endfor;
+  return '';
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-74: registers the statements of the field indicators of a field: plus is on
+// when the field is above zero, minus when it is below zero, zero or blank when the
+// field is zero (numeric) or blank (character); each is off otherwise.
+dcl-proc FieldIndReg;
+  dcl-pi *n;
+    i_up char(100) const;
+    i_name varchar(6) const;
+    i_numeric ind const;
+  end-pi;
+
+  dcl-s l_ind char(2);
+  dcl-s l_test varchar(30);
+
+  if g_inFile = '';
+    return;
+  endif;
+  // plus
+  l_ind = %subst(i_up:65:2);
+  if l_ind <> '  ' and g_fiCount < C_MAXREN;
+    g_fiCount += 1;
+    g_fiFile(g_fiCount) = g_inFile;
+    g_fiText(g_fiCount) = '*in' + l_ind + ' = (' + i_name + ' > 0)';
+  endif;
+  // minus
+  l_ind = %subst(i_up:67:2);
+  if l_ind <> '  ' and g_fiCount < C_MAXREN;
+    g_fiCount += 1;
+    g_fiFile(g_fiCount) = g_inFile;
+    g_fiText(g_fiCount) = '*in' + l_ind + ' = (' + i_name + ' < 0)';
+  endif;
+  // zero or blank
+  l_ind = %subst(i_up:69:2);
+  if l_ind <> '  ' and g_fiCount < C_MAXREN;
+    if i_numeric;
+      l_test = i_name + ' = 0';
+    else;
+      l_test = i_name + ' = *blanks';
+    endif;
+    g_fiCount += 1;
+    g_fiFile(g_fiCount) = g_inFile;
+    g_fiText(g_fiCount) = '*in' + l_ind + ' = (' + l_test + ')';
+  endif;
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-74: the field indicators of a file as statements (*inNN = (FIELD > 0); ...),
+// for the input operations and the cycle skeleton. '' when the file has none.
+dcl-proc FileFieldInds export;
+  dcl-pi *n varchar(250);
+    i_name varchar(8) const;
+  end-pi;
+
+  dcl-s l_i int(10);
+  dcl-s l_text varchar(250) inz('');
+
+  for l_i = 1 to g_fiCount;
+    if g_fiFile(l_i) = i_name;
+      if %len(l_text) + %len(g_fiText(l_i)) + 2 > 250;
+        leave;
+      endif;
+      if l_text <> '';
+        l_text += '; ';
+      endif;
+      l_text += g_fiText(l_i);
+    endif;
+  endfor;
+  return l_text;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -3307,7 +3422,7 @@ dcl-proc ControlLevelOnly;
              or (%subst(i_up:59:1) = 'L' and %check('123456789':%subst(i_up:60:1)) = 0));
   l_match = (%trim(%subst(i_up:61:2)) = ''
              or (%subst(i_up:61:1) = 'M' and %check('123456789':%subst(i_up:62:1)) = 0));
-  return g_inPrimary and l_level and l_match and %trim(%subst(i_up:63:8)) = '';
+  return g_inPrimary and l_level and l_match and %trim(%subst(i_up:63:2)) = '';
 end-proc;
 
 // ------------------------------------------------------------------
