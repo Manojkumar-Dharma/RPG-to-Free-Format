@@ -13,3 +13,4 @@
       * detail calculations: sales records with indicator 01, payments with 02
      C   01                ADD  AMT       STOT    92
      C   02                ADD  PAMT      PTOT    92
+     C   MR 01             ADD  AMT       MTOT    92

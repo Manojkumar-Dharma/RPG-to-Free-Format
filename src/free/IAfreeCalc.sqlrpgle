@@ -3113,6 +3113,10 @@ dcl-proc IndCycleOk;
   if %trim(i_class) = 'RETURN';
     return *on;
   endif;
+  // FREE-55 part C: MR, a conditioning indicator only, set by the skeleton for several files.
+  if %trim(i_class) = 'MATCHING';
+    return g_cycMulti and CycleMatchCount() > 0 and not i_resulting;
+  endif;
   return not i_resulting and %trim(i_class) = 'CONTROLLEVEL';
 end-proc;
 
@@ -6677,6 +6681,18 @@ dcl-proc CalcCycleActive export;
 end-proc;
 
 // ------------------------------------------------------------------
+// FREE-55 part C: *ON when the skeleton for several files sets MR (match fields).
+dcl-proc CalcCycleMatching export;
+  dcl-pi *n ind;
+  end-pi;
+
+  if not g_cycChecked;
+    CycInit();
+  endif;
+  return g_cycMulti and CycleMatchCount() > 0;
+end-proc;
+
+// ------------------------------------------------------------------
 // The records of the O specifications the skeleton writes: part S at the start of
 // the cycle (step 1, heading and detail), part T at the end of IA_TOTALS.
 // FREE-68: the overflow indicators (OA to OG, OV) that condition records of one part of
@@ -7147,7 +7163,7 @@ dcl-proc CycOpen;
              + '(FREE-55): a hold area for each file; the record without match '
              + 'fields is processed first, then the lowest match field, the '
              + 'earlier file first; ascending sequence is not checked (RPG9032 '
-             + 'not converted); MR is not written yet');
+             + 'not converted); MR is set for the record selected');
   elseif g_cycNoPrim;
     RptItem(C_STS_ASSUMPTION:g_lastLineNo:'RPG cycle'
             :'Cycle skeleton written without a primary file (RV-60): the '
@@ -7199,6 +7215,10 @@ dcl-proc CycDeclareMulti;
   DeclareHidden('IA_K':'varchar(100) dim(9)');
   DeclareHidden('IA_SEL':'int(10)');
   DeclareHidden('IA_I':'int(10)');
+  if CycleMatchCount() > 0;
+    DeclareHidden('IA_PK':'varchar(100)');
+    DeclareHidden('IA_PW':'ind');
+  endif;
 end-proc;
 
 // ------------------------------------------------------------------
@@ -7355,8 +7375,48 @@ dcl-proc CycReadMulti;
     Emit('IA_NEXT = IA_H' + %char(l_k) + ';':g_lastLineNo:2);
   endfor;
   Emit('endsl;':g_lastLineNo);
+  if CycleMatchCount() > 0;
+    CycMatchRecord(l_n);
+  endif;
   CycTypeTest();
   CycBreakTest();
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-55 part C: the matching record indicator MR for the record selected (SC09-1818,
+// Table 6). A record with a match key has MR on when the key equals the key of a record
+// of the primary file: for a primary record, the key of a secondary record in a hold
+// area; for a secondary record, the key of the primary record in its hold area or of
+// the primary record processed just before. Two secondary files without a primary
+// match, and a record without match fields, do not set it.
+dcl-proc CycMatchRecord;
+  dcl-pi *n;
+    i_files int(10) const;
+  end-pi;
+
+  Emit('// MR: the match field equals that of a record of the primary file '
+       + '(FREE-55)':g_lastLineNo);
+  Emit('*inmr = *off;':g_lastLineNo);
+  Emit('if IA_W(IA_SEL);':g_lastLineNo);
+  Emit('if IA_SEL = 1;':g_lastLineNo:1);
+  Emit('for IA_I = 2 to ' + %char(i_files) + ';':g_lastLineNo:2);
+  Emit('if IA_L(IA_I) and IA_W(IA_I) and IA_K(IA_I) = IA_K(1);':g_lastLineNo:3);
+  Emit('*inmr = *on;':g_lastLineNo:4);
+  Emit('endif;':g_lastLineNo:3);
+  Emit('endfor;':g_lastLineNo:2);
+  Emit('else;':g_lastLineNo:1);
+  Emit('if IA_L(1) and IA_W(1) and IA_K(1) = IA_K(IA_SEL);':g_lastLineNo:2);
+  Emit('*inmr = *on;':g_lastLineNo:3);
+  Emit('endif;':g_lastLineNo:2);
+  Emit('if IA_PW and IA_PK = IA_K(IA_SEL);':g_lastLineNo:2);
+  Emit('*inmr = *on;':g_lastLineNo:3);
+  Emit('endif;':g_lastLineNo:2);
+  Emit('endif;':g_lastLineNo:1);
+  Emit('endif;':g_lastLineNo);
+  Emit('if IA_SEL = 1;':g_lastLineNo);
+  Emit('IA_PK = IA_K(1);':g_lastLineNo:1);
+  Emit('IA_PW = IA_W(1);':g_lastLineNo:1);
+  Emit('endif;':g_lastLineNo);
 end-proc;
 
 // ------------------------------------------------------------------

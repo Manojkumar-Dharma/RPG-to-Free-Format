@@ -293,6 +293,11 @@ dcl-proc CycleTerm;
     i_type char(1) const;
   end-pi;
 
+  // FREE-55 part C: MR of the skeleton for several files, on any record of the cycle.
+  if i_ind = 'MR' and (i_type = 'H' or i_type = 'D' or i_type = 'T' or i_type = 'E')
+     and CalcCycleMatching();
+    return '*inmr';
+  endif;
   if i_type <> 'H' and i_type <> 'D' and i_type <> 'T';
     return '';
   endif;
