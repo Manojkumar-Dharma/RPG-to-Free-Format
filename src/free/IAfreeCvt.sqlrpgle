@@ -1289,6 +1289,13 @@ dcl-proc ContinuationKeywords;
                  + '*NOIND in columns 60-65';
         endif;
         o_keywords += ' pass(*noind)';
+      when l_opt = 'PLIST' and i_device = 'SPECIAL' and g_dialect = '3';
+        if not ContName(l_arg);
+          return 'PLIST needs a parameter list name in columns 60-65';
+        endif;
+        o_keywords += ' plist(' + l_arg + ')';
+        AppendText(o_note:'PLIST ' + l_arg + ' must be defined by PLIST and PARM '
+                   + 'calculation lines');
       when l_opt = 'ID' or l_opt = 'IND' or l_opt = 'NUM' or l_opt = 'PASS'
            or l_opt = 'SAVDS' or l_opt = 'SLN'
            or l_opt = 'PLIST';
@@ -1389,10 +1396,15 @@ dcl-proc ConvertFileLine;
   dcl-s l_stmt varchar(200);
   dcl-s l_note varchar(190) inz('');
   dcl-s l_cycWhy varchar(150);
+  dcl-s l_routine varchar(6) inz('');
 
   l_up = %xlate(C_LOWER:C_UPPER:i_line);
   o_ok = *off;
   l_name = %trim(%subst(l_up:7:8));
+  // FREE-72: the routine of a SPECIAL file (columns 54-59, no K in column 53).
+  if %subst(l_up:53:1) <> 'K';
+    l_routine = %trim(%subst(l_up:54:6));
+  endif;
   l_type = %subst(l_up:15:1);
   l_desig = %subst(l_up:16:1);
   l_eof = %subst(l_up:17:1);
@@ -1417,7 +1429,8 @@ dcl-proc ConvertFileLine;
     when l_type <> 'I' and l_type <> 'O' and l_type <> 'U' and l_type <> 'C';
       ReviewSpec(i_lineNo:i_line:'File type (column 15) must be I, O, U or C');
       return;
-    when l_device <> 'DISK' and l_device <> 'PRINTER' and l_device <> 'WORKSTN';
+    when l_device <> 'DISK' and l_device <> 'PRINTER' and l_device <> 'WORKSTN'
+         and not (l_device = 'SPECIAL' and g_dialect = '3');
       if l_device = '';
         ReviewSpec(i_lineNo:i_line:'Device (columns 40-46) is blank');
       else;
@@ -1518,7 +1531,13 @@ dcl-proc ConvertFileLine;
       ReviewSpec(i_lineNo:i_line
                  :'File addition (column 66) ' + l_add + ' is not valid');
       return;
-    when l_type = 'C' and l_device <> 'WORKSTN';
+    when l_device = 'SPECIAL' and (l_fmt = 'E' or l_routine = ''
+         or not IsFileName(l_routine) or l_add <> ' ' or l_org <> ' ');
+      ReviewSpec(i_lineNo:i_line:'A SPECIAL file needs a program described file (no E '
+                 + 'in column 19), the routine name in columns 54-59 and no file '
+                 + 'addition or organization');
+      return;
+    when l_type = 'C' and l_device <> 'WORKSTN' and l_device <> 'SPECIAL';
       ReviewSpec(i_lineNo:i_line:'A combined file is not valid for a DISK file');
       return;
     when l_type = 'O' and l_device <> 'WORKSTN' and (l_desig = 'C' or l_mode = 'R');
@@ -1541,11 +1560,15 @@ dcl-proc ConvertFileLine;
 
   if l_fmt = 'E';
     l_stmt = 'dcl-f ' + l_name;
+  elseif l_device = 'SPECIAL';
+    l_stmt = 'dcl-f ' + l_name + ' special(' + %trim(%char(ToInt(l_recLen))) + ')';
   else;
     l_stmt = 'dcl-f ' + l_name + ' disk(' + %trim(%char(ToInt(l_recLen))) + ')';
   endif;
 
   select;
+    when l_type = 'C';
+      l_usage = '*input:*output';
     when l_type = 'I' and l_add = 'A';
       l_usage = '*input:*output';
     when l_type = 'I';
@@ -1558,6 +1581,12 @@ dcl-proc ConvertFileLine;
       l_usage = '*output';
   endsl;
   l_stmt += ' usage(' + l_usage + ')';
+  if l_device = 'SPECIAL';
+    l_stmt += ' pgmname(' + l_routine + ')';
+    AppendText(l_note:'SPECIAL file: the routine ' + l_routine + ' is called by the '
+               + 'compiler with the option, status, error and area parameters '
+               + '(PGMNAME); it must be a program, not a procedure');
+  endif;
 
   if l_org = 'I';
     select;

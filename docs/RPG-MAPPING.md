@@ -1229,3 +1229,14 @@ Source: SC09-1817 (operation codes ACQ, NEXT, POST, REL; Table 17, continuation 
 | `SLN` field | `sln(field)` (numeric 2,0, defined by the compiler) |
 | `PASS` `*NOIND` (program described file) | `pass(*noind)` |
 | `SPECIAL`, `PLIST`, `PRTCTL` | R |
+
+## RPG III: SPECIAL files (FREE-72, RV-31, RV-32)
+
+Source: SC09-1817 (file description, device SPECIAL, columns 54-59; Table 17, option PLIST), SC09-2508 (keywords SPECIAL, PGMNAME, PLIST).
+
+| RPG III | Free-form |
+|---|---|
+| F specification, device `SPECIAL`, program described, routine in columns 54-59 | `dcl-f NAME special(len) usage(...) pgmname(ROUTINE);` |
+| type C (combined file) | `usage(*input:*output)` |
+| continuation option `PLIST` | `plist(NAME)` |
+| E in column 19, no routine, file addition or organization, RPG II | R |

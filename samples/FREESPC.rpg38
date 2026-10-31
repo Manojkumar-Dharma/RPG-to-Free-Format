@@ -1,0 +1,9 @@
+      * RPG III SPECIAL files (FREE-72): routine (54-59) becomes PGMNAME
+     H
+     FSPCIN   IF  F      80            SPECIAL       MYRTN
+     FSPCOUT  O   F      80            SPECIAL       MYRTN
+     FSPCBAD  IF  E                    SPECIAL       MYRTN
+     ISPCIN   AA
+     I                                        1   40CUST
+     C                     READ SPCIN                    90
+     C                     SETON                     LR
