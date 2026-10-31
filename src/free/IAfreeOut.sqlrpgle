@@ -2491,7 +2491,6 @@ dcl-proc DiskFinish;
             + 'separately');
     return;
   endif;
-<<<<<<< HEAD
   // A separate sign is a cause of its own: the manual does not give the character
   // of a plus sign or say that the end position counts the sign.
   for l_j = g_gFirst(i_g) to g_gFirst(i_g) + g_gFields(i_g) - 1;
@@ -2501,7 +2500,6 @@ dcl-proc DiskFinish;
                + 'by the RPG program';
     endif;
   endfor;
-=======
   if g_gExt(i_g);
     RptItem(C_STS_ASSUMPTION:SrcLineNo(g_gStart(i_g)):%trimr(%subst(
             SrcLine(g_gStart(i_g)):6:75))
@@ -2511,7 +2509,6 @@ dcl-proc DiskFinish;
             + 'named (the others are not set to zeros or blanks)'
             + CycleNote(g_gType(i_g)) + '; not tested');
   else;
->>>>>>> 9c5983b (FREE-64: O specifications of externally described files by record format name (write/update %fields/delete), RV-56; sample FREEEXT.rpg36; docs)
   RptItem(C_STS_ASSUMPTION:SrcLineNo(g_gStart(i_g)):%trimr(%subst(
           SrcLine(g_gStart(i_g)):6:75))
           :'Record of a DISK file written by the EXCPT with a data structure'
@@ -2519,12 +2516,8 @@ dcl-proc DiskFinish;
           + '%SUBST at their end positions, numeric fields as zoned digits '
           + 'with %EDITC code X; data format P and B through a work field)'
           + CycleNote(g_gType(i_g))
-<<<<<<< HEAD
           + '; not tested' + l_sign);
-=======
-          + '; not tested');
   endif;
->>>>>>> 9c5983b (FREE-64: O specifications of externally described files by record format name (write/update %fields/delete), RV-56; sample FREEEXT.rpg36; docs)
   for l_j = g_gStart(i_g) + 1 to g_gEnd(i_g);
     RptItem(C_STS_CONVERTED:SrcLineNo(l_j):%trimr(%subst(SrcLine(l_j):6:75)):'');
   endfor;
