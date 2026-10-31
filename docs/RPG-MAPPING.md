@@ -1183,7 +1183,7 @@ Sample: `samples/FREECYT.rpg36`. Needs a compile and test on the IBM i.
 
 ## Secondary files and matching records (FREE-55, RV-20, RV-21, RV-60): design
 
-Status: **design only, not written** (FREE-55 in `PLANNED.md`). Source: SC09-1818 chapter 12 (Primary/Secondary/Multifile Processing), Table 6 and Figures 112-115. It extends the cycle skeleton of FREE-36, FREE-49, FREE-60 and FREE-63 from one input file to a primary file and secondary files (designation `S`, in the order of the file descriptions), with or without match fields (`M1`-`M9`, columns 65-66 of the I specification field line) and the matching record indicator `MR`.
+Status: **part A written** (the cycle state in `IAfreeCvt`, `C_MULTIFILE` off: secondary files still R, match fields `M1`-`M9` of a primary file are accepted and recorded); parts B to D not written (FREE-55 in `PLANNED.md`). Source: SC09-1818 chapter 12 (Primary/Secondary/Multifile Processing), Table 6 and Figures 112-115. It extends the cycle skeleton of FREE-36, FREE-49, FREE-60 and FREE-63 from one input file to a primary file and secondary files (designation `S`, in the order of the file descriptions), with or without match fields (`M1`-`M9`, columns 65-66 of the I specification field line) and the matching record indicator `MR`.
 
 What the manual says, as used here:
 

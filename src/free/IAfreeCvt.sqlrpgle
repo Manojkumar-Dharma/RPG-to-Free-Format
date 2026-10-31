@@ -79,7 +79,23 @@ dcl-s g_cycTypeInd char(2) dim(20);
 dcl-s g_cycTypeCount int(10) inz(0);
 dcl-s g_cycTypeCur int(10) inz(0);
 dcl-s g_cycCtlType int(10) dim(50);
-dcl-s g_inPrimary ind inz(*off);
+dcl-s g_inPrimary ind inz(*off);              // the I specification block of a cycle file
+// FREE-55: secondary files of the cycle (part A: the state; part B writes the skeleton).
+// The slot of a cycle file is 1 for the primary file, 2 and up for the secondary files
+// in the order of the file descriptions. C_MULTIFILE is off until the skeleton for
+// several files is written (secondary files stay R).
+dcl-c C_MULTIFILE *off;
+dcl-s g_cycSec varchar(8) dim(8);
+dcl-s g_cycSecCount int(10) inz(0);
+dcl-s g_cycCur int(10) inz(0);                // slot of the file whose I specification is read
+dcl-s g_cycTypeBase int(10) inz(0);           // record types of the files before it
+dcl-s g_cycTypeFile int(10) dim(20);          // slot of each record type
+dcl-s g_cycCtlFile int(10) dim(50);           // slot of each control field
+dcl-s g_cycMatchName varchar(6) dim(50);      // match fields M1 to M9 (columns 61-62)
+dcl-s g_cycMatchNo int(10) dim(50);
+dcl-s g_cycMatchType int(10) dim(50);
+dcl-s g_cycMatchFile int(10) dim(50);
+dcl-s g_cycMatchCount int(10) inz(0);
 // Names defined so far (files, data structures, fields) and the line of each.
 dcl-s g_nameList varchar(12) dim(C_MAXNAMES);
 dcl-s g_nameLines int(10) dim(C_MAXNAMES);
@@ -143,6 +159,10 @@ dcl-proc FreeConvert export;
   g_cycCtlCount = 0;
   g_cycTypeCount = 0;
   g_cycTypeCur = 0;
+  g_cycSecCount = 0;
+  g_cycCur = 0;
+  g_cycTypeBase = 0;
+  g_cycMatchCount = 0;
   g_inPrimary = *off;
   g_renCount = 0;
   g_fmtCount = 0;
@@ -1494,11 +1514,11 @@ dcl-proc ConvertFileLine;
     when l_ovf <> '';
       ReviewSpec(i_lineNo:i_line:'Overflow indicator is only for PRINTER files');
       return;
-    when l_desig = 'S';
-      ReviewSpec(i_lineNo:i_line:'Secondary files (the RPG cycle) are not converted: '
-                 + 'the cycle skeleton handles one primary file');
+    when l_desig = 'S' and not CycleFileOk(l_type:l_fmt:'S':l_cycWhy);
+      ReviewSpec(i_lineNo:i_line:'Secondary file (the RPG cycle) is not converted: '
+                 + l_cycWhy);
       return;
-    when l_desig = 'P' and not CycleFileOk(l_type:l_fmt:l_cycWhy);
+    when l_desig = 'P' and not CycleFileOk(l_type:l_fmt:'P':l_cycWhy);
       ReviewSpec(i_lineNo:i_line:'Primary file (the RPG cycle) is not converted: '
                  + l_cycWhy);
       return;
@@ -1507,7 +1527,7 @@ dcl-proc ConvertFileLine;
                  :'Record address and table files are not supported in free-form');
       return;
     when l_desig <> ' ' and l_desig <> 'F' and l_desig <> 'C' and l_desig <> 'D'
-         and l_desig <> 'P';
+         and l_desig <> 'P' and l_desig <> 'S';
       ReviewSpec(i_lineNo:i_line
                  :'File designation (column 16) ' + l_desig + ' is not valid');
       return;
@@ -1649,6 +1669,11 @@ dcl-proc ConvertFileLine;
     g_cycFile = l_name;
     AppendText(l_note:'primary file: the RPG cycle skeleton is written for it when its '
                + 'I specification has a record layout (FREE-36)');
+  endif;
+  if l_desig = 'S' and g_cycSecCount < 8;
+    g_cycSecCount += 1;
+    g_cycSec(g_cycSecCount) = l_name;
+    AppendText(l_note:'secondary file: read by the RPG cycle skeleton (FREE-55)');
   endif;
   if l_eof <> ' ';
     AppendText(l_note:'end of file entry (column 17) ignored');
@@ -2320,7 +2345,11 @@ dcl-proc ConvertInput;
   endsl;
   // FREE-49: the record lines of the primary file of the cycle form one block (the
   // record types), with their AND/OR lines and field lines.
-  l_isCyc = (l_kind = 'F' and g_cycFile <> '' and l_name = g_cycFile);
+  l_isCyc = (l_kind = 'F' and CycleSlotOf(l_name) > 0);
+  g_cycCur = 0;
+  if l_isCyc;
+    g_cycCur = CycleSlotOf(l_name);
+  endif;
 
   // The block ends before the next record line (of another file, or of a file
   // that is not the primary file). Comment and blank lines belong to it only
@@ -2405,12 +2434,13 @@ dcl-proc ConvertInput;
         else;
           l_recLen = g_fileLens(l_file);
           if l_isCyc;
+            g_cycTypeBase = g_cycTypeCount;
             l_reason = CycleTypeParse(i_index:l_last:l_name:l_recLen);
           endif;
         endif;
       endif;
   endsl;
-  l_typed = (l_isCyc and l_reason = '' and g_cycTypeCount > 0);
+  l_typed = (l_isCyc and l_reason = '' and g_cycTypeCount > g_cycTypeBase);
 
   if l_reason <> '';
     ReviewBlock(i_index:l_last:l_reason);
@@ -2445,7 +2475,7 @@ dcl-proc ConvertInput;
       l_note = %subst(l_note:1:190);
     endif;
     l_typeNo = 1;
-    g_cycTypeCur = 1;
+    g_cycTypeCur = g_cycTypeBase + 1;
   endif;
   BlockAdd(l_head:i_lineNo);
   g_inPrimary = l_isCyc;
@@ -2460,7 +2490,7 @@ dcl-proc ConvertInput;
       endif;
     elseif l_typed and IsRecordLineOf(l_nextUp:l_name);
       l_typeNo += 1;
-      g_cycTypeCur = l_typeNo;
+      g_cycTypeCur = g_cycTypeBase + l_typeNo;
       BlockAdd('// record type ' + %char(l_typeNo) + ' of file ' + l_name
                + ' (tested after READ in the cycle)':g_sourceLineNos(l_k));
       RptItem(C_STS_ASSUMPTION:g_sourceLineNos(l_k)
@@ -2487,11 +2517,12 @@ dcl-proc ConvertInput;
 
   g_inPrimary = *off;
   g_cycTypeCur = 0;
+  g_cycCur = 0;
 
   // No subfield could be converted: the whole block stays as comments. The
   // field lines were reported with their own reasons.
   if l_fields = 0;
-    g_cycTypeCount = 0;
+    g_cycTypeCount = g_cycTypeBase;
     for l_k = i_index to l_last;
       l_nextUp = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
       if IsCommentOrBlank(l_nextUp);
@@ -2657,11 +2688,20 @@ dcl-proc ConvertInputField;
 
   o_stmt = '  dcl-subf ' + l_name + ' ' + l_type + ' pos('
            + %trim(%char(l_from)) + ');';
-  if ControlLevelOnly(l_up) and g_cycCtlCount < 50;
+  if ControlLevelOnly(l_up) and %subst(l_up:59:1) = 'L' and g_cycCtlCount < 50;
     g_cycCtlCount += 1;
     g_cycCtlName(g_cycCtlCount) = l_name;
     g_cycCtlLevel(g_cycCtlCount) = %int(%subst(l_up:60:1));
     g_cycCtlType(g_cycCtlCount) = g_cycTypeCur;
+    g_cycCtlFile(g_cycCtlCount) = g_cycCur;
+  endif;
+  // FREE-55: a match field M1 to M9 of the record type being read.
+  if ControlLevelOnly(l_up) and %subst(l_up:61:1) = 'M' and g_cycMatchCount < 50;
+    g_cycMatchCount += 1;
+    g_cycMatchName(g_cycMatchCount) = l_name;
+    g_cycMatchNo(g_cycMatchCount) = %int(%subst(l_up:62:1));
+    g_cycMatchType(g_cycMatchCount) = g_cycTypeCur;
+    g_cycMatchFile(g_cycMatchCount) = g_cycCur;
   endif;
   // The length and type are needed by MOVE and MOVEL.
   select;
@@ -2785,22 +2825,23 @@ dcl-proc CycleTypeParse;
   dcl-s l_ind char(2);
   dcl-s l_n int(10) inz(0);
 
-  g_cycTypeCount = 0;
+  g_cycTypeCount = g_cycTypeBase;
   for l_k = i_first to i_last;
     l_up = %xlate(C_LOWER:C_UPPER:g_sourceLines(l_k));
     select;
       when IsRecordLineOf(l_up:i_name);
         l_n += 1;
-        if l_n > 20;
+        if g_cycTypeBase + l_n > 20;
           l_reason = 'More than 20 record types in the primary file';
         else;
           l_reason = CycleRecordLine(l_up:g_sourceLines(l_k):i_recLen:l_ind:l_piece);
         endif;
         if l_reason = '';
-          g_cycTypeInd(l_n) = l_ind;
+          g_cycTypeInd(g_cycTypeBase + l_n) = l_ind;
+          g_cycTypeFile(g_cycTypeBase + l_n) = g_cycCur;
           l_cur = l_piece;
           l_alts = '';
-          g_cycTypeCond(l_n) = l_cur;
+          g_cycTypeCond(g_cycTypeBase + l_n) = l_cur;
         endif;
       when IsInputContinuation(l_up);
         if %trim(%subst(l_up:17:4)) <> '';
@@ -2832,7 +2873,7 @@ dcl-proc CycleTypeParse;
           if %len(l_total) > 170;
             l_reason = 'The record identification codes of a record type are too long';
           else;
-            g_cycTypeCond(l_n) = l_total;
+            g_cycTypeCond(g_cycTypeBase + l_n) = l_total;
           endif;
         endif;
     endsl;
@@ -2843,21 +2884,21 @@ dcl-proc CycleTypeParse;
 
   if l_reason = '' and l_n > 1;
     for l_k = 1 to l_n;
-      if g_cycTypeCond(l_k) = '';
+      if g_cycTypeCond(g_cycTypeBase + l_k) = '';
         l_reason = 'More than one record type, but record type ' + %char(l_k)
                    + ' has no record identification codes';
       endif;
     endfor;
   endif;
   if l_reason <> '';
-    g_cycTypeCount = 0;
+    g_cycTypeCount = g_cycTypeBase;
     return l_reason;
   endif;
   // One record line without indicator and codes: the plain layout.
-  if l_n = 1 and g_cycTypeCond(1) = '' and g_cycTypeInd(1) = '  ';
+  if l_n = 1 and g_cycTypeCond(g_cycTypeBase + 1) = '' and g_cycTypeInd(g_cycTypeBase + 1) = '  ';
     return '';
   endif;
-  g_cycTypeCount = l_n;
+  g_cycTypeCount = g_cycTypeBase + l_n;
   return '';
 end-proc;
 
@@ -3028,12 +3069,14 @@ dcl-proc CycleFileOk;
   dcl-pi *n ind;
     i_type char(1) const;
     i_fmt char(1) const;
+    i_desig char(1) const;
     o_why varchar(150);
   end-pi;
 
   dcl-s l_k int(10);
   dcl-s l_up char(100);
   dcl-s l_primary int(10) inz(0);
+  dcl-s l_second int(10) inz(0);
   dcl-s l_other int(10) inz(0);
   dcl-s l_col int(10) inz(16);
 
@@ -3048,8 +3091,9 @@ dcl-proc CycleFileOk;
       select;
         when %subst(l_up:l_col:1) = 'P';
           l_primary += 1;
-        when %subst(l_up:l_col:1) = 'S' or %subst(l_up:l_col:1) = 'R'
-             or %subst(l_up:l_col:1) = 'T';
+        when %subst(l_up:l_col:1) = 'S';
+          l_second += 1;
+        when %subst(l_up:l_col:1) = 'R' or %subst(l_up:l_col:1) = 'T';
           l_other += 1;
       endsl;
     endif;
@@ -3058,12 +3102,19 @@ dcl-proc CycleFileOk;
     when l_primary > 1;
       o_why = 'more than one primary file';
     when l_other > 0;
-      o_why = 'secondary, record address or table files are not converted';
+      o_why = 'record address and table files are not converted';
+    when l_second > 0 and not C_MULTIFILE;
+      o_why = 'secondary files (the RPG cycle) are not converted: the cycle skeleton '
+              + 'handles one primary file';
+    when l_second > 0 and l_primary = 0;
+      o_why = 'secondary files need a primary file';
+    when l_second > 8;
+      o_why = 'more than 8 secondary files';
     when i_type <> 'I';
       o_why = 'only an input primary file is converted (not update)';
     when i_fmt = 'E';
       o_why = 'an externally described primary file is not converted yet';
-    when g_cycFile <> '';
+    when i_desig = 'P' and g_cycFile <> '';
       o_why = 'a primary file is already declared';
   endsl;
   return o_why = '';
@@ -3124,7 +3175,7 @@ dcl-proc CvtCycleFileOk export;
     o_why varchar(150);
   end-pi;
 
-  return CycleFileOk(i_type:i_fmt:o_why);
+  return CycleFileOk(i_type:i_fmt:'P':o_why);
 end-proc;
 
 dcl-proc CvtSetCycleFile export;
@@ -3220,16 +3271,139 @@ dcl-proc CvtSetLayout export;
 end-proc;
 
 // ------------------------------------------------------------------
-// A field line of the primary file with a control level (columns 59-60: L1 to L9)
-// and nothing else in columns 61-70.
+// FREE-55: the slot of a cycle file: 1 for the primary file, 2 and up for the secondary
+// files in the order of the file descriptions, 0 for any other file.
+dcl-proc CycleSlotOf;
+  dcl-pi *n int(10);
+    i_name varchar(8) const;
+  end-pi;
+
+  dcl-s l_k int(10);
+
+  if g_cycFile <> '' and i_name = g_cycFile;
+    return 1;
+  endif;
+  for l_k = 1 to g_cycSecCount;
+    if g_cycSec(l_k) = i_name;
+      return l_k + 1;
+    endif;
+  endfor;
+  return 0;
+end-proc;
+
+// ------------------------------------------------------------------
+// A field line of a cycle file (primary or secondary) with a control level (columns
+// 59-60: L1 to L9) and/or a match field (columns 61-62: M1 to M9) and nothing else in
+// columns 63-70 (FREE-55: the match field).
 dcl-proc ControlLevelOnly;
   dcl-pi *n ind;
     i_up char(100) const;
   end-pi;
 
-  return g_inPrimary and %subst(i_up:59:1) = 'L'
-         and %check('123456789':%subst(i_up:60:1)) = 0
-         and %trim(%subst(i_up:61:10)) = '';
+  dcl-s l_level ind;
+  dcl-s l_match ind;
+
+  l_level = (%trim(%subst(i_up:59:2)) = ''
+             or (%subst(i_up:59:1) = 'L' and %check('123456789':%subst(i_up:60:1)) = 0));
+  l_match = (%trim(%subst(i_up:61:2)) = ''
+             or (%subst(i_up:61:1) = 'M' and %check('123456789':%subst(i_up:62:1)) = 0));
+  return g_inPrimary and l_level and l_match and %trim(%subst(i_up:63:8)) = '';
+end-proc;
+
+// ------------------------------------------------------------------
+// FREE-55 (part A): the cycle files for the skeleton of several files. Slot 1 is the
+// primary file, 2 and up the secondary files; the type, control field and match field
+// lists carry the slot of their file (0 is the primary file).
+dcl-proc CycleFileCount export;
+  dcl-pi *n int(10);
+  end-pi;
+
+  if g_cycFile = '';
+    return 0;
+  endif;
+  return 1 + g_cycSecCount;
+end-proc;
+
+dcl-proc CycleFileAt export;
+  dcl-pi *n ind;
+    i_slot int(10) const;
+    o_file varchar(8);
+    o_recDs varchar(12);
+  end-pi;
+
+  dcl-s l_file int(10);
+
+  o_file = '';
+  o_recDs = '';
+  if i_slot = 1;
+    o_file = g_cycFile;
+  elseif i_slot > 1 and i_slot <= g_cycSecCount + 1;
+    o_file = g_cycSec(i_slot - 1);
+  endif;
+  if o_file = '';
+    return *off;
+  endif;
+  l_file = FindFile(o_file);
+  if l_file = 0 or not g_fileHasLayout(l_file);
+    return *off;
+  endif;
+  o_recDs = o_file + '_REC';
+  return *on;
+end-proc;
+
+dcl-proc CycleTypeFile export;
+  dcl-pi *n int(10);
+    i_type int(10) const;
+  end-pi;
+
+  if i_type < 1 or i_type > g_cycTypeCount or g_cycTypeFile(i_type) = 0;
+    return 1;
+  endif;
+  return g_cycTypeFile(i_type);
+end-proc;
+
+dcl-proc CycleControlFile export;
+  dcl-pi *n int(10);
+    i_ctl int(10) const;
+  end-pi;
+
+  if i_ctl < 1 or i_ctl > g_cycCtlCount or g_cycCtlFile(i_ctl) = 0;
+    return 1;
+  endif;
+  return g_cycCtlFile(i_ctl);
+end-proc;
+
+dcl-proc CycleMatchCount export;
+  dcl-pi *n int(10);
+  end-pi;
+
+  return g_cycMatchCount;
+end-proc;
+
+dcl-proc CycleMatchField export;
+  dcl-pi *n ind;
+    i_match int(10) const;
+    o_name varchar(6);
+    o_no int(10);
+    o_type int(10);
+    o_file int(10);
+  end-pi;
+
+  o_name = '';
+  o_no = 0;
+  o_type = 0;
+  o_file = 1;
+  if i_match < 1 or i_match > g_cycMatchCount;
+    return *off;
+  endif;
+  o_name = g_cycMatchName(i_match);
+  o_no = g_cycMatchNo(i_match);
+  o_type = g_cycMatchType(i_match);
+  o_file = g_cycMatchFile(i_match);
+  if o_file = 0;
+    o_file = 1;
+  endif;
+  return *on;
 end-proc;
 
 // ------------------------------------------------------------------

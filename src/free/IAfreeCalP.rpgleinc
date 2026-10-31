@@ -195,6 +195,36 @@ end-pr;
 // record layout data structure and the number of control fields; *off when the
 // cycle skeleton cannot be written (FREE-36). CycleControl gives the field name and
 // the control level (1 to 9) of one control field.
+// FREE-55 part A: the cycle files, their record types, control fields and match fields
+// (IAfreeCvt). Slot 1 is the primary file, 2 and up the secondary files.
+dcl-pr CycleFileCount int(10);
+end-pr;
+
+dcl-pr CycleFileAt ind;
+  i_slot int(10) const;
+  o_file varchar(8);
+  o_recDs varchar(12);
+end-pr;
+
+dcl-pr CycleTypeFile int(10);
+  i_type int(10) const;
+end-pr;
+
+dcl-pr CycleControlFile int(10);
+  i_ctl int(10) const;
+end-pr;
+
+dcl-pr CycleMatchCount int(10);
+end-pr;
+
+dcl-pr CycleMatchField ind;
+  i_match int(10) const;
+  o_name varchar(6);
+  o_no int(10);
+  o_type int(10);
+  o_file int(10);
+end-pr;
+
 // RV-60: no primary file, with heading, detail or total records (IAfreeCvt).
 dcl-pr CycleNoPrimary ind;
 end-pr;
