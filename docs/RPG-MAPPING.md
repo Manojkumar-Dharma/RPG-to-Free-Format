@@ -1180,6 +1180,48 @@ Source: SC09-1818 (record identifying indicators and record identification codes
 
 Sample: `samples/FREECYT.rpg36`. Needs a compile and test on the IBM i.
 
+## Secondary files and matching records (FREE-55, RV-20, RV-21, RV-60): design
+
+Status: **design only, not written** (FREE-55 in `PLANNED.md`). Source: SC09-1818 chapter 12 (Primary/Secondary/Multifile Processing), Table 6 and Figures 112-115. It extends the cycle skeleton of FREE-36, FREE-49, FREE-60 and FREE-63 from one input file to a primary file and secondary files (designation `S`, in the order of the file descriptions), with or without match fields (`M1`-`M9`, columns 65-66 of the I specification field line) and the matching record indicator `MR`.
+
+What the manual says, as used here:
+
+1. Without match fields the files are processed one after the other: the primary file to its end, then each secondary file in order.
+2. With match fields the program reads **one record of each file into a hold area**, compares the match fields (all `M1`-`M9` fields of the record, in order) and processes the record with the **lowest** value (ascending files) or the **highest** (descending files, column 18 of the file description); a tie goes to the earlier file, so the primary file first. The records not selected stay in the hold area; the next record is read from the file just processed.
+3. A record type that has **no match field** is processed immediately after it is read, `MR` off, before any record with match fields; of those, the primary file's record comes first.
+4. `MR` is on for the selected record when its match field equals that of a record of the **primary** file: the primary record in the hold area, or the primary record processed just before (Table 6, cycles 7, 14, 15: the secondary records after the primary ones have `MR`). Equal match fields in two secondary files without a primary match do not set `MR` (Table 6, cycles 8 to 10).
+5. The match fields must be in sequence (all ascending or all descending); otherwise the program halts with RPG9032. **Not converted**: the skeleton does not check the sequence (a note in the report).
+6. The record identifying indicator of the selected record's type is on while it is processed (FREE-49, per file).
+
+Free-form shape (each input file `n`: `IA_Hn likeds(FILE_REC)` hold record, `IA_Ln` loaded, `IA_En` end of file, `IA_Kn` match key as characters, `IA_Wn` has a match field):
+
+```
+dow *on;
+  // step 1: heading and detail output of the previous record (as before)
+  // fill the hold areas: every file that is not at its end and has no record in the hold area
+  if not IA_L1 and not IA_E1; read FILE1 IA_H1; IA_E1 = %eof(FILE1); IA_L1 = not IA_E1; ... endif;
+  // select: a record without match field first (primary first), else the lowest (highest) key
+  // MR: the selected key equals the key of the primary hold record or of the last primary record
+  // no record in any hold area: *inlr = *on; leave
+  // move the selected hold record to FILE_REC, set the record identifying indicator, control breaks
+enddo;
+```
+
+Match keys: the match fields of one record concatenated as characters (numeric fields with `%editc(field:'X')` so that the order of the characters is the order of the values; alphanumeric fields as they are). Control level fields (`L1`-`L9`) of every file are kept with `IA_P_name` as in FREE-49, so a control break is found whichever file the record comes from.
+
+Increments (in this order, each one pushed and noted in `PLANNED.md`):
+
+| Part | Content |
+|---|---|
+| A | `IAfreeCvt`: the cycle state per file (files, record types with their file, control fields with their file), `S` files accepted by `CycleFileOk`, `M1`-`M9` read on the I specification field lines; RPG IV: the same in `IAfreeFx4` (designation `S`, columns 65-66) |
+| B | `IAfreeCalc`: the hold areas, the selection and the loop for several files, without `MR` (match fields give the selection order only) |
+| C | `MR`: the match key, the indicator `*inmr` in conditions, calculations and output records (`CycleTerm`) |
+| D | RPG IV and samples; `IA_TOTALS` and `LR` with several files (the last record of each file) |
+
+Acceptance test (from Table 6 and Figure 114, to be written as `samples/FREEMR.rpg36`): primary file with the match fields `20 20 40 50 60 80` and some records without; first secondary `20 30 30 60 70 80 80`; second secondary `10 30 50 50 60 80 80`. Expected order and indicators: Table 6, 26 cycles, e.g. cycle 4 second secondary (`10`, low), cycles 5 and 6 primary with `MR`, cycle 7 first secondary with `MR`, cycles 8 and 9 first secondary without `MR`.
+
+Decisions that are still open (the owner): none of this is written; check item 4 (`MR` after the primary records) and item 5 (no sequence check) first.
+
 ## A program without a primary file (FREE-63, RV-60)
 
 Source: SC09-1818 chapter 5, steps 7, 8, 18 and the rule that the program must set LR on when it has no primary file. A program with **no** file designated P, S, R or T (column 16, RPG IV column 18) and with heading, detail or total records (O types H, D, T) gets the cycle skeleton without the read: the loop repeats until the program sets LR on.
